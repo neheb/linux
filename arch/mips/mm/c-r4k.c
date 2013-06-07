@@ -238,13 +238,13 @@ static inline void tx49_blast_icache32(void)
 	/* I'm in even chunk.  blast odd chunks */
 	for (ws = 0; ws < ws_end; ws += ws_inc)
 		for (addr = start + 0x400; addr < end; addr += 0x400 * 2)
-			cache_unroll(32, kernel_cache, Index_Invalidate_I,
+			cache_unroll(32, _cache_op, kernel_cache, Index_Invalidate_I,
 				     addr | ws, 32);
 	CACHE32_UNROLL32_ALIGN;
 	/* I'm in odd chunk.  blast even chunks */
 	for (ws = 0; ws < ws_end; ws += ws_inc)
 		for (addr = start; addr < end; addr += 0x400 * 2)
-			cache_unroll(32, kernel_cache, Index_Invalidate_I,
+			cache_unroll(32, _cache_op, kernel_cache, Index_Invalidate_I,
 				     addr | ws, 32);
 }
 
