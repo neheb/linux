@@ -192,10 +192,16 @@ static inline void invalidate_tcache_page(unsigned long addr)
 	cache_op(Page_Invalidate_T, addr);
 }
 
-#define cache_unroll(times, insn, op, addr, lsize) do {			\
+#define cache_unroll(times, fn, insn, op, addr, lsize) do {		\
 	int i = 0;							\
-	unroll(times, _cache_op, insn, op, (addr) + (i++ * (lsize)));	\
+	unroll(times, fn, insn, op, (addr) + (i++ * (lsize)));		\
 } while (0)
+
+/* cache_op() and protected_cache_op() take two arguments, so wrap them
+ * in the three-argument form expected by cache_unroll()
+ */
+#define cache_op3(insn, op, addr)	_cache_op(insn, op, addr)
+#define protected_cache_op3(insn, op, addr)	protected_cache_op(op, addr)
 
 /* build blast_xxx, blast_xxx_page, blast_xxx_page_indexed */
 #define __BUILD_BLAST_CACHE(pfx, desc, indexop, hitop, lsize, extra)	\
@@ -210,7 +216,7 @@ static inline void extra##blast_##pfx##cache##lsize(void)		\
 									\
 	for (ws = 0; ws < ws_end; ws += ws_inc)				\
 		for (addr = start; addr < end; addr += lsize * 32)	\
-			cache_unroll(32, kernel_cache, indexop,		\
+			cache_unroll(32, _cache_op, kernel_cache, indexop, \
 				     addr | ws, lsize);			\
 }									\
 									\
@@ -220,7 +226,8 @@ static inline void extra##blast_##pfx##cache##lsize##_page(unsigned long page) \
 	unsigned long end = page + PAGE_SIZE;				\
 									\
 	do {								\
-		cache_unroll(32, kernel_cache, hitop, start, lsize);	\
+		cache_unroll(32, _cache_op, kernel_cache, hitop, start,	\
+			     lsize);					\
 		start += lsize * 32;					\
 	} while (start < end);						\
 }									\
@@ -237,7 +244,7 @@ static inline void extra##blast_##pfx##cache##lsize##_page_indexed(unsigned long
 									\
 	for (ws = 0; ws < ws_end; ws += ws_inc)				\
 		for (addr = start; addr < end; addr += lsize * 32)	\
-			cache_unroll(32, kernel_cache, indexop,		\
+			cache_unroll(32, _cache_op, kernel_cache, indexop, \
 				     addr | ws, lsize);			\
 }
 
@@ -269,7 +276,8 @@ static inline void blast_##pfx##cache##lsize##_user_page(unsigned long page) \
 	unsigned long end = page + PAGE_SIZE;				\
 									\
 	do {								\
-		cache_unroll(32, user_cache, hitop, start, lsize);	\
+		cache_unroll(32, _cache_op, user_cache, hitop, start,	\
+			     lsize);					\
 		start += lsize * 32;					\
 	} while (start < end);						\
 }
@@ -293,10 +301,14 @@ static inline void prot##extra##blast_##pfx##cache##_range(unsigned long start, 
 	unsigned long addr = start & ~(lsize - 1);			\
 	unsigned long aend = (end - 1) & ~(lsize - 1);			\
 									\
-	while (1) {							\
+	while (addr <= aend && aend - addr >= 31 * lsize) {		\
+		cache_unroll(32, prot##cache_op3, kernel_cache, hitop,	\
+			     addr, lsize);				\
+		addr += lsize * 32;					\
+	}								\
+									\
+	while (addr <= aend) {						\
 		prot##cache_op(hitop, addr);				\
-		if (addr == aend)					\
-			break;						\
 		addr += lsize;						\
 	}								\
 }
@@ -326,7 +338,7 @@ static inline void blast_##pfx##cache##lsize##_node(long node)		\
 									\
 	for (ws = 0; ws < ws_end; ws += ws_inc)				\
 		for (addr = start; addr < end; addr += lsize * 32)	\
-			cache_unroll(32, kernel_cache, indexop,		\
+			cache_unroll(32, _cache_op, kernel_cache, indexop, \
 				     addr | ws, lsize);			\
 }
 
