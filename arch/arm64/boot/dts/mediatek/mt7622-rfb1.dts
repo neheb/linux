@@ -602,6 +602,16 @@
 			partition@1c0000 {
 				label = "Factory";
 				reg = <0x1c0000 0x0100000>;
+
+				nvmem-layout {
+					compatible = "fixed-layout";
+					#address-cells = <1>;
+					#size-cells = <1>;
+
+					eeprom_factory_0: eeprom@0 {
+						reg = <0x0 0x4da8>; /* actual length 0x400 */
+					};
+				};
 			};
 
 			partition@200000 {
@@ -660,5 +670,7 @@
 &wmac {
 	pinctrl-names = "default";
 	pinctrl-0 = <&wmac_pins>;
+	nvmem-cells = <&eeprom_factory_0>;
+	nvmem-cell-names = "eeprom";
 	status = "okay";
 };
