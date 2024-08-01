@@ -15,13 +15,10 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/bitops.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
-#include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
@@ -31,7 +28,6 @@
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
-#include <linux/uaccess.h>
 
 #define DRIVER_NAME	"ath79-wdt"
 
@@ -78,16 +74,26 @@ static inline u32 ath79_wdt_rr(unsigned reg)
 	return ioread32(wdt_base + reg);
 }
 
-static inline void ath79_wdt_keepalive(void)
+static int ath79_wdt_ping(struct watchdog_device *wdd)
 {
 	ath79_wdt_wr(WDOG_REG_TIMER, wdt_freq * timeout);
 	/* flush write */
 	ath79_wdt_rr(WDOG_REG_TIMER);
+
+	return 0;
 }
 
-static inline void ath79_wdt_enable(void)
+static int ath79_wdt_set_timeout(struct watchdog_device *wdd, unsigned int val)
 {
-	ath79_wdt_keepalive();
+	timeout = val;
+	ath79_wdt_ping();
+
+	return 0;
+}
+
+static void ath79_wdt_enable(void)
+{
+	ath79_wdt_ping();
 
 	/*
 	 * Updating the TIMER register requires a few microseconds
@@ -102,25 +108,7 @@ static inline void ath79_wdt_enable(void)
 	ath79_wdt_rr(WDOG_REG_CTRL);
 }
 
-static inline void ath79_wdt_disable(void)
-{
-	ath79_wdt_wr(WDOG_REG_CTRL, WDOG_CTRL_ACTION_NONE);
-	/* flush write */
-	ath79_wdt_rr(WDOG_REG_CTRL);
-}
-
-static int ath79_wdt_set_timeout(int val)
-{
-	if (val < 1 || val > max_timeout)
-		return -EINVAL;
-
-	timeout = val;
-	ath79_wdt_keepalive();
-
-	return 0;
-}
-
-static int ath79_wdt_open(struct inode *inode, struct file *file)
+static int ath79_wdt_start(struct watchdog_device *wdd)
 {
 	if (test_and_set_bit(WDT_FLAGS_BUSY, &wdt_flags))
 		return -EBUSY;
@@ -128,16 +116,28 @@ static int ath79_wdt_open(struct inode *inode, struct file *file)
 	clear_bit(WDT_FLAGS_EXPECT_CLOSE, &wdt_flags);
 	ath79_wdt_enable();
 
-	return stream_open(inode, file);
+	return 0;
 }
 
-static int ath79_wdt_release(struct inode *inode, struct file *file)
+static void ath79_wdt_disable(void)
+{
+	ath79_wdt_wr(WDOG_REG_CTRL, WDOG_CTRL_ACTION_NONE);
+	/* flush write */
+	ath79_wdt_rr(WDOG_REG_CTRL);
+}
+
+static unsigned int ath79_wdt_get_timeleft(struct watchdog_device *wdd)
+{
+	return ath79_wdt_rr(WDOG_REG_TIMER);
+}
+
+static int ath79_wdt_stop(struct watchdog_device *wdd)
 {
 	if (test_bit(WDT_FLAGS_EXPECT_CLOSE, &wdt_flags))
 		ath79_wdt_disable();
 	else {
 		pr_crit("device closed unexpectedly, watchdog timer will not stop!\n");
-		ath79_wdt_keepalive();
+		ath79_wdt_ping();
 	}
 
 	clear_bit(WDT_FLAGS_BUSY, &wdt_flags);
@@ -146,31 +146,13 @@ static int ath79_wdt_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static ssize_t ath79_wdt_write(struct file *file, const char *data,
-				size_t len, loff_t *ppos)
+static int ath79_wdt_bootcause(void)
 {
-	if (len) {
-		if (!nowayout) {
-			size_t i;
+	ctrl = ath79_wdt_rr(WDOG_REG_CTRL);
+	if (ath79_wdt_rr(ctrl & WDOG_CTRL_LAST_RESET)
+		return WDIOF_CARDRESET;
 
-			clear_bit(WDT_FLAGS_EXPECT_CLOSE, &wdt_flags);
-
-			for (i = 0; i != len; i++) {
-				char c;
-
-				if (get_user(c, data + i))
-					return -EFAULT;
-
-				if (c == 'V')
-					set_bit(WDT_FLAGS_EXPECT_CLOSE,
-						&wdt_flags);
-			}
-		}
-
-		ath79_wdt_keepalive();
-	}
-
-	return len;
+	return 0;
 }
 
 static const struct watchdog_info ath79_wdt_info = {
@@ -180,79 +162,25 @@ static const struct watchdog_info ath79_wdt_info = {
 	.identity		= "ATH79 watchdog",
 };
 
-static long ath79_wdt_ioctl(struct file *file, unsigned int cmd,
-			    unsigned long arg)
-{
-	void __user *argp = (void __user *)arg;
-	int __user *p = argp;
-	int err;
-	int t;
-
-	switch (cmd) {
-	case WDIOC_GETSUPPORT:
-		err = copy_to_user(argp, &ath79_wdt_info,
-				   sizeof(ath79_wdt_info)) ? -EFAULT : 0;
-		break;
-
-	case WDIOC_GETSTATUS:
-		err = put_user(0, p);
-		break;
-
-	case WDIOC_GETBOOTSTATUS:
-		err = put_user(boot_status, p);
-		break;
-
-	case WDIOC_KEEPALIVE:
-		ath79_wdt_keepalive();
-		err = 0;
-		break;
-
-	case WDIOC_SETTIMEOUT:
-		err = get_user(t, p);
-		if (err)
-			break;
-
-		err = ath79_wdt_set_timeout(t);
-		if (err)
-			break;
-		fallthrough;
-
-	case WDIOC_GETTIMEOUT:
-		err = put_user(timeout, p);
-		break;
-
-	default:
-		err = -ENOTTY;
-		break;
-	}
-
-	return err;
-}
-
-static const struct file_operations ath79_wdt_fops = {
+static const struct watchdog_ops ath79_wdt_ops = {
 	.owner		= THIS_MODULE,
-	.llseek		= no_llseek,
-	.write		= ath79_wdt_write,
-	.unlocked_ioctl	= ath79_wdt_ioctl,
-	.compat_ioctl	= compat_ptr_ioctl,
-	.open		= ath79_wdt_open,
-	.release	= ath79_wdt_release,
+	.start		= ath79_wdt_start,
+	.stop		= ath79_wdt_stop,
+	.ping		= ath79_wdt_ping,
+	.set_timeout	= ath79_wdt_set_timeout,
+	.get_timeleft	= ath79_wdt_get_timeleft,
 };
 
-static struct miscdevice ath79_wdt_miscdev = {
-	.minor = WATCHDOG_MINOR,
-	.name = "watchdog",
-	.fops = &ath79_wdt_fops,
+static struct watchdog_device ath79_wdt_dev = {
+	.info		= &ath79_wdt_info,
+	.ops		= &ath79_wdt_ops,
+	.min_timeout	= 1,
+	.max_timeout	= max_timeout,
+	.timeout	= timeout,
 };
 
 static int ath79_wdt_probe(struct platform_device *pdev)
 {
-	u32 ctrl;
-	int err;
-
-	if (wdt_base)
-		return -EBUSY;
-
 	wdt_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(wdt_base))
 		return PTR_ERR(wdt_base);
@@ -265,35 +193,18 @@ static int ath79_wdt_probe(struct platform_device *pdev)
 	if (!wdt_freq)
 		return -EINVAL;
 
-	max_timeout = (0xfffffffful / wdt_freq);
-	if (timeout < 1 || timeout > max_timeout) {
-		timeout = max_timeout;
-		dev_info(&pdev->dev,
-			"timeout value must be 0 < timeout < %d, using %d\n",
-			max_timeout, timeout);
-	}
+	ath79_wdt_dev.bootstatus = ath79_wdt_bootcause();
 
-	ctrl = ath79_wdt_rr(WDOG_REG_CTRL);
-	boot_status = (ctrl & WDOG_CTRL_LAST_RESET) ? WDIOF_CARDRESET : 0;
+	watchdog_init_timeout(&ath79_wdt_dev, ath79_wdt_dev.max_timeout,
+					      &pdev->dev);
+	boot_status = ath79_wdt_bootcause();
 
-	err = misc_register(&ath79_wdt_miscdev);
-	if (err) {
-		dev_err(&pdev->dev,
-			"unable to register misc device, err=%d\n", err);
-		return err;
-	}
-
-	return 0;
-}
-
-static void ath79_wdt_remove(struct platform_device *pdev)
-{
-	misc_deregister(&ath79_wdt_miscdev);
+	return devm_watchdog_register(&pdev->dev, &ath79_wdt_dev);
 }
 
 static void ath79_wdt_shutdown(struct platform_device *pdev)
 {
-	ath79_wdt_disable();
+	ath79_wdt_stop();
 }
 
 #ifdef CONFIG_OF
@@ -306,7 +217,6 @@ MODULE_DEVICE_TABLE(of, ath79_wdt_match);
 
 static struct platform_driver ath79_wdt_driver = {
 	.probe		= ath79_wdt_probe,
-	.remove_new	= ath79_wdt_remove,
 	.shutdown	= ath79_wdt_shutdown,
 	.driver		= {
 		.name	= DRIVER_NAME,
