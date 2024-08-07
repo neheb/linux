@@ -53,6 +53,8 @@ expression x;
  x = devm_ioremap(...)
 |
  x = devm_ioport_map(...)
+|
+ x = devm_alloc_etherdev_mqs(...)
 )
 
 @safe depends on context || org || report exists@
@@ -84,6 +86,8 @@ position p;
  x = ioremap(...)
 |
  x = ioport_map(...)
+|
+ x = alloc_etherdev_mqs(...)
 )
 ...
 (
@@ -102,6 +106,8 @@ position p;
  iounmap@p(x)
 |
  ioport_unmap@p(x)
+|
+ free_netdev@p(x)
 )
 
 @pb@
@@ -125,6 +131,8 @@ position p != safe.p;
 * iounmap@p(x)
 |
 * ioport_unmap@p(x)
+|
+* free_netdev@p(x)
 )
 
 @script:python depends on org@
