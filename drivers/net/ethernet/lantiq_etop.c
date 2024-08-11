@@ -389,13 +389,11 @@ static int
 ltq_etop_mdio_init(struct net_device *dev)
 {
 	struct ltq_etop_priv *priv = netdev_priv(dev);
-	int err;
 
 	priv->mii_bus = devm_mdiobus_alloc(&dev->dev);
 	if (!priv->mii_bus) {
 		netdev_err(dev, "failed to allocate mii bus\n");
-		err = -ENOMEM;
-		goto err_out;
+		return -ENOMEM;
 	}
 
 	priv->mii_bus->priv = dev;
@@ -404,19 +402,13 @@ ltq_etop_mdio_init(struct net_device *dev)
 	priv->mii_bus->name = "ltq_mii";
 	snprintf(priv->mii_bus->id, MII_BUS_ID_SIZE, "%s-%x",
 		 priv->pdev->name, priv->pdev->id);
-	if (devm_mdiobus_register(&dev->dev, priv->mii_bus)) {
-		err = -ENXIO;
-		goto err_out;
-	}
+	if (devm_mdiobus_register(&dev->dev, priv->mii_bus))
+		return -ENXIO;
 
-	if (ltq_etop_mdio_probe(dev)) {
-		err = -ENXIO;
-		goto err_out;
-	}
+	if (ltq_etop_mdio_probe(dev))
+		return -ENXIO;
+
 	return 0;
-
-err_out:
-	return err;
 }
 
 static int
@@ -637,16 +629,13 @@ ltq_etop_probe(struct platform_device *pdev)
 	if (IS_ERR(ltq_etop_membase)) {
 		dev_err(&pdev->dev, "failed to remap etop engine %d\n",
 			pdev->id);
-		err = PTR_ERR(ltq_etop_membase);
-		goto err_out;
+		return PTR_ERR(ltq_etop_membase);
 	}
 
 	dev = devm_alloc_etherdev_mqs(&pdev->dev, sizeof(struct ltq_etop_priv),
 				      4, 4);
-	if (!dev) {
-		err = -ENOMEM;
-		goto err_out;
-	}
+	if (!dev)
+		return -ENOMEM;
 	dev->netdev_ops = &ltq_eth_netdev_ops;
 	dev->ethtool_ops = &ltq_etop_ethtool_ops;
 	priv = netdev_priv(dev);
@@ -657,16 +646,14 @@ ltq_etop_probe(struct platform_device *pdev)
 	SET_NETDEV_DEV(dev, &pdev->dev);
 
 	err = device_property_read_u32(&pdev->dev, "lantiq,tx-burst-length", &priv->tx_burst_len);
-	if (err < 0) {
-		dev_err(&pdev->dev, "unable to read tx-burst-length property\n");
-		goto err_out;
-	}
+	if (err < 0)
+		return dev_err_probe(&pdev->dev, err,
+				     "unable to read tx-burst-length property");
 
 	err = device_property_read_u32(&pdev->dev, "lantiq,rx-burst-length", &priv->rx_burst_len);
-	if (err < 0) {
-		dev_err(&pdev->dev, "unable to read rx-burst-length property\n");
-		goto err_out;
-	}
+	if (err < 0)
+		return dev_err_probe(&pdev->dev, err,
+				     "unable to read rx-burst-length property");
 
 	for (i = 0; i < MAX_DMA_CHAN; i++) {
 		if (IS_TX(i))
@@ -680,13 +667,10 @@ ltq_etop_probe(struct platform_device *pdev)
 
 	err = devm_register_netdev(&pdev->dev, dev);
 	if (err)
-		goto err_out;
+		return err;
 
 	platform_set_drvdata(pdev, dev);
 	return 0;
-
-err_out:
-	return err;
 }
 
 static void ltq_etop_remove(struct platform_device *pdev)
