@@ -1918,7 +1918,7 @@ static int ag71xx_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	err = register_netdev(ndev);
+	err = devm_register_netdev(&pdev->dev, ndev);
 	if (err) {
 		netif_err(ag, probe, ndev, "unable to register net device\n");
 		platform_set_drvdata(pdev, NULL);
@@ -1928,19 +1928,6 @@ static int ag71xx_probe(struct platform_device *pdev)
 	netif_info(ag, probe, ndev, "Atheros AG71xx at 0x%08lx, irq %d, mode:%s\n",
 		   (unsigned long)ag->mac_base, ndev->irq,
 		   phy_modes(ag->phy_if_mode));
-
-	return 0;
-}
-
-static int ag71xx_remove(struct platform_device *pdev)
-{
-	struct net_device *ndev = platform_get_drvdata(pdev);
-
-	if (!ndev)
-		return 0;
-
-	unregister_netdev(ndev);
-	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }
@@ -2029,7 +2016,6 @@ static const struct of_device_id ag71xx_match[] = {
 
 static struct platform_driver ag71xx_driver = {
 	.probe		= ag71xx_probe,
-	.remove		= ag71xx_remove,
 	.driver = {
 		.name	= "ag71xx",
 		.of_match_table = ag71xx_match,
