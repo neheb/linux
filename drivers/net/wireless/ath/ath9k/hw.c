@@ -2734,8 +2734,9 @@ static void ath9k_hw_gpio_cfg_soc(struct ath_hw *ah, u32 gpio, bool out,
 
 	err = gpio_request_one(gpio, out ? GPIOF_OUT_INIT_LOW : GPIOF_IN, label);
 	if (err) {
-		ath_err(ath9k_hw_common(ah), "request GPIO%d failed:%d\n",
-			gpio, err);
+		if (err != -EPROBE_DEFER)
+			ath_err(ath9k_hw_common(ah), "request GPIO%d failed:%d\n",
+				gpio, err);
 		return;
 	}
 
