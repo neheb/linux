@@ -4203,12 +4203,6 @@ static int mtk_free_dev(struct mtk_eth *eth)
 {
 	int i;
 
-	for (i = 0; i < MTK_MAX_DEVS; i++) {
-		if (!eth->netdev[i])
-			continue;
-		free_netdev(eth->netdev[i]);
-	}
-
 	for (i = 0; i < ARRAY_SIZE(eth->dsa_meta); i++) {
 		if (!eth->dsa_meta[i])
 			break;
@@ -4550,7 +4544,7 @@ static int mtk_add_mac(struct mtk_eth *eth, struct device_node *np)
 	if (MTK_HAS_CAPS(eth->soc->caps, MTK_QDMA))
 		txqs = MTK_QDMA_NUM_QUEUES;
 
-	eth->netdev[id] = alloc_etherdev_mqs(sizeof(*mac), txqs, 1);
+	eth->netdev[id] = devm_alloc_etherdev_mqs(eth->dev, sizeof(*mac), txqs, 1);
 	if (!eth->netdev[id]) {
 		dev_err(eth->dev, "alloc_etherdev failed\n");
 		return -ENOMEM;
@@ -4578,11 +4572,8 @@ static int mtk_add_mac(struct mtk_eth *eth, struct device_node *np)
 	mac->hw_stats = devm_kzalloc(eth->dev,
 				     sizeof(*mac->hw_stats),
 				     GFP_KERNEL);
-	if (!mac->hw_stats) {
-		dev_err(eth->dev, "failed to allocate counter memory\n");
-		err = -ENOMEM;
-		goto free_netdev;
-	}
+	if (!mac->hw_stats)
+		return dev_err_probe(eth->dev, -ENOMEM, "failed to allocate counter memory\n");
 	spin_lock_init(&mac->hw_stats->stats_lock);
 	u64_stats_init(&mac->hw_stats->syncp);
 
@@ -4593,10 +4584,8 @@ static int mtk_add_mac(struct mtk_eth *eth, struct device_node *np)
 
 	/* phylink create */
 	err = of_get_phy_mode(np, &phy_mode);
-	if (err) {
-		dev_err(eth->dev, "incorrect phy-mode\n");
-		goto free_netdev;
-	}
+	if (err)
+		return dev_err_probe(eth->dev, err, "incorrect phy-mode\n");
 
 	/* mac config is not set */
 	mac->interface = PHY_INTERFACE_MODE_NA;
@@ -4657,10 +4646,8 @@ static int mtk_add_mac(struct mtk_eth *eth, struct device_node *np)
 	phylink = phylink_create(&mac->phylink_config,
 				 of_fwnode_handle(mac->of_node),
 				 phy_mode, &mtk_phylink_ops);
-	if (IS_ERR(phylink)) {
-		err = PTR_ERR(phylink);
-		goto free_netdev;
-	}
+	if (IS_ERR(phylink))
+		return PTR_ERR(phylink);
 
 	mac->phylink = phylink;
 
@@ -4698,10 +4685,6 @@ static int mtk_add_mac(struct mtk_eth *eth, struct device_node *np)
 						NETDEV_XDP_ACT_NDO_XMIT_SG;
 
 	return 0;
-
-free_netdev:
-	free_netdev(eth->netdev[id]);
-	return err;
 }
 
 void mtk_eth_set_dma_device(struct mtk_eth *eth, struct device *dma_dev)
