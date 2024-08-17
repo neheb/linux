@@ -879,19 +879,11 @@ static int mtk_mdio_init(struct mtk_eth *eth)
 
 	dev_dbg(eth->dev, "MDC is running on %d Hz\n", MDC_MAX_FREQ / divider);
 
-	ret = of_mdiobus_register(eth->mii_bus, mii_np);
+	ret = devm_of_mdiobus_register(eth->dev, eth->mii_bus, mii_np);
 
 err_put_node:
 	of_node_put(mii_np);
 	return ret;
-}
-
-static void mtk_mdio_cleanup(struct mtk_eth *eth)
-{
-	if (!eth->mii_bus)
-		return;
-
-	mdiobus_unregister(eth->mii_bus);
 }
 
 static inline void mtk_tx_irq_disable(struct mtk_eth *eth, u32 mask)
@@ -5051,7 +5043,6 @@ err_unreg_netdev:
 	mtk_unreg_dev(eth);
 err_deinit_ppe:
 	mtk_ppe_deinit(eth);
-	mtk_mdio_cleanup(eth);
 err_free_dev:
 	mtk_free_dev(eth);
 err_deinit_hw:
@@ -5086,7 +5077,6 @@ static void mtk_remove(struct platform_device *pdev)
 	netif_napi_del(&eth->rx_napi);
 	mtk_cleanup(eth);
 	free_netdev(eth->dummy_dev);
-	mtk_mdio_cleanup(eth);
 }
 
 static const struct mtk_soc_data mt2701_data = {
