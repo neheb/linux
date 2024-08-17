@@ -4237,7 +4237,6 @@ static int mtk_unreg_dev(struct mtk_eth *eth)
 		mac = netdev_priv(eth->netdev[i]);
 		if (MTK_HAS_CAPS(eth->soc->caps, MTK_QDMA))
 			unregister_netdevice_notifier(&mac->device_notifier);
-		unregister_netdev(eth->netdev[i]);
 	}
 
 	return 0;
@@ -5020,7 +5019,7 @@ static int mtk_probe(struct platform_device *pdev)
 		if (!eth->netdev[i])
 			continue;
 
-		err = register_netdev(eth->netdev[i]);
+		err = devm_register_netdev(eth->dev, eth->netdev[i]);
 		if (err) {
 			dev_err(eth->dev, "error bringing up device\n");
 			goto err_deinit_ppe;
