@@ -441,7 +441,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%pOFn@%llx", np,
 		 (unsigned long long)res.start);
 
-	priv->map = devm_of_iomap(&pdev->dev, np, 0);
+	priv->map = devm_of_iomap(&pdev->dev, np, 0, NULL);
 	if (!priv->map) {
 		err = -ENOMEM;
 		goto error;

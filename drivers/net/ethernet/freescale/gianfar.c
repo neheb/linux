@@ -407,12 +407,12 @@ static void gfar_ints_enable(struct gfar_private *priv)
 	}
 }
 
-static int gfar_alloc_tx_queues(struct gfar_private *priv)
+static int gfar_alloc_tx_queues(struct device *dev, struct gfar_private *priv)
 {
 	int i;
 
 	for (i = 0; i < priv->num_tx_queues; i++) {
-		priv->tx_queue[i] = kzalloc(sizeof(struct gfar_priv_tx_q),
+		priv->tx_queue[i] = devm_kzalloc(dev, sizeof(struct gfar_priv_tx_q),
 					    GFP_KERNEL);
 		if (!priv->tx_queue[i])
 			return -ENOMEM;
@@ -425,12 +425,12 @@ static int gfar_alloc_tx_queues(struct gfar_private *priv)
 	return 0;
 }
 
-static int gfar_alloc_rx_queues(struct gfar_private *priv)
+static int gfar_alloc_rx_queues(struct device *dev, struct gfar_private *priv)
 {
 	int i;
 
 	for (i = 0; i < priv->num_rx_queues; i++) {
-		priv->rx_queue[i] = kzalloc(sizeof(struct gfar_priv_rx_q),
+		priv->rx_queue[i] = devm_kzalloc(dev, sizeof(struct gfar_priv_rx_q),
 					    GFP_KERNEL);
 		if (!priv->rx_queue[i])
 			return -ENOMEM;
@@ -439,44 +439,6 @@ static int gfar_alloc_rx_queues(struct gfar_private *priv)
 		priv->rx_queue[i]->ndev = priv->ndev;
 	}
 	return 0;
-}
-
-static void gfar_free_tx_queues(struct gfar_private *priv)
-{
-	int i;
-
-	for (i = 0; i < priv->num_tx_queues; i++)
-		kfree(priv->tx_queue[i]);
-}
-
-static void gfar_free_rx_queues(struct gfar_private *priv)
-{
-	int i;
-
-	for (i = 0; i < priv->num_rx_queues; i++)
-		kfree(priv->rx_queue[i]);
-}
-
-static void unmap_group_regs(struct gfar_private *priv)
-{
-	int i;
-
-	for (i = 0; i < MAXGROUPS; i++)
-		if (priv->gfargrp[i].regs)
-			iounmap(priv->gfargrp[i].regs);
-}
-
-static void free_gfar_dev(struct gfar_private *priv)
-{
-	int i, j;
-
-	for (i = 0; i < priv->num_grps; i++)
-		for (j = 0; j < GFAR_NUM_IRQS; j++) {
-			kfree(priv->gfargrp[i].irqinfo[j]);
-			priv->gfargrp[i].irqinfo[j] = NULL;
-		}
-
-	free_netdev(priv->ndev);
 }
 
 static void disable_napi(struct gfar_private *priv)
@@ -499,20 +461,20 @@ static void enable_napi(struct gfar_private *priv)
 	}
 }
 
-static int gfar_parse_group(struct device_node *np,
+static int gfar_parse_group(struct device *dev, struct device_node *np,
 			    struct gfar_private *priv, const char *model)
 {
 	struct gfar_priv_grp *grp = &priv->gfargrp[priv->num_grps];
 	int i;
 
 	for (i = 0; i < GFAR_NUM_IRQS; i++) {
-		grp->irqinfo[i] = kzalloc(sizeof(struct gfar_irqinfo),
+		grp->irqinfo[i] = devm_kzalloc(dev, sizeof(struct gfar_irqinfo),
 					  GFP_KERNEL);
 		if (!grp->irqinfo[i])
 			return -ENOMEM;
 	}
 
-	grp->regs = of_iomap(np, 0);
+	grp->regs = devm_of_iomap(dev, np, 0, NULL);
 	if (!grp->regs)
 		return -ENOMEM;
 
@@ -681,7 +643,7 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 		return -EINVAL;
 	}
 
-	*pdev = alloc_etherdev_mq(sizeof(*priv), num_tx_qs);
+	*pdev = devm_alloc_etherdev_mqs(&ofdev->dev, sizeof(*priv), num_tx_qs, num_rx_qs);
 	dev = *pdev;
 	if (NULL == dev)
 		return -ENOMEM;
@@ -695,18 +657,18 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	netif_set_real_num_rx_queues(dev, num_rx_qs);
 	priv->num_rx_queues = num_rx_qs;
 
-	err = gfar_alloc_tx_queues(priv);
+	err = gfar_alloc_tx_queues(&ofdev->dev, priv);
 	if (err)
-		goto tx_alloc_failed;
+		return err;
 
-	err = gfar_alloc_rx_queues(priv);
+	err = gfar_alloc_rx_queues(&ofdev->dev, priv);
 	if (err)
-		goto rx_alloc_failed;
+		return err;
 
 	err = of_property_read_string(np, "model", &model);
 	if (err) {
 		pr_err("Device model property missing, aborting\n");
-		goto rx_alloc_failed;
+		return err;
 	}
 
 	/* Init Rx queue filer rule set linked list */
@@ -723,16 +685,16 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 			if (!of_node_name_eq(child, "queue-group"))
 				continue;
 
-			err = gfar_parse_group(child, priv, model);
+			err = gfar_parse_group(&ofdev->dev, child, priv, model);
 			if (err) {
 				of_node_put(child);
-				goto err_grp_init;
+				return err;
 			}
 		}
 	} else { /* SQ_SG_MODE */
-		err = gfar_parse_group(np, priv, model);
+		err = gfar_parse_group(&ofdev->dev, np, priv, model);
 		if (err)
-			goto err_grp_init;
+			return err;
 	}
 
 	if (of_property_read_bool(np, "bd-stash")) {
@@ -801,7 +763,7 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	if (!priv->phy_node && of_phy_is_fixed_link(np)) {
 		err = of_phy_register_fixed_link(np);
 		if (err)
-			goto err_grp_init;
+			return err;
 
 		priv->phy_node = of_node_get(np);
 	}
@@ -810,15 +772,6 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	priv->tbi_node = of_parse_phandle(np, "tbi-handle", 0);
 
 	return 0;
-
-err_grp_init:
-	unmap_group_regs(priv);
-rx_alloc_failed:
-	gfar_free_rx_queues(priv);
-tx_alloc_failed:
-	gfar_free_tx_queues(priv);
-	free_gfar_dev(priv);
-	return err;
 }
 
 static u32 cluster_entry_per_class(struct gfar_private *priv, u32 rqfar,
@@ -3303,7 +3256,7 @@ static int gfar_probe(struct platform_device *ofdev)
 	/* Carrier starts down, phylib will bring it up */
 	netif_carrier_off(dev);
 
-	err = register_netdev(dev);
+	err = devm_register_netdev(&ofdev->dev, dev);
 
 	if (err) {
 		pr_err("%s: Cannot register net device, aborting\n", dev->name);
@@ -3355,12 +3308,8 @@ static int gfar_probe(struct platform_device *ofdev)
 register_fail:
 	if (of_phy_is_fixed_link(np))
 		of_phy_deregister_fixed_link(np);
-	unmap_group_regs(priv);
-	gfar_free_rx_queues(priv);
-	gfar_free_tx_queues(priv);
 	of_node_put(priv->phy_node);
 	of_node_put(priv->tbi_node);
-	free_gfar_dev(priv);
 	return err;
 }
 
@@ -3372,15 +3321,8 @@ static void gfar_remove(struct platform_device *ofdev)
 	of_node_put(priv->phy_node);
 	of_node_put(priv->tbi_node);
 
-	unregister_netdev(priv->ndev);
-
 	if (of_phy_is_fixed_link(np))
 		of_phy_deregister_fixed_link(np);
-
-	unmap_group_regs(priv);
-	gfar_free_rx_queues(priv);
-	gfar_free_tx_queues(priv);
-	free_gfar_dev(priv);
 }
 
 #ifdef CONFIG_PM
