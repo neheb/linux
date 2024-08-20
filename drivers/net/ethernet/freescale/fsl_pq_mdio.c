@@ -422,7 +422,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	new_bus = mdiobus_alloc_size(sizeof(*priv));
+	new_bus = devm_mdiobus_alloc_size(&pdev->dev, sizeof(*priv));
 	if (!new_bus)
 		return -ENOMEM;
 
@@ -441,7 +441,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%pOFn@%llx", np,
 		 (unsigned long long)res.start);
 
-	priv->map = of_iomap(np, 0);
+	priv->map = devm_of_iomap(&pdev->dev, np, 0);
 	if (!priv->map) {
 		err = -ENOMEM;
 		goto error;
@@ -489,7 +489,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	if (data->ucc_configure)
 		data->ucc_configure(res.start, res.end);
 
-	err = of_mdiobus_register(new_bus, np);
+	err = devm_of_mdiobus_register(&pdev->dev, new_bus, np);
 	if (err) {
 		dev_err(&pdev->dev, "cannot register %s as MDIO bus\n",
 			new_bus->name);
@@ -499,26 +499,9 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	return 0;
 
 error:
-	if (priv->map)
-		iounmap(priv->map);
-
-	kfree(new_bus);
-
 	return err;
 }
 
-
-static void fsl_pq_mdio_remove(struct platform_device *pdev)
-{
-	struct device *device = &pdev->dev;
-	struct mii_bus *bus = dev_get_drvdata(device);
-	struct fsl_pq_mdio_priv *priv = bus->priv;
-
-	mdiobus_unregister(bus);
-
-	iounmap(priv->map);
-	mdiobus_free(bus);
-}
 
 static struct platform_driver fsl_pq_mdio_driver = {
 	.driver = {
@@ -526,7 +509,6 @@ static struct platform_driver fsl_pq_mdio_driver = {
 		.of_match_table = fsl_pq_mdio_match,
 	},
 	.probe = fsl_pq_mdio_probe,
-	.remove_new = fsl_pq_mdio_remove,
 };
 
 module_platform_driver(fsl_pq_mdio_driver);
