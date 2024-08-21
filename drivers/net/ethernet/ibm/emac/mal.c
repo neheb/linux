@@ -524,7 +524,7 @@ static int mal_probe(struct platform_device *ofdev)
 	unsigned long irqflags;
 	irq_handler_t hdlr_serr, hdlr_txde, hdlr_rxde;
 
-	mal = kzalloc(sizeof(struct mal_instance), GFP_KERNEL);
+	mal = devm_kzalloc(&ofdev->dev, sizeof(struct mal_instance), GFP_KERNEL);
 	if (!mal)
 		return -ENOMEM;
 
@@ -535,39 +535,27 @@ static int mal_probe(struct platform_device *ofdev)
 	MAL_DBG(mal, "probe" NL);
 
 	prop = of_get_property(ofdev->dev.of_node, "num-tx-chans", NULL);
-	if (prop == NULL) {
-		printk(KERN_ERR
-		       "mal%d: can't find MAL num-tx-chans property!\n",
+	if (prop == NULL)
+		return dev_err_probe(&ofdev->dev, -ENODEV,
+		       "mal%d: can't find MAL num-tx-chans property",
 		       index);
-		err = -ENODEV;
-		goto fail;
-	}
 	mal->num_tx_chans = prop[0];
 
 	prop = of_get_property(ofdev->dev.of_node, "num-rx-chans", NULL);
-	if (prop == NULL) {
-		printk(KERN_ERR
-		       "mal%d: can't find MAL num-rx-chans property!\n",
+	if (prop == NULL)
+		return dev_err_probe(&ofdev->dev, -ENODEV,
+		       "mal%d: can't find MAL num-rx-chans property",
 		       index);
-		err = -ENODEV;
-		goto fail;
-	}
 	mal->num_rx_chans = prop[0];
 
 	dcr_base = dcr_resource_start(ofdev->dev.of_node, 0);
-	if (dcr_base == 0) {
-		printk(KERN_ERR
-		       "mal%d: can't find DCR resource!\n", index);
-		err = -ENODEV;
-		goto fail;
-	}
+	if (dcr_base == 0)
+		return dev_err_probe(&ofdev->dev, -ENODEV,
+		       "mal%d: can't find DCR resource", index);
 	mal->dcr_host = dcr_map(ofdev->dev.of_node, dcr_base, 0x100);
-	if (!DCR_MAP_OK(mal->dcr_host)) {
-		printk(KERN_ERR
-		       "mal%d: failed to map DCRs !\n", index);
-		err = -ENODEV;
-		goto fail;
-	}
+	if (!DCR_MAP_OK(mal->dcr_host))
+		return dev_err_probe(&ofdev->dev, -ENODEV,
+		       "mal%d: failed to map DCRs", index);
 
 	if (of_device_is_compatible(ofdev->dev.of_node, "ibm,mcmal-405ez")) {
 #if defined(CONFIG_IBM_EMAC_MAL_CLR_ICINTSTAT) && \
@@ -575,10 +563,8 @@ static int mal_probe(struct platform_device *ofdev)
 		mal->features |= (MAL_FTR_CLEAR_ICINTSTAT |
 				MAL_FTR_COMMON_ERR_INT);
 #else
-		printk(KERN_ERR "%pOF: Support for 405EZ not enabled!\n",
+		return dev_err_probe(&ofdev->dev, -ENODEV, "%pOF: Support for 405EZ not enabled",
 				ofdev->dev.of_node);
-		err = -ENODEV;
-		goto fail;
 #endif
 	}
 
@@ -711,8 +697,6 @@ static int mal_probe(struct platform_device *ofdev)
 	free_netdev(mal->dummy_dev);
  fail_unmap:
 	dcr_unmap(mal->dcr_host, 0x100);
- fail:
-	kfree(mal);
 
 	return err;
 }
@@ -747,7 +731,6 @@ static void mal_remove(struct platform_device *ofdev)
 			  (NUM_TX_BUFF * mal->num_tx_chans +
 			   NUM_RX_BUFF * mal->num_rx_chans), mal->bd_virt,
 			  mal->bd_dma);
-	kfree(mal);
 }
 
 static const struct of_device_id mal_platform_match[] =
