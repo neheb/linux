@@ -2585,10 +2585,9 @@ static int emac_dt_mdio_probe(struct emac_instance *dev)
 	int res;
 
 	mii_np = of_get_child_by_name(dev->ofdev->dev.of_node, "mdio");
-	if (!mii_np) {
-		dev_err(&dev->ofdev->dev, "no mdio definition found.");
-		return -ENODEV;
-	}
+	if (!mii_np)
+		return dev_err_probe(&dev->ofdev->dev, -ENODEV,
+				     "no mdio definition found.");
 
 	if (!of_device_is_available(mii_np)) {
 		res = -ENODEV;
@@ -2609,10 +2608,9 @@ static int emac_dt_mdio_probe(struct emac_instance *dev)
 	bus->reset = &emac_mii_bus_reset;
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%s", dev->ofdev->name);
 	res = devm_of_mdiobus_register(&dev->ofdev->dev, bus, mii_np);
-	if (res) {
-		dev_err(&dev->ofdev->dev, "cannot register MDIO bus %s (%d)",
-			bus->name, res);
-	}
+	if (res)
+		dev_err_probe(&dev->ofdev->dev, res,
+			      "cannot register MDIO bus %s", bus->name);
 
  put_node:
 	of_node_put(mii_np);
@@ -3063,16 +3061,18 @@ static int emac_probe(struct platform_device *ofdev)
 	dev->emac_irq = irq_of_parse_and_map(np, 0);
 	dev->wol_irq = irq_of_parse_and_map(np, 1);
 	if (!dev->emac_irq) {
-		printk(KERN_ERR "%pOF: Can't map main interrupt\n", np);
 		err = -ENODEV;
+		dev_err_probe(&ofdev->dev, err,
+			      "%pOF: Can't map main interrupt\n", np);
 		goto err_gone;
 	}
 
 	/* Setup error IRQ handler */
 	err = devm_request_irq(&ofdev->dev, dev->emac_irq, emac_irq, 0, "EMAC", dev);
 	if (err) {
-		printk(KERN_ERR "%s: failed to request IRQ %d\n",
-		       ndev->name, dev->emac_irq);
+		dev_err_probe(&ofdev->dev, err,
+			      "%s: failed to request IRQ %d\n", ndev->name,
+			      dev->emac_irq);
 		goto err_gone;
 	}
 
@@ -3082,16 +3082,18 @@ static int emac_probe(struct platform_device *ofdev)
 	// TODO : platform_get_resource() and devm_ioremap_resource()
 	dev->emacp = devm_of_iomap(&ofdev->dev, np, 0, NULL);
 	if (dev->emacp == NULL) {
-		printk(KERN_ERR "%pOF: Can't map device registers!\n", np);
 		err = -ENOMEM;
+		dev_err_probe(&ofdev->dev, err,
+			      "%pOF: Can't map device registers!\n", np);
 		goto err_irq_unmap;
 	}
 
 	/* Wait for dependent devices */
 	err = emac_wait_deps(dev);
 	if (err) {
-		printk(KERN_ERR
-		       "%pOF: Timeout waiting for dependent devices\n", np);
+		dev_err_probe(&ofdev->dev, err,
+			      "%pOF: Timeout waiting for dependent devices\n",
+			      np);
 		/*  display more info about what's missing ? */
 		goto err_irq_unmap;
 	}
@@ -3106,8 +3108,9 @@ static int emac_probe(struct platform_device *ofdev)
 	dev->commac.rx_chan_mask = MAL_CHAN_MASK(dev->mal_rx_chan);
 	err = mal_register_commac(dev->mal, &dev->commac);
 	if (err) {
-		printk(KERN_ERR "%pOF: failed to register with mal %pOF!\n",
-		       np, dev->mal_dev->dev.of_node);
+		dev_err_probe(&ofdev->dev, err,
+			      "%pOF: failed to register with mal %pOF!\n", np,
+			      dev->mal_dev->dev.of_node);
 		goto err_rel_deps;
 	}
 	dev->rx_skb_size = emac_rx_skb_size(ndev->mtu);
@@ -3183,8 +3186,8 @@ static int emac_probe(struct platform_device *ofdev)
 
 	err = devm_register_netdev(&ofdev->dev, ndev);
 	if (err) {
-		printk(KERN_ERR "%pOF: failed to register net device (%d)!\n",
-		       np, err);
+		dev_err_probe(&ofdev->dev, err,
+			      "%pOF: failed to register net device", np);
 		goto err_detach_tah;
 	}
 
