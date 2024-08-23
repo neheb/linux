@@ -698,7 +698,7 @@ static int ag71xx_mdio_probe(struct ag71xx *ag)
 	if (!mii_bus)
 		return -ENOMEM;
 
-	mdio_reset = devm_reset_control_get_exclusive(dev, "mdio");
+	mdio_reset = devm_reset_control_get_optional_exclusive(dev, "mdio");
 	if (IS_ERR(mdio_reset)) {
 		netif_err(ag, probe, ndev, "Failed to get reset mdio.\n");
 		return PTR_ERR(mdio_reset);
@@ -712,12 +712,10 @@ static int ag71xx_mdio_probe(struct ag71xx *ag)
 	mii_bus->parent = dev;
 	snprintf(mii_bus->id, MII_BUS_ID_SIZE, "%s.%d", np->name, ag->mac_idx);
 
-	if (!IS_ERR(mdio_reset)) {
-		reset_control_assert(mdio_reset);
-		msleep(100);
-		reset_control_deassert(mdio_reset);
-		msleep(200);
-	}
+	reset_control_assert(mdio_reset);
+	msleep(100);
+	reset_control_deassert(mdio_reset);
+	msleep(200);
 
 	mnp = of_get_child_by_name(np, "mdio");
 	err = devm_of_mdiobus_register(dev, mii_bus, mnp);
