@@ -1066,7 +1066,10 @@ int ath9k_init_device(u16 devid, struct ath_softc *sc,
 			goto debug_cleanup;
 	}
 
-	ath_init_leds(sc);
+	error = ath_init_leds(sc);
+	if (error)
+		goto debug_cleanup;
+
 	ath_start_rfkill_poll(sc);
 
 	return 0;

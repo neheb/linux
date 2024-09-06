@@ -16,6 +16,8 @@
 
 #include "ath9k.h"
 
+#include <linux/of_address.h>
+
 /********************************/
 /*	 LED functions		*/
 /********************************/
@@ -24,7 +26,18 @@
 
 static void ath_fill_led_pin(struct ath_softc *sc)
 {
+	struct device_node *np = sc->dev->of_node;
 	struct ath_hw *ah = sc->sc_ah;
+
+	np = of_get_child_by_name(np, "led");
+	if (np) {
+		int led_pin;
+
+		if (!of_property_read_u32(np, "led-sources", &led_pin))
+			ah->led_pin = led_pin;
+
+		ah->config.led_active_high = of_property_read_bool(np, "led-active-high");
+	}
 
 	/* Set default led pin if invalid */
 	if (ah->led_pin < 0) {
@@ -62,7 +75,7 @@ static void ath_led_brightness(struct led_classdev *led_cdev,
 
 void ath_deinit_leds(struct ath_softc *sc)
 {
-	if (!sc->led_registered)
+	if (AR_SREV_9100(sc->sc_ah))
 		return;
 
 	ath_led_brightness(&sc->led_cdev, LED_OFF);
@@ -71,12 +84,10 @@ void ath_deinit_leds(struct ath_softc *sc)
 	ath9k_hw_gpio_free(sc->sc_ah, sc->sc_ah->led_pin);
 }
 
-void ath_init_leds(struct ath_softc *sc)
+int ath_init_leds(struct ath_softc *sc)
 {
-	int ret;
-
 	if (AR_SREV_9100(sc->sc_ah))
-		return;
+		return 0;
 
 	ath_fill_led_pin(sc);
 
@@ -89,11 +100,7 @@ void ath_init_leds(struct ath_softc *sc)
 	sc->led_cdev.name = sc->led_name;
 	sc->led_cdev.brightness_set = ath_led_brightness;
 
-	ret = led_classdev_register(wiphy_dev(sc->hw->wiphy), &sc->led_cdev);
-	if (ret < 0)
-		return;
-
-	sc->led_registered = true;
+	return led_classdev_register(wiphy_dev(sc->hw->wiphy), &sc->led_cdev);
 }
 #endif
 

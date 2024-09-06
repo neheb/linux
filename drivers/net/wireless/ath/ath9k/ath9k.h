@@ -843,11 +843,12 @@ static inline int ath9k_dump_btcoex(struct ath_softc *sc, u8 *buf, u32 size)
 #define ATH_LED_PIN_9462		4
 
 #ifdef CONFIG_MAC80211_LEDS
-void ath_init_leds(struct ath_softc *sc);
+int ath_init_leds(struct ath_softc *sc);
 void ath_deinit_leds(struct ath_softc *sc);
 #else
-static inline void ath_init_leds(struct ath_softc *sc)
+static inline int ath_init_leds(struct ath_softc *sc)
 {
+	return 0;
 }
 
 static inline void ath_deinit_leds(struct ath_softc *sc)
