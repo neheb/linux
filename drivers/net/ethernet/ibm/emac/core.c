@@ -793,7 +793,7 @@ static int __emac_mdio_read(struct emac_instance *dev, u8 id, u8 reg)
 {
 	struct emac_regs __iomem *p = dev->emacp;
 	u32 r = 0;
-	int n, err = -ETIMEDOUT;
+	int err = -ETIMEDOUT;
 
 	mutex_lock(&dev->mdio_lock);
 
@@ -806,13 +806,9 @@ static int __emac_mdio_read(struct emac_instance *dev, u8 id, u8 reg)
 		rgmii_get_mdio(dev->rgmii_dev, dev->rgmii_port);
 
 	/* Wait for management interface to become idle */
-	n = 20;
-	while (!emac_phy_done(dev, in_be32(&p->stacr))) {
-		udelay(1);
-		if (!--n) {
-			DBG2(dev, " -> timeout wait idle\n");
-			goto bail;
-		}
+	if (!read_poll_timeout(&p->stacr, r, emac_phy_done(dev, r), 1, 20)) {
+		DBG2(dev, " -> timeout wait idle\n");
+		goto bail;
 	}
 
 	/* Issue read command */
@@ -829,15 +825,12 @@ static int __emac_mdio_read(struct emac_instance *dev, u8 id, u8 reg)
 	r |= (reg & EMAC_STACR_PRA_MASK)
 		| ((id & EMAC_STACR_PCDA_MASK) << EMAC_STACR_PCDA_SHIFT);
 	out_be32(&p->stacr, r);
+	r = in_be32(&p->stacr);
 
 	/* Wait for read to complete */
-	n = 200;
-	while (!emac_phy_done(dev, (r = in_be32(&p->stacr)))) {
-		udelay(1);
-		if (!--n) {
-			DBG2(dev, " -> timeout wait complete\n");
-			goto bail;
-		}
+	if (!read_poll_timeout(&p->stacr, r, emac_phy_done(dev, r), 1, 200)) {
+		DBG2(dev, " -> timeout wait complete\n");
+		goto bail;
 	}
 
 	if (unlikely(r & EMAC_STACR_PHYE)) {
@@ -865,7 +858,6 @@ static void __emac_mdio_write(struct emac_instance *dev, u8 id, u8 reg,
 {
 	struct emac_regs __iomem *p = dev->emacp;
 	u32 r = 0;
-	int n;
 
 	mutex_lock(&dev->mdio_lock);
 
@@ -878,13 +870,9 @@ static void __emac_mdio_write(struct emac_instance *dev, u8 id, u8 reg,
 		rgmii_get_mdio(dev->rgmii_dev, dev->rgmii_port);
 
 	/* Wait for management interface to be idle */
-	n = 20;
-	while (!emac_phy_done(dev, in_be32(&p->stacr))) {
-		udelay(1);
-		if (!--n) {
-			DBG2(dev, " -> timeout wait idle\n");
-			goto bail;
-		}
+	if (!read_poll_timeout(&p->stacr, r, emac_phy_done(dev, r), 1, 20)) {
+		DBG2(dev, " -> timeout wait idle\n");
+		goto bail;
 	}
 
 	/* Issue write command */
@@ -902,15 +890,12 @@ static void __emac_mdio_write(struct emac_instance *dev, u8 id, u8 reg,
 		((id & EMAC_STACR_PCDA_MASK) << EMAC_STACR_PCDA_SHIFT) |
 		(val << EMAC_STACR_PHYD_SHIFT);
 	out_be32(&p->stacr, r);
+	r = in_be32(&p->stacr);
 
 	/* Wait for write to complete */
-	n = 200;
-	while (!emac_phy_done(dev, in_be32(&p->stacr))) {
-		udelay(1);
-		if (!--n) {
-			DBG2(dev, " -> timeout wait complete\n");
-			goto bail;
-		}
+	if (!read_poll_timeout(&p->stacr, r, emac_phy_done(dev, r), 1, 200)) {
+		DBG2(dev, " -> timeout wait complete\n");
+		goto bail;
 	}
  bail:
 	if (emac_has_feature(dev, EMAC_FTR_HAS_RGMII))
