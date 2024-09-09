@@ -758,19 +758,6 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	if (of_property_read_bool(np, "fsl,wake-on-filer"))
 		priv->device_flags |= FSL_GIANFAR_DEV_HAS_WAKE_ON_FILER;
 
-	priv->phy_node = of_parse_phandle(np, "phy-handle", 0);
-
-	/* In the case of a fixed PHY, the DT node associated
-	 * to the PHY is the Ethernet MAC DT node.
-	 */
-	if (!priv->phy_node && of_phy_is_fixed_link(np)) {
-		err = of_phy_register_fixed_link(np);
-		if (err)
-			return err;
-
-		priv->phy_node = of_node_get(np);
-	}
-
 	/* Find the TBI PHY.  If it's not there, we don't support SGMII */
 	priv->tbi_node = of_parse_phandle(np, "tbi-handle", 0);
 
@@ -3308,8 +3295,6 @@ static int gfar_probe(struct platform_device *ofdev)
 	return 0;
 
 register_fail:
-	if (of_phy_is_fixed_link(np))
-		of_phy_deregister_fixed_link(np);
 	of_node_put(priv->phy_node);
 	of_node_put(priv->tbi_node);
 	return err;
@@ -3318,13 +3303,9 @@ register_fail:
 static void gfar_remove(struct platform_device *ofdev)
 {
 	struct gfar_private *priv = platform_get_drvdata(ofdev);
-	struct device_node *np = ofdev->dev.of_node;
 
 	of_node_put(priv->phy_node);
 	of_node_put(priv->tbi_node);
-
-	if (of_phy_is_fixed_link(np))
-		of_phy_deregister_fixed_link(np);
 }
 
 #ifdef CONFIG_PM
