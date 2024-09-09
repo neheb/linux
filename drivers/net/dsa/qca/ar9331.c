@@ -41,6 +41,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/module.h>
+#include <linux/of_device.h>
 #include <linux/of_irq.h>
 #include <linux/of_mdio.h>
 #include <linux/regmap.h>
@@ -49,6 +50,8 @@
 
 #define AR9331_SW_NAME				"ar9331_switch"
 #define AR9331_SW_PORTS				6
+
+#define AR9331_CPU_PORT				0
 
 /* dummy reg to change page */
 #define AR9331_SW_REG_PAGE			0x40000
@@ -60,9 +63,15 @@
 
 #define AR9331_SW_REG_FLOOD_MASK		0x2c
 #define AR9331_SW_FLOOD_MASK_BROAD_TO_CPU	BIT(26)
+#define AR9344_SW_FLOOD_MASK_BC_DP_M		GENMASK(31, 25)
+#define AR9344_SW_FLOOD_MASK_MC_DP_M		GENMASK(22, 16)
+#define AR9344_SW_FLOOD_MASK_UC_DP_M		GENMASK(6, 0)
 
 #define AR9331_SW_REG_GLOBAL_CTRL		0x30
 #define AR9331_SW_GLOBAL_CTRL_MFS_M		GENMASK(13, 0)
+
+#define AR9331_SW_REG_CPU_PORT			0x78
+#define AR9344_SW_CPU_PORT_CPU_EN		BIT(8)
 
 #define AR9331_SW_REG_MDIO_CTRL			0x98
 #define AR9331_SW_MDIO_CTRL_BUSY		BIT(31)
@@ -100,6 +109,19 @@
 	(AR9331_SW_PORT_STATUS_DUPLEX_MODE | \
 	 AR9331_SW_PORT_STATUS_RX_FLOW_EN | AR9331_SW_PORT_STATUS_TX_FLOW_EN | \
 	 AR9331_SW_PORT_STATUS_SPEED_M)
+
+#define AR9331_SW_REG_PORT_CTRL(_port)		(0x104 + (_port) * 0x100)
+#define AR9344_SW_PORT_CTRL_QCA_HDR		BIT(11)
+
+#define AR9344_SW_REG_PORT_VLAN1(_port)		(0x108 + (_port) * 0x100)
+#define AR9344_SW_PORT_VLAN1_PORT_VLAN_EN	BIT(28)
+
+#define AR9344_SW_REG_PORT_VLAN2(_port)		(0x10C + (_port) * 0x100)
+#define AR9344_SW_PORT_VLAN2_PORT_VID_MEM_M	GENMASK(22, 16)
+#define AR9344_SW_PORT_VLAN2_SET_PORTMASK(_ports) \
+	(FIELD_PREP(AR9344_SW_PORT_VLAN2_PORT_VID_MEM_M, _ports))
+#define AR9344_SW_PORT_VLAN2_SET_PORT(_port) \
+	(AR9344_SW_PORT_VLAN2_SET_PORTMASK(BIT(_port)))
 
 #define AR9331_SW_REG_PORT_CTRL(_port)			(0x104 + (_port) * 0x100)
 #define AR9331_SW_PORT_CTRL_HEAD_EN			BIT(11)
@@ -235,10 +257,15 @@ struct ar9331_sw_port {
 	struct spinlock stats_lock;
 };
 
+struct ar9331_match_data {
+	enum dsa_tag_protocol dsa_proto;
+	const struct dsa_switch_ops *switch_ops;
+};
+
 struct ar9331_sw_priv {
 	struct device *dev;
+	const struct ar9331_match_data *match_data;
 	struct dsa_switch ds;
-	struct dsa_switch_ops ops;
 	struct irq_domain *irqdomain;
 	u32 irq_mask;
 	struct mutex lock_irq;
@@ -482,6 +509,89 @@ error:
 	return ret;
 }
 
+static int ar9344_sw_setup(struct dsa_switch *ds)
+{
+	struct ar9331_sw_priv *priv = (struct ar9331_sw_priv *)ds->priv;
+	struct regmap *regmap = priv->regmap;
+	int ret;
+	int i;
+
+	/* CPU port has to be Port 0 */
+	if (!dsa_is_cpu_port(ds, AR9331_CPU_PORT)) {
+		pr_err("port 0 is not the CPU port\n");
+		return -EINVAL;
+	}
+
+	ret = ar9331_sw_reset(priv);
+	if (ret)
+		return ret;
+
+	ret = ar9331_sw_mbus_init(priv);
+	if (ret)
+		return ret;
+
+	/* Enable CPU port */
+	ret = regmap_update_bits(regmap, AR9331_SW_REG_CPU_PORT,
+				 AR9344_SW_CPU_PORT_CPU_EN,
+				 AR9344_SW_CPU_PORT_CPU_EN);
+	if (ret)
+		goto error;
+
+	/* Enable QCA header on CPU port */
+	ret = regmap_update_bits(regmap, AR9331_SW_REG_PORT_CTRL(0),
+				 AR9344_SW_PORT_CTRL_QCA_HDR,
+				 AR9344_SW_PORT_CTRL_QCA_HDR);
+	if (ret)
+		goto error;
+
+	/* Set max frame size to the maximum supported value */
+	ret = regmap_update_bits(regmap, AR9331_SW_REG_GLOBAL_CTRL,
+				 AR9331_SW_GLOBAL_CTRL_MFS_M,
+				 AR9331_SW_GLOBAL_CTRL_MFS_M);
+	if (ret)
+		goto error;
+
+	/* Forward all unknown frames to CPU port for Linux processing */
+	ret = regmap_update_bits(regmap, AR9331_SW_REG_FLOOD_MASK,
+				 AR9344_SW_FLOOD_MASK_BC_DP_M |
+				 AR9344_SW_FLOOD_MASK_MC_DP_M |
+				 AR9344_SW_FLOOD_MASK_UC_DP_M,
+				 FIELD_PREP(AR9344_SW_FLOOD_MASK_BC_DP_M, BIT(AR9331_CPU_PORT)) |
+				 FIELD_PREP(AR9344_SW_FLOOD_MASK_MC_DP_M, BIT(AR9331_CPU_PORT)) |
+				 FIELD_PREP(AR9344_SW_FLOOD_MASK_UC_DP_M, BIT(AR9331_CPU_PORT)));
+	if (ret)
+		goto error;
+
+	/* Setup connection between CPU port & user ports */
+	for (i = 0; i < AR9331_SW_PORTS; i++) {
+		/* Enable Port-based VLAN */
+		ret = regmap_update_bits(regmap, AR9344_SW_REG_PORT_VLAN1(i),
+					 AR9344_SW_PORT_VLAN1_PORT_VLAN_EN,
+					 AR9344_SW_PORT_VLAN1_PORT_VLAN_EN);
+		if (ret)
+			goto error;
+
+		/* CPU port is already connected to all ports */
+		if (dsa_is_cpu_port(ds, i))
+			continue;
+
+		/* Individual user ports get connected to CPU port only */
+		if (dsa_is_user_port(ds, i)) {
+			ret = regmap_update_bits(
+				regmap, AR9344_SW_REG_PORT_VLAN2(i),
+				AR9344_SW_PORT_VLAN2_PORT_VID_MEM_M,
+				AR9344_SW_PORT_VLAN2_SET_PORT(AR9331_CPU_PORT));
+			if (ret)
+				goto error;
+		}
+	}
+
+	return 0;
+error:
+	dev_err_ratelimited(priv->dev, "%s: %i\n", __func__, ret);
+	return ret;
+}
+
 static void ar9331_sw_port_disable(struct dsa_switch *ds, int port)
 {
 	struct ar9331_sw_priv *priv = ds->priv;
@@ -497,7 +607,88 @@ static enum dsa_tag_protocol ar9331_sw_get_tag_protocol(struct dsa_switch *ds,
 							int port,
 							enum dsa_tag_protocol m)
 {
-	return DSA_TAG_PROTO_AR9331;
+	struct ar9331_sw_priv *priv = (struct ar9331_sw_priv *)ds->priv;
+
+	return priv->match_data->dsa_proto;
+}
+
+static int ar9344_port_bridge_join(struct dsa_switch *ds, int port,
+				   struct dsa_bridge bridge,
+				   bool *tx_fwd_offload,
+				   struct netlink_ext_ack *extack)
+{
+	struct ar9331_sw_priv *priv = (struct ar9331_sw_priv *)ds->priv;
+	struct regmap *regmap = priv->regmap;
+	int port_mask = BIT(AR9331_CPU_PORT);
+	struct dsa_port *dp;
+	int ret;
+	int i;
+
+	for (i = 1; i < AR9331_SW_PORTS; i++) {
+		dp = dsa_to_port(ds, i);
+		if (!dsa_port_offloads_bridge_dev(dp, bridge.dev))
+			continue;
+		/* Add this port to the portvlan mask of the other ports
+		 * of the bridge
+		 */
+
+		ret = regmap_update_bits(regmap,
+					 AR9344_SW_REG_PORT_VLAN2(i),
+					 AR9344_SW_PORT_VLAN2_SET_PORT(port),
+					 AR9344_SW_PORT_VLAN2_SET_PORT(port));
+		if (ret)
+			goto error;
+
+		if (i != port)
+			port_mask |= BIT(i);
+	}
+
+	/* Add all other ports to this ports portvlan mask */
+	ret = regmap_update_bits(regmap, AR9344_SW_REG_PORT_VLAN2(port),
+				 AR9344_SW_PORT_VLAN2_PORT_VID_MEM_M,
+				 AR9344_SW_PORT_VLAN2_SET_PORTMASK(port_mask));
+	if (ret)
+		goto error;
+
+	return 0;
+error:
+	dev_err_ratelimited(priv->dev, "%s: %i\n", __func__, ret);
+	return ret;
+}
+
+static void ar9344_port_bridge_leave(struct dsa_switch *ds, int port,
+				     struct dsa_bridge bridge)
+{
+	struct ar9331_sw_priv *priv = (struct ar9331_sw_priv *)ds->priv;
+	struct regmap *regmap = priv->regmap;
+	struct dsa_port *dp;
+	int ret;
+	int i;
+
+	for (i = 1; i < AR9331_SW_PORTS; i++) {
+		dp = dsa_to_port(ds, i);
+		if (!dsa_port_offloads_bridge_dev(dp, bridge.dev))
+			continue;
+
+		/* Remove this port to the portvlan mask of the other ports
+		 * in the bridge
+		 */
+		ret = regmap_update_bits(regmap, AR9344_SW_REG_PORT_VLAN2(i),
+					 AR9344_SW_PORT_VLAN2_SET_PORT(port),
+					 0);
+		if (ret)
+			goto error;
+	}
+
+	/* Set the cpu port to be the only one in the portvlan mask of
+	 * this port
+	 */
+	ret = regmap_update_bits(
+		regmap, AR9344_SW_REG_PORT_VLAN2(port),
+		AR9344_SW_PORT_VLAN2_PORT_VID_MEM_M,
+		AR9344_SW_PORT_VLAN2_SET_PORT(AR9331_CPU_PORT));
+error:
+	dev_err_ratelimited(priv->dev, "%s: %i\n", __func__, ret);
 }
 
 static void ar9331_sw_phylink_get_caps(struct dsa_switch *ds, int port,
@@ -700,6 +891,14 @@ static const struct dsa_switch_ops ar9331_sw_ops = {
 	.phylink_get_caps	= ar9331_sw_phylink_get_caps,
 	.get_stats64		= ar9331_get_stats64,
 	.get_pause_stats	= ar9331_get_pause_stats,
+};
+
+static const struct dsa_switch_ops ar9344_sw_ops = {
+	.get_tag_protocol	= ar9331_sw_get_tag_protocol,
+	.setup			= ar9344_sw_setup,
+	.port_disable		= ar9331_sw_port_disable,
+	.port_bridge_join	= ar9344_port_bridge_join,
+	.port_bridge_leave	= ar9344_port_bridge_leave,
 };
 
 static irqreturn_t ar9331_sw_irq(int irq, void *data)
@@ -1055,6 +1254,10 @@ static int ar9331_sw_probe(struct mdio_device *mdiodev)
 	priv->sbus = mdiodev->bus;
 	priv->dev = &mdiodev->dev;
 
+	priv->match_data = of_device_get_match_data(priv->dev);
+	if (!priv->match_data)
+		return -EINVAL;
+
 	ret = ar9331_sw_irq_init(priv);
 	if (ret)
 		return ret;
@@ -1063,9 +1266,8 @@ static int ar9331_sw_probe(struct mdio_device *mdiodev)
 	ds->dev = &mdiodev->dev;
 	ds->num_ports = AR9331_SW_PORTS;
 	ds->priv = priv;
-	priv->ops = ar9331_sw_ops;
-	ds->ops = &priv->ops;
 	ds->phylink_mac_ops = &ar9331_phylink_mac_ops;
+	ds->ops = priv->match_data->switch_ops;
 	dev_set_drvdata(&mdiodev->dev, priv);
 
 	for (i = 0; i < ARRAY_SIZE(priv->port); i++) {
@@ -1120,8 +1322,19 @@ static void ar9331_sw_shutdown(struct mdio_device *mdiodev)
 	dev_set_drvdata(&mdiodev->dev, NULL);
 }
 
+static const struct ar9331_match_data ar9331_data = {
+       .dsa_proto = DSA_TAG_PROTO_AR9331,
+       .switch_ops = &ar9331_sw_ops,
+};
+
+static const struct ar9331_match_data ar9344_data = { 
+       .dsa_proto = DSA_TAG_PROTO_AR9344,
+       .switch_ops = &ar9344_sw_ops,
+};
+
 static const struct of_device_id ar9331_sw_of_match[] = {
-	{ .compatible = "qca,ar9331-switch" },
+	{ .compatible = "qca,ar9331-switch", .data = &ar9331_data },
+	{ .compatible = "qca,ar9344-switch", .data = &ar9344_data },
 	{ },
 };
 
