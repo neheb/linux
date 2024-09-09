@@ -30,6 +30,12 @@ config NET_DSA_TAG_AR9331
 	  Say Y or M if you want to enable support for tagging frames for
 	  the Atheros AR9331 SoC with built-in switch.
 
+config NET_DSA_TAG_AR9344
+	tristate "Tag driver for Atheros AR9344 / QCA95xx SoC with built-in switch"
+	help
+	  Say Y or M if you want to enable support for tagging frames for
+	  the Atheros AR9344 / QCA95xx SoC with built-in switch.
+
 config NET_DSA_TAG_BRCM_COMMON
 	tristate
 	default n
