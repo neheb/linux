@@ -2602,20 +2602,13 @@ static int emac_dt_phy_connect(struct emac_instance *dev,
 
 static int emac_dt_phy_probe(struct emac_instance *dev)
 {
-	struct device_node *np = dev->ofdev->dev.of_node;
 	struct device_node *phy_handle;
 	int res = 1;
 
-	phy_handle = of_parse_phandle(np, "phy-handle", 0);
+	res = emac_dt_mdio_probe(dev);
+	if (!res)
+		res = emac_dt_phy_connect(dev, phy_handle);
 
-	if (phy_handle) {
-		res = emac_dt_mdio_probe(dev);
-		if (!res) {
-			res = emac_dt_phy_connect(dev, phy_handle);
-		}
-	}
-
-	of_node_put(phy_handle);
 	return res;
 }
 
@@ -2643,19 +2636,6 @@ static int emac_init_phy(struct emac_instance *dev)
 			dev->phy.features |= SUPPORTED_100baseT_Full;
 		dev->phy.pause = 1;
 
-		if (of_phy_is_fixed_link(np)) {
-			int res = emac_dt_mdio_probe(dev);
-
-			if (res)
-				return res;
-
-			res = of_phy_register_fixed_link(np);
-			ndev->phydev = of_phy_find_device(np);
-			if (res || !ndev->phydev)
-				return res ? res : -EINVAL;
-			emac_adjust_link(dev->ndev);
-			put_device(&ndev->phydev->mdio.dev);
-		}
 		return 0;
 	}
 
