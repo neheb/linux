@@ -171,8 +171,8 @@
 #define AR9331_SW_MDIO_PHY_ADDR_M		GENMASK(2, 0)
 
 /* Empirical determined values */
-#define AR9331_SW_MDIO_POLL_SLEEP_US		1
-#define AR9331_SW_MDIO_POLL_TIMEOUT_US		20
+#define AR9331_SW_MDIO_POLL_SLEEP_US		10
+#define AR9331_SW_MDIO_POLL_TIMEOUT_US		100
 
 /* The interval should be small enough to avoid overflow of 32bit MIBs */
 /*
