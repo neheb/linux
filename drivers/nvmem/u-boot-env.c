@@ -113,7 +113,9 @@ static int u_boot_env_add_cells(struct u_boot_env *priv, uint8_t *buf,
 		info.offset = data_offset + value - data;
 		info.bytes = strlen(value);
 		info.np = of_get_child_by_name(dev->of_node, info.name);
-		if (!strcmp(var, "ethaddr")) {
+		if (!strcmp(name, "ethaddr") ||
+		    !strcmp(name, "eth1addr") ||
+		    !strcmp(name, "eth2addr")) {
 			info.raw_len = strlen(value);
 			info.bytes = ETH_ALEN;
 			info.read_post_process = u_boot_env_read_post_process_ethaddr;
