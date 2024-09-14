@@ -2989,6 +2989,7 @@ ucc_geth_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 static int ucc_geth_rx(struct ucc_geth_private *ugeth, u8 rxQ, int rx_work_limit)
 {
+	LIST_HEAD(rx_list);
 	struct sk_buff *skb;
 	u8 __iomem *bd;
 	u16 length, howmany = 0;
@@ -3035,7 +3036,7 @@ static int ucc_geth_rx(struct ucc_geth_private *ugeth, u8 rxQ, int rx_work_limit
 
 			dev->stats.rx_bytes += length;
 			/* Send the packet up the stack */
-			netif_receive_skb(skb);
+			list_add_tail(&skb->list, &rx_list);
 		}
 
 		skb = get_new_skb(ugeth, bd);
@@ -3060,6 +3061,8 @@ static int ucc_geth_rx(struct ucc_geth_private *ugeth, u8 rxQ, int rx_work_limit
 
 		bd_status = in_be32((u32 __iomem *)bd);
 	}
+
+	netif_receive_skb_list(&rx_list);
 
 	ugeth->rxBd[rxQ] = bd;
 	return howmany;
