@@ -437,11 +437,14 @@ qca8k_parse_port_leds(struct qca8k_priv *priv, struct fwnode_handle *port, int p
 			return -ENOMEM;
 		}
 
-		ret = devm_led_classdev_register_ext(priv->dev, &port_led->cdev, &init_data);
-		if (ret)
-			dev_warn(priv->dev, "Failed to init LED %d for port %d", led_num, port_num);
-
+		ret = devm_led_classdev_register_ext(priv->dev, &port_led->cdev,
+						     &init_data);
 		kfree(init_data.devicename);
+		if (ret)
+			return dev_err_probe(
+				priv->dev, ret,
+				"Failed to init LED %d for port %d", led_num,
+				port_num);
 	}
 
 	fwnode_handle_put(leds);
