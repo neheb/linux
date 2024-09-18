@@ -778,7 +778,7 @@ static int pn533_target_found_felica(struct nfc_target *nfc_tgt, u8 *tgt_data,
 	else
 		nfc_tgt->supported_protocols = NFC_PROTO_FELICA_MASK;
 
-	memcpy(nfc_tgt->sensf_res, &tgt_felica->opcode, 9);
+	memcpy(nfc_tgt->sensf_res, &tgt_felica->opcode, 1);
 	nfc_tgt->sensf_res_len = 9;
 
 	memcpy(nfc_tgt->nfcid2, tgt_felica->nfcid2, NFC_NFCID2_MAXSIZE);
