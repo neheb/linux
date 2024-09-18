@@ -611,7 +611,7 @@ static int qlcnic_83xx_dcb_query_cee_param(struct qlcnic_dcb *dcb,
 			each->app[i] = cmd.rsp.arg[i + k];
 
 		size = 16 * sizeof(u32);
-		memcpy(p, &each->hdr_prio_pfc_map[0], size);
+		memcpy(p, each, size);
 		p += size;
 		if (j == 0)
 			k = 18;
