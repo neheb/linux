@@ -866,7 +866,7 @@ static int fs_enet_probe(struct platform_device *ofdev)
 	if (!ops)
 		return -EINVAL;
 
-	fpi = kzalloc(sizeof(*fpi), GFP_KERNEL);
+	fpi = devm_kzalloc(&ofdev->dev, sizeof(*fpi), GFP_KERNEL);
 	if (!fpi)
 		return -ENOMEM;
 
@@ -897,7 +897,7 @@ static int fs_enet_probe(struct platform_device *ofdev)
 	 */
 	clk = devm_clk_get_optional_enabled(&ofdev->dev, "per");
 	if (IS_ERR(clk))
-		goto out_free_fpi;
+		return PTR_ERR(clk);
 
 	privsize = sizeof(*fep) +
 		   sizeof(struct sk_buff **) *
@@ -905,10 +905,8 @@ static int fs_enet_probe(struct platform_device *ofdev)
 		   sizeof(char) * fpi->tx_ring;
 
 	ndev = alloc_etherdev(privsize);
-	if (!ndev) {
-		ret = -ENOMEM;
-		goto out_free_fpi;
-	}
+	if (!ndev)
+		return -ENOMEM;
 
 	SET_NETDEV_DEV(ndev, &ofdev->dev);
 	platform_set_drvdata(ofdev, ndev);
@@ -989,8 +987,6 @@ out_phylink:
 	phylink_destroy(fep->phylink);
 out_free_dev:
 	free_netdev(ndev);
-out_free_fpi:
-	kfree(fpi);
 	return ret;
 }
 
