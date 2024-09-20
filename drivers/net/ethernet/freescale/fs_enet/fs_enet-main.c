@@ -904,7 +904,7 @@ static int fs_enet_probe(struct platform_device *ofdev)
 		     (fpi->rx_ring + fpi->tx_ring) +
 		   sizeof(char) * fpi->tx_ring;
 
-	ndev = alloc_etherdev(privsize);
+	ndev = devm_alloc_etherdev(&ofdev->dev, privsize);
 	if (!ndev)
 		return -ENOMEM;
 
@@ -930,10 +930,8 @@ static int fs_enet_probe(struct platform_device *ofdev)
 
 	phylink = phylink_create(&fep->phylink_config, dev_fwnode(fep->dev),
 				 phy_mode, &fs_enet_phylink_mac_ops);
-	if (IS_ERR(phylink)) {
-		ret = PTR_ERR(phylink);
-		goto out_free_dev;
-	}
+	if (IS_ERR(phylink))
+		return PTR_ERR(phylink);
 
 	fep->phylink = phylink;
 
@@ -985,8 +983,6 @@ out_cleanup_data:
 	fep->ops->cleanup_data(ndev);
 out_phylink:
 	phylink_destroy(fep->phylink);
-out_free_dev:
-	free_netdev(ndev);
 	return ret;
 }
 
@@ -1001,7 +997,6 @@ static void fs_enet_remove(struct platform_device *ofdev)
 	fep->ops->cleanup_data(ndev);
 	dev_set_drvdata(fep->dev, NULL);
 	phylink_destroy(fep->phylink);
-	free_netdev(ndev);
 }
 
 static const struct of_device_id fs_enet_match[] = {
