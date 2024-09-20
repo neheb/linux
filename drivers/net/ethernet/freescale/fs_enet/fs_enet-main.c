@@ -969,7 +969,7 @@ static int fs_enet_probe(struct platform_device *ofdev)
 
 	ndev->features |= NETIF_F_SG;
 
-	ret = register_netdev(ndev);
+	ret = devm_register_netdev(&ofdev->dev, ndev);
 	if (ret)
 		goto out_free_bd;
 
@@ -990,8 +990,6 @@ static void fs_enet_remove(struct platform_device *ofdev)
 {
 	struct net_device *ndev = platform_get_drvdata(ofdev);
 	struct fs_enet_private *fep = netdev_priv(ndev);
-
-	unregister_netdev(ndev);
 
 	fep->ops->free_bd(ndev);
 	fep->ops->cleanup_data(ndev);
