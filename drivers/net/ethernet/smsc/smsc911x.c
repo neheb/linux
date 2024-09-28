@@ -2245,8 +2245,6 @@ static void smsc911x_drv_remove(struct platform_device *pdev)
 
 	SMSC_TRACE(pdata, ifdown, "Stopping driver");
 
-	unregister_netdev(dev);
-
 	pm_runtime_disable(&pdev->dev);
 }
 
@@ -2389,7 +2387,7 @@ static int smsc911x_drv_probe(struct platform_device *pdev)
 		goto out_init_fail;
 	}
 
-	retval = register_netdev(dev);
+	retval = devm_register_netdev(&pdev->dev, dev);
 	if (retval) {
 		SMSC_WARN(pdata, probe, "Error %i registering device", retval);
 		goto out_init_fail;
