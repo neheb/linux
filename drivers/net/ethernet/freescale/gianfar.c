@@ -3119,8 +3119,8 @@ static int gfar_probe(struct platform_device *ofdev)
 {
 	struct device_node *np = ofdev->dev.of_node;
 	struct net_device *dev = NULL;
-	struct gfar_private *priv = NULL;
-	int err = 0, i;
+	struct gfar_private *priv;
+	int err, i;
 
 	err = gfar_of_init(ofdev, &dev);
 
