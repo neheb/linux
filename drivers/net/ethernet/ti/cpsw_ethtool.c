@@ -244,11 +244,9 @@ static void cpsw_add_ch_strings(u8 **p, int ch_num, int rx_dir)
 	ch_stats_len = CPSW_STATS_CH_LEN * ch_num;
 	for (i = 0; i < ch_stats_len; i++) {
 		line = i % CPSW_STATS_CH_LEN;
-		snprintf(*p, ETH_GSTRING_LEN,
-			 "%s DMA chan %ld: %s", rx_dir ? "Rx" : "Tx",
-			 (long)(i / CPSW_STATS_CH_LEN),
-			 cpsw_gstrings_ch_stats[line].stat_string);
-		*p += ETH_GSTRING_LEN;
+		ethtool_sprintf(p, "%s DMA chan %ld: %s", rx_dir ? "Rx" : "Tx",
+				(long)(i / CPSW_STATS_CH_LEN),
+				cpsw_gstrings_ch_stats[line].stat_string);
 	}
 }
 

@@ -608,7 +608,6 @@ static void am65_cpsw_get_strings(struct net_device *ndev,
 {
 	const struct am65_cpsw_ethtool_stat *hw_stats;
 	u32 i, num_stats;
-	u8 *p = data;
 
 	switch (stringset) {
 	case ETH_SS_STATS:

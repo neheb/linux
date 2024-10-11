@@ -184,29 +184,20 @@ static void enic_get_strings(struct net_device *netdev, u32 stringset,
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		for (i = 0; i < NUM_ENIC_TX_STATS; i++) {
+		for (i = 0; i < NUM_ENIC_TX_STATS; i++)
 			ethtool_puts(&data, enic_tx_stats[i].name);
-		}
-		for (i = 0; i < NUM_ENIC_RX_STATS; i++) {
+		for (i = 0; i < NUM_ENIC_RX_STATS; i++)
 			ethtool_puts(&data, enic_rx_stats[i].name);
-		}
-		for (i = 0; i < NUM_ENIC_GEN_STATS; i++) {
+		for (i = 0; i < NUM_ENIC_GEN_STATS; i++)
 			ethtool_puts(&data, enic_gen_stats[i].name);
-		}
-		for (i = 0; i < enic->rq_count; i++) {
-			for (j = 0; j < NUM_ENIC_PER_RQ_STATS; j++) {
-				snprintf(data, ETH_GSTRING_LEN,
-					 enic_per_rq_stats[j].name, i);
-				data += ETH_GSTRING_LEN;
-			}
-		}
-		for (i = 0; i < enic->wq_count; i++) {
-			for (j = 0; j < NUM_ENIC_PER_WQ_STATS; j++) {
-				snprintf(data, ETH_GSTRING_LEN,
-					 enic_per_wq_stats[j].name, i);
-				data += ETH_GSTRING_LEN;
-			}
-		}
+		for (i = 0; i < enic->rq_count; i++)
+			for (j = 0; j < NUM_ENIC_PER_RQ_STATS; j++)
+				ethtool_sprintf(&data,
+						enic_per_rq_stats[j].name, i);
+		for (i = 0; i < enic->wq_count; i++)
+			for (j = 0; j < NUM_ENIC_PER_WQ_STATS; j++)
+				ethtool_sprintf(&data,
+						enic_per_wq_stats[j].name, i);
 		break;
 	}
 }

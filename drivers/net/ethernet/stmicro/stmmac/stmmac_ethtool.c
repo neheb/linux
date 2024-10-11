@@ -765,27 +765,20 @@ static void stmmac_get_qstats_string(struct stmmac_priv *priv, u8 *data)
 	u32 rx_cnt = priv->plat->rx_queues_to_use;
 	int q, stat;
 
-	for (q = 0; q < tx_cnt; q++) {
-		for (stat = 0; stat < STMMAC_TXQ_STATS; stat++) {
-			snprintf(data, ETH_GSTRING_LEN, "q%d_%s", q,
-				 stmmac_qstats_tx_string[stat]);
-			data += ETH_GSTRING_LEN;
-		}
-	}
-	for (q = 0; q < rx_cnt; q++) {
-		for (stat = 0; stat < STMMAC_RXQ_STATS; stat++) {
-			snprintf(data, ETH_GSTRING_LEN, "q%d_%s", q,
-				 stmmac_qstats_rx_string[stat]);
-			data += ETH_GSTRING_LEN;
-		}
-	}
+	for (q = 0; q < tx_cnt; q++)
+		for (stat = 0; stat < STMMAC_TXQ_STATS; stat++)
+			ethtool_sprintf(&data, "q%d_%s", q,
+					stmmac_qstats_tx_string[stat]);
+	for (q = 0; q < rx_cnt; q++)
+		for (stat = 0; stat < STMMAC_RXQ_STATS; stat++)
+			ethtool_sprintf(&data, "q%d_%s", q,
+					stmmac_qstats_rx_string[stat]);
 }
 
 static void stmmac_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
-	int i;
-	u8 *p = data;
 	struct stmmac_priv *priv = netdev_priv(dev);
+	int i;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
@@ -793,26 +786,26 @@ static void stmmac_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 			for (i = 0; i < STMMAC_SAFETY_FEAT_SIZE; i++) {
 				const char *desc;
 				if (!stmmac_safety_feat_dump(priv,
-							&priv->sstats, i,
-							NULL, &desc)) {
-					ethtool_puts(&p, desc);
-				}
+							     &priv->sstats, i,
+							     NULL, &desc))
+					ethtool_puts(&data, desc);
 			}
 		}
 		if (priv->dma_cap.rmon)
-			for (i = 0; i < STMMAC_MMC_STATS_LEN; i++) {
-				ethtool_puts(&p, stmmac_mmc[i].stat_string);
-			}
-		for (i = 0; i < STMMAC_STATS_LEN; i++) {
-			ethtool_puts(&p, stmmac_gstrings_stats[i].stat_string);
-		}
-		for (i = 0; i < STMMAC_QSTATS; i++) {
-			ethtool_puts(&p, stmmac_qstats_string[i]);
-		}
-		stmmac_get_qstats_string(priv, p);
+			for (i = 0; i < STMMAC_MMC_STATS_LEN; i++)
+				ethtool_puts(&data, stmmac_mmc[i].stat_string);
+
+		for (i = 0; i < STMMAC_STATS_LEN; i++)
+			ethtool_puts(&data,
+				     stmmac_gstrings_stats[i].stat_string);
+
+		for (i = 0; i < STMMAC_QSTATS; i++)
+			ethtool_puts(&data, stmmac_qstats_string[i]);
+
+		stmmac_get_qstats_string(priv, data);
 		break;
 	case ETH_SS_TEST:
-		stmmac_selftest_get_strings(priv, p);
+		stmmac_selftest_get_strings(priv, data);
 		break;
 	default:
 		WARN_ON(1);

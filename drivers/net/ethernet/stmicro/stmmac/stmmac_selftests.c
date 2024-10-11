@@ -2036,11 +2036,8 @@ void stmmac_selftest_get_strings(struct stmmac_priv *priv, u8 *data)
 	u8 *p = data;
 	int i;
 
-	for (i = 0; i < stmmac_selftest_get_count(priv); i++) {
-		snprintf(p, ETH_GSTRING_LEN, "%2d. %s", i + 1,
-			 stmmac_selftests[i].name);
-		p += ETH_GSTRING_LEN;
-	}
+	for (i = 0; i < stmmac_selftest_get_count(priv); i++)
+		ethtool_sprintf(&p, "%2d. %s", i + 1, stmmac_selftests[i].name);
 }
 
 int stmmac_selftest_get_count(struct stmmac_priv *priv)

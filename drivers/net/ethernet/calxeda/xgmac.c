@@ -1618,13 +1618,11 @@ static void xgmac_get_strings(struct net_device *dev, u32 stringset,
 				   u8 *data)
 {
 	int i;
-	u8 *p = data;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		for (i = 0; i < XGMAC_STATS_LEN; i++) {
-			ethtool_puts(&p, xgmac_gstrings_stats[i].stat_string);
-		}
+		for (i = 0; i < XGMAC_STATS_LEN; i++)
+			ethtool_puts(&data, xgmac_gstrings_stats[i].stat_string);
 		break;
 	default:
 		WARN_ON(1);

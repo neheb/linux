@@ -192,12 +192,11 @@ static void sxgbe_setmsglevel(struct net_device *dev, u32 level)
 static void sxgbe_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
 	int i;
-	u8 *p = data;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
 		for (i = 0; i < SXGBE_STATS_LEN; i++) {
-			ethtool_puts(&p, sxgbe_gstrings_stats[i].stat_string);
+			ethtool_puts(&data, sxgbe_gstrings_stats[i].stat_string);
 		}
 		break;
 	default:

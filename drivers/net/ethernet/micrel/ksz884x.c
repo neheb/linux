@@ -6093,10 +6093,11 @@ static void netdev_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 	struct dev_priv *priv = netdev_priv(dev);
 	struct dev_info *hw_priv = priv->adapter;
 	struct ksz_hw *hw = &hw_priv->hw;
+	int i;
 
 	if (ETH_SS_STATS == stringset)
-		memcpy(buf, &ethtool_stats_keys,
-			ETH_GSTRING_LEN * hw->mib_cnt);
+		for (i = 0; i < hw->mib_cnt; i++)
+			ethtool_puts(&buf, ethtool_stats_keys[i].string);
 }
 
 /**

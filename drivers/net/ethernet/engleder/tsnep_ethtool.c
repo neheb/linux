@@ -138,24 +138,20 @@ static void tsnep_ethtool_get_strings(struct net_device *netdev, u32 stringset,
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, tsnep_stats_strings, sizeof(tsnep_stats_strings));
-		data += sizeof(tsnep_stats_strings);
+		for (i = 0; i < sizeof(tsnep_stats_strings); i++)
+			ethtool_puts(&data, tsnep_stats_strings[i]);
 
-		for (i = 0; i < rx_count; i++) {
-			for (j = 0; j < TSNEP_RX_QUEUE_STATS_COUNT; j++) {
-				snprintf(data, ETH_GSTRING_LEN,
-					 tsnep_rx_queue_stats_strings[j], i);
-				data += ETH_GSTRING_LEN;
-			}
-		}
+		for (i = 0; i < rx_count; i++)
+			for (j = 0; j < TSNEP_RX_QUEUE_STATS_COUNT; j++)
+				ethtool_sprintf(&data,
+						tsnep_rx_queue_stats_strings[j],
+						i);
 
-		for (i = 0; i < tx_count; i++) {
-			for (j = 0; j < TSNEP_TX_QUEUE_STATS_COUNT; j++) {
-				snprintf(data, ETH_GSTRING_LEN,
-					 tsnep_tx_queue_stats_strings[j], i);
-				data += ETH_GSTRING_LEN;
-			}
-		}
+		for (i = 0; i < tx_count; i++)
+			for (j = 0; j < TSNEP_TX_QUEUE_STATS_COUNT; j++)
+				ethtool_sprintf(&data,
+						tsnep_tx_queue_stats_strings[j],
+						i);
 		break;
 	case ETH_SS_TEST:
 		tsnep_ethtool_get_test_strings(data);

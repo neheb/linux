@@ -1837,10 +1837,8 @@ static void lio_get_priv_flags_strings(struct lio *lio, u8 *data)
 	switch (oct_dev->chip_id) {
 	case OCTEON_CN23XX_PF_VID:
 	case OCTEON_CN23XX_VF_VID:
-		for (i = 0; i < ARRAY_SIZE(oct_priv_flags_strings); i++) {
-			sprintf(data, "%s", oct_priv_flags_strings[i]);
-			data += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < ARRAY_SIZE(oct_priv_flags_strings); i++)
+			ethtool_puts(&data, oct_priv_flags_strings[i]);
 		break;
 	case OCTEON_CN68XX:
 	case OCTEON_CN66XX:
@@ -1861,31 +1859,25 @@ static void lio_get_strings(struct net_device *netdev, u32 stringset, u8 *data)
 	switch (stringset) {
 	case ETH_SS_STATS:
 		num_stats = ARRAY_SIZE(oct_stats_strings);
-		for (j = 0; j < num_stats; j++) {
-			sprintf(data, "%s", oct_stats_strings[j]);
-			data += ETH_GSTRING_LEN;
-		}
+		for (j = 0; j < num_stats; j++)
+			ethtool_puts(&data, oct_stats_strings[j]);
 
 		num_iq_stats = ARRAY_SIZE(oct_iq_stats_strings);
 		for (i = 0; i < MAX_OCTEON_INSTR_QUEUES(oct_dev); i++) {
 			if (!(oct_dev->io_qmask.iq & BIT_ULL(i)))
 				continue;
-			for (j = 0; j < num_iq_stats; j++) {
-				sprintf(data, "tx-%d-%s", i,
-					oct_iq_stats_strings[j]);
-				data += ETH_GSTRING_LEN;
-			}
+			for (j = 0; j < num_iq_stats; j++)
+				ethtool_sprintf(&data, "tx-%d-%s", i,
+						oct_iq_stats_strings[j]);
 		}
 
 		num_oq_stats = ARRAY_SIZE(oct_droq_stats_strings);
 		for (i = 0; i < MAX_OCTEON_OUTPUT_QUEUES(oct_dev); i++) {
 			if (!(oct_dev->io_qmask.oq & BIT_ULL(i)))
 				continue;
-			for (j = 0; j < num_oq_stats; j++) {
-				sprintf(data, "rx-%d-%s", i,
-					oct_droq_stats_strings[j]);
-				data += ETH_GSTRING_LEN;
-			}
+			for (j = 0; j < num_oq_stats; j++)
+				ethtool_sprintf(&data, "rx-%d-%s", i,
+						oct_droq_stats_strings[j]);
 		}
 		break;
 
@@ -1909,31 +1901,25 @@ static void lio_vf_get_strings(struct net_device *netdev, u32 stringset,
 	switch (stringset) {
 	case ETH_SS_STATS:
 		num_stats = ARRAY_SIZE(oct_vf_stats_strings);
-		for (j = 0; j < num_stats; j++) {
-			sprintf(data, "%s", oct_vf_stats_strings[j]);
-			data += ETH_GSTRING_LEN;
-		}
+		for (j = 0; j < num_stats; j++)
+			ethtool_puts(&data, oct_vf_stats_strings[j]);
 
 		num_iq_stats = ARRAY_SIZE(oct_iq_stats_strings);
 		for (i = 0; i < MAX_OCTEON_INSTR_QUEUES(oct_dev); i++) {
 			if (!(oct_dev->io_qmask.iq & BIT_ULL(i)))
 				continue;
-			for (j = 0; j < num_iq_stats; j++) {
-				sprintf(data, "tx-%d-%s", i,
-					oct_iq_stats_strings[j]);
-				data += ETH_GSTRING_LEN;
-			}
+			for (j = 0; j < num_iq_stats; j++)
+				ethtool_sprintf(&data, "tx-%d-%s", i,
+						oct_iq_stats_strings[j]);
 		}
 
 		num_oq_stats = ARRAY_SIZE(oct_droq_stats_strings);
 		for (i = 0; i < MAX_OCTEON_OUTPUT_QUEUES(oct_dev); i++) {
 			if (!(oct_dev->io_qmask.oq & BIT_ULL(i)))
 				continue;
-			for (j = 0; j < num_oq_stats; j++) {
-				sprintf(data, "rx-%d-%s", i,
-					oct_droq_stats_strings[j]);
-				data += ETH_GSTRING_LEN;
-			}
+			for (j = 0; j < num_oq_stats; j++)
+				ethtool_sprintf(&data, "rx-%d-%s", i,
+						oct_droq_stats_strings[j]);
 		}
 		break;
 
