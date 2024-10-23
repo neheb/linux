@@ -356,7 +356,7 @@ static int prestera_dl_info_get(struct devlink *dl,
 	struct prestera_switch *sw = devlink_priv(dl);
 	char buf[16];
 
-	snprintf(buf, sizeof(buf), "%d.%d.%d",
+	snprintf(buf, sizeof(buf), "%hd.%hd.%hd",
 		 sw->dev->fw_rev.maj,
 		 sw->dev->fw_rev.min,
 		 sw->dev->fw_rev.sub);
