@@ -503,7 +503,7 @@ static void rvu_dbg_mcs_init(struct rvu *rvu)
 	for (i = 0; i < rvu->mcs_blk_cnt; i++) {
 		mcs = mcs_get_pdata(i);
 
-		sprintf(dname, "mcs%d", i);
+		sprintf(dname, "mcs%hd", i);
 		rvu->rvu_dbg.mcs = debugfs_create_dir(dname,
 						      rvu->rvu_dbg.mcs_root);
 
