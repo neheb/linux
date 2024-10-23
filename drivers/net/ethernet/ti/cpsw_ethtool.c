@@ -261,9 +261,7 @@ void cpsw_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 	switch (stringset) {
 	case ETH_SS_STATS:
 		for (i = 0; i < CPSW_STATS_COMMON_LEN; i++) {
-			memcpy(p, cpsw_gstrings_stats[i].stat_string,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p, cpsw_gstrings_stats[i].stat_string);
 		}
 
 		cpsw_add_ch_strings(&p, cpsw->rx_ch_num, 1);

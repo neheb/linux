@@ -197,9 +197,7 @@ static void sxgbe_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 	switch (stringset) {
 	case ETH_SS_STATS:
 		for (i = 0; i < SXGBE_STATS_LEN; i++) {
-			memcpy(p, sxgbe_gstrings_stats[i].stat_string,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p, sxgbe_gstrings_stats[i].stat_string);
 		}
 		break;
 	default:

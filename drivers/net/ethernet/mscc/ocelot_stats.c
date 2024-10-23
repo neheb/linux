@@ -406,8 +406,7 @@ void ocelot_get_strings(struct ocelot *ocelot, int port, u32 sset, u8 *data)
 		if (layout[i].name[0] == '\0')
 			continue;
 
-		memcpy(data, layout[i].name, ETH_GSTRING_LEN);
-		data += ETH_GSTRING_LEN;
+		ethtool_puts(&data, layout[i].name);
 	}
 }
 EXPORT_SYMBOL(ocelot_get_strings);

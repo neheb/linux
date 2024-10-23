@@ -241,13 +241,11 @@ static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 		return;
 
 	for (stats = 0; stats < nicvf_n_hw_stats; stats++) {
-		memcpy(data, nicvf_hw_stats[stats].name, ETH_GSTRING_LEN);
-		data += ETH_GSTRING_LEN;
+		ethtool_puts(&data, nicvf_hw_stats[stats].name);
 	}
 
 	for (stats = 0; stats < nicvf_n_drv_stats; stats++) {
-		memcpy(data, nicvf_drv_stats[stats].name, ETH_GSTRING_LEN);
-		data += ETH_GSTRING_LEN;
+		ethtool_puts(&data, nicvf_drv_stats[stats].name);
 	}
 
 	nicvf_get_qset_strings(nic, &data, 0);

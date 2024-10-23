@@ -450,9 +450,7 @@ static void pch_gbe_get_strings(struct net_device *netdev, u32 stringset,
 	switch (stringset) {
 	case (u32) ETH_SS_STATS:
 		for (i = 0; i < PCH_GBE_GLOBAL_STATS_LEN; i++) {
-			memcpy(p, pch_gbe_gstrings_stats[i].string,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p, pch_gbe_gstrings_stats[i].string);
 		}
 		break;
 	}

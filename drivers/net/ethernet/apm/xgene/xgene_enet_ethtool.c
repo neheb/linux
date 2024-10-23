@@ -195,13 +195,11 @@ static void xgene_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 		return;
 
 	for (i = 0; i < XGENE_STATS_LEN; i++) {
-		memcpy(p, gstrings_stats[i].name, ETH_GSTRING_LEN);
-		p += ETH_GSTRING_LEN;
+		ethtool_puts(&p, gstrings_stats[i].name);
 	}
 
 	for (i = 0; i < XGENE_EXTD_STATS_LEN; i++) {
-		memcpy(p, gstrings_extd_stats[i].name, ETH_GSTRING_LEN);
-		p += ETH_GSTRING_LEN;
+		ethtool_puts(&p, gstrings_extd_stats[i].name);
 	}
 }
 

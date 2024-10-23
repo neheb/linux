@@ -435,8 +435,7 @@ static void be_get_stat_strings(struct net_device *netdev, uint32_t stringset,
 	switch (stringset) {
 	case ETH_SS_STATS:
 		for (i = 0; i < ETHTOOL_STATS_NUM; i++) {
-			memcpy(data, et_stats[i].desc, ETH_GSTRING_LEN);
-			data += ETH_GSTRING_LEN;
+			ethtool_puts(&data, et_stats[i].desc);
 		}
 		for (i = 0; i < adapter->num_rx_qs; i++) {
 			for (j = 0; j < ETHTOOL_RXSTATS_NUM; j++) {
@@ -455,8 +454,7 @@ static void be_get_stat_strings(struct net_device *netdev, uint32_t stringset,
 		break;
 	case ETH_SS_TEST:
 		for (i = 0; i < ETHTOOL_TESTS_NUM; i++) {
-			memcpy(data, et_self_tests[i], ETH_GSTRING_LEN);
-			data += ETH_GSTRING_LEN;
+			ethtool_puts(&data, et_self_tests[i]);
 		}
 		break;
 	case ETH_SS_PRIV_FLAGS:

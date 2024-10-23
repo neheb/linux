@@ -1007,8 +1007,7 @@ static u8 *nfp_vnic_get_tlv_stats_strings(struct nfp_net *nn, u8 *data)
 
 		if (id < ARRAY_SIZE(nfp_tlv_stat_names) &&
 		    nfp_tlv_stat_names[id][0]) {
-			memcpy(data, nfp_tlv_stat_names[id], ETH_GSTRING_LEN);
-			data += ETH_GSTRING_LEN;
+			ethtool_puts(&data, nfp_tlv_stat_names[id]);
 		} else {
 			ethtool_sprintf(&data, "dev_unknown_stat%u", id);
 		}

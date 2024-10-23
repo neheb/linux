@@ -2254,8 +2254,7 @@ static void rocker_port_get_strings(struct net_device *netdev, u32 stringset,
 	switch (stringset) {
 	case ETH_SS_STATS:
 		for (i = 0; i < ARRAY_SIZE(rocker_port_stats); i++) {
-			memcpy(p, rocker_port_stats[i].str, ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p, rocker_port_stats[i].str);
 		}
 		break;
 	}

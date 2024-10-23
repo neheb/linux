@@ -635,39 +635,30 @@ static void mlxsw_sp_port_get_strings(struct net_device *dev,
 	switch (stringset) {
 	case ETH_SS_STATS:
 		for (i = 0; i < MLXSW_SP_PORT_HW_STATS_LEN; i++) {
-			memcpy(p, mlxsw_sp_port_hw_stats[i].str,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p, mlxsw_sp_port_hw_stats[i].str);
 		}
 
 		for (i = 0; i < MLXSW_SP_PORT_HW_RFC_2863_STATS_LEN; i++) {
-			memcpy(p, mlxsw_sp_port_hw_rfc_2863_stats[i].str,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p,
+				     mlxsw_sp_port_hw_rfc_2863_stats[i].str);
 		}
 
 		for (i = 0; i < MLXSW_SP_PORT_HW_RFC_2819_STATS_LEN; i++) {
-			memcpy(p, mlxsw_sp_port_hw_rfc_2819_stats[i].str,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p,
+				     mlxsw_sp_port_hw_rfc_2819_stats[i].str);
 		}
 
 		for (i = 0; i < MLXSW_SP_PORT_HW_RFC_3635_STATS_LEN; i++) {
-			memcpy(p, mlxsw_sp_port_hw_rfc_3635_stats[i].str,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p,
+				     mlxsw_sp_port_hw_rfc_3635_stats[i].str);
 		}
 
 		for (i = 0; i < MLXSW_SP_PORT_HW_EXT_STATS_LEN; i++) {
-			memcpy(p, mlxsw_sp_port_hw_ext_stats[i].str,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p, mlxsw_sp_port_hw_ext_stats[i].str);
 		}
 
 		for (i = 0; i < MLXSW_SP_PORT_HW_DISCARD_STATS_LEN; i++) {
-			memcpy(p, mlxsw_sp_port_hw_discard_stats[i].str,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p, mlxsw_sp_port_hw_discard_stats[i].str);
 		}
 
 		for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++)
@@ -679,9 +670,8 @@ static void mlxsw_sp_port_get_strings(struct net_device *dev,
 		mlxsw_sp_port->mlxsw_sp->ptp_ops->get_stats_strings(&p);
 
 		for (i = 0; i < MLXSW_SP_PORT_HW_TRANSCEIVER_STATS_LEN; i++) {
-			memcpy(p, mlxsw_sp_port_transceiver_stats[i].str,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			ethtool_puts(&p,
+				     mlxsw_sp_port_transceiver_stats[i].str);
 		}
 		break;
 	}
