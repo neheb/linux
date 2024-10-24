@@ -140,11 +140,12 @@ struct nfs4_cpntf_state {
 struct nfs4_cb_fattr {
 	struct nfsd4_callback ncf_getattr;
 	u32 ncf_cb_status;
-	u32 ncf_cb_bmap[1];
 
 	/* from CB_GETATTR reply */
 	u64 ncf_cb_change;
 	u64 ncf_cb_fsize;
+	struct timespec64 ncf_cb_mtime;
+	struct timespec64 ncf_cb_atime;
 
 	unsigned long ncf_cb_flags;
 	bool ncf_file_modified;
@@ -193,6 +194,22 @@ struct nfs4_delegation {
 	struct nfs4_cb_fattr    dl_cb_fattr;
 };
 
+static inline bool deleg_is_read(u32 dl_type)
+{
+	return (dl_type == OPEN_DELEGATE_READ || dl_type == OPEN_DELEGATE_READ_ATTRS_DELEG);
+}
+
+static inline bool deleg_is_write(u32 dl_type)
+{
+	return (dl_type == OPEN_DELEGATE_WRITE || dl_type == OPEN_DELEGATE_WRITE_ATTRS_DELEG);
+}
+
+static inline bool deleg_attrs_deleg(u32 dl_type)
+{
+	return dl_type == OPEN_DELEGATE_READ_ATTRS_DELEG ||
+	       dl_type == OPEN_DELEGATE_WRITE_ATTRS_DELEG;
+}
+
 #define cb_to_delegation(cb) \
 	container_of(cb, struct nfs4_delegation, dl_recall)
 
@@ -216,7 +233,7 @@ static inline struct nfs4_delegation *delegstateid(struct nfs4_stid *s)
 /* Maximum number of slots per session. 160 is useful for long haul TCP */
 #define NFSD_MAX_SLOTS_PER_SESSION     160
 /* Maximum  session per slot cache size */
-#define NFSD_SLOT_CACHE_SIZE		2048
+#define NFSD_SLOT_CACHE_SIZE		2048UL
 /* Maximum number of NFSD_SLOT_CACHE_SIZE slots per session */
 #define NFSD_CACHE_SIZE_SLOTS_PER_SESSION	32
 #define NFSD_MAX_MEM_PER_SESSION  \
@@ -784,5 +801,5 @@ static inline bool try_to_expire_client(struct nfs4_client *clp)
 }
 
 extern __be32 nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp,
-		struct dentry *dentry, bool *file_modified, u64 *size);
+		struct dentry *dentry, struct nfs4_delegation **pdp);
 #endif   /* NFSD4_STATE_H */
