@@ -970,7 +970,7 @@ static int hns_get_sset_count(struct net_device *netdev, int stringset)
 		return -EOPNOTSUPP;
 	}
 	if (stringset == ETH_SS_TEST) {
-		u32 cnt = (sizeof(hns_nic_test_strs) / ETH_GSTRING_LEN);
+		u32 cnt = ARRAY_SIZE(hns_nic_test_strs);
 
 		if (priv->ae_handle->phy_if == PHY_INTERFACE_MODE_XGMII)
 			cnt--;
