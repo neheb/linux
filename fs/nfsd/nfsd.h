@@ -90,7 +90,11 @@ extern const struct svc_version	nfsd_version2, nfsd_version3, nfsd_version4;
 extern struct mutex		nfsd_mutex;
 extern spinlock_t		nfsd_drc_lock;
 extern unsigned long		nfsd_drc_max_mem;
-extern unsigned long		nfsd_drc_mem_used;
+/* Storing the sum of the slot sizes for all active clients (across
+ * all net-namespaces) allows a share of total available memory to
+ * be allocated to each client based on its slot size.
+ */
+extern unsigned long		nfsd_drc_slotsize_sum;
 extern atomic_t			nfsd_th_cnt;		/* number of available threads */
 
 extern const struct seq_operations nfs_exports_op;
@@ -458,7 +462,10 @@ enum {
 	(NFSD4_1_SUPPORTED_ATTRS_WORD2 | \
 	FATTR4_WORD2_MODE_UMASK | \
 	NFSD4_2_SECURITY_ATTRS | \
-	FATTR4_WORD2_XATTR_SUPPORT)
+	FATTR4_WORD2_XATTR_SUPPORT | \
+	FATTR4_WORD2_TIME_DELEG_ACCESS | \
+	FATTR4_WORD2_TIME_DELEG_MODIFY | \
+	FATTR4_WORD2_OPEN_ARGUMENTS)
 
 extern const u32 nfsd_suppattrs[3][3];
 
@@ -528,7 +535,10 @@ static inline bool nfsd_attrs_supported(u32 minorversion, const u32 *bmval)
 #endif
 #define NFSD_WRITEABLE_ATTRS_WORD2 \
 	(FATTR4_WORD2_MODE_UMASK \
-	| MAYBE_FATTR4_WORD2_SECURITY_LABEL)
+	| MAYBE_FATTR4_WORD2_SECURITY_LABEL \
+	| FATTR4_WORD2_TIME_DELEG_ACCESS \
+	| FATTR4_WORD2_TIME_DELEG_MODIFY \
+	)
 
 #define NFSD_SUPPATTR_EXCLCREAT_WORD0 \
 	NFSD_WRITEABLE_ATTRS_WORD0
