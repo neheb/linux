@@ -640,45 +640,34 @@ static void fun_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 	unsigned int i, j;
 	u8 *p = data;
 
-	switch (sset) {
-	case ETH_SS_STATS:
-		if (fp->port_caps & FUN_PORT_CAP_STATS) {
-			memcpy(p, mac_tx_stat_names, sizeof(mac_tx_stat_names));
-			p += sizeof(mac_tx_stat_names);
-			memcpy(p, mac_rx_stat_names, sizeof(mac_rx_stat_names));
-			p += sizeof(mac_rx_stat_names);
-		}
+	if (sset != ETH_SS_STATS)
+		return;
 
-		for (i = 0; i < netdev->real_num_tx_queues; i++) {
-			for (j = 0; j < ARRAY_SIZE(txq_stat_names); j++)
-				ethtool_sprintf(&p, "%s[%u]", txq_stat_names[j],
-						i);
-		}
-		for (j = 0; j < ARRAY_SIZE(txq_stat_names); j++)
-			ethtool_puts(&p, txq_stat_names[j]);
-
-		for (i = 0; i < fp->num_xdpqs; i++) {
-			for (j = 0; j < ARRAY_SIZE(xdpq_stat_names); j++)
-				ethtool_sprintf(&p, "%s[%u]",
-						xdpq_stat_names[j], i);
-		}
-		for (j = 0; j < ARRAY_SIZE(xdpq_stat_names); j++)
-			ethtool_puts(&p, xdpq_stat_names[j]);
-
-		for (i = 0; i < netdev->real_num_rx_queues; i++) {
-			for (j = 0; j < ARRAY_SIZE(rxq_stat_names); j++)
-				ethtool_sprintf(&p, "%s[%u]", rxq_stat_names[j],
-						i);
-		}
-		for (j = 0; j < ARRAY_SIZE(rxq_stat_names); j++)
-			ethtool_puts(&p, rxq_stat_names[j]);
-
-		for (j = 0; j < ARRAY_SIZE(tls_stat_names); j++)
-			ethtool_puts(&p, tls_stat_names[j]);
-		break;
-	default:
-		break;
+	if (fp->port_caps & FUN_PORT_CAP_STATS) {
+		for (i = 0; i < ARRAY_SIZE(mac_tx_stat_names); i++)
+			ethtool_puts(&p, mac_tx_stat_names[i]);
+		for (i = 0; i < ARRAY_SIZE(mac_rx_stat_names); i++)
+			ethtool_puts(&p, mac_rx_stat_names[i]);
 	}
+
+	for (i = 0; i < netdev->real_num_tx_queues; i++)
+		for (j = 0; j < ARRAY_SIZE(txq_stat_names); j++)
+			ethtool_sprintf(&p, "%s[%u]", txq_stat_names[j], i);
+	for (j = 0; j < ARRAY_SIZE(txq_stat_names); j++)
+		ethtool_puts(&p, txq_stat_names[j]);
+	for (i = 0; i < fp->num_xdpqs; i++)
+		for (j = 0; j < ARRAY_SIZE(xdpq_stat_names); j++)
+			ethtool_sprintf(&p, "%s[%u]", xdpq_stat_names[j], i);
+	for (j = 0; j < ARRAY_SIZE(xdpq_stat_names); j++)
+		ethtool_puts(&p, xdpq_stat_names[j]);
+	for (i = 0; i < netdev->real_num_rx_queues; i++)
+		for (j = 0; j < ARRAY_SIZE(rxq_stat_names); j++)
+			ethtool_sprintf(&p, "%s[%u]", rxq_stat_names[j], i);
+	for (j = 0; j < ARRAY_SIZE(rxq_stat_names); j++)
+		ethtool_puts(&p, rxq_stat_names[j]);
+
+	for (j = 0; j < ARRAY_SIZE(tls_stat_names); j++)
+		ethtool_puts(&p, tls_stat_names[j]);
 }
 
 static u64 *get_mac_stats(const struct funeth_priv *fp, u64 *data)

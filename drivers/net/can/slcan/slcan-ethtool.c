@@ -20,8 +20,8 @@ static void slcan_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 {
 	switch (stringset) {
 	case ETH_SS_PRIV_FLAGS:
-		memcpy(data, slcan_priv_flags_strings,
-		       sizeof(slcan_priv_flags_strings));
+		for (int i = 0; i < ARRAY_SIZE(slcan_priv_flags_strings); i++)
+			ethtool_puts(&data, slcan_priv_flags_strings[i]);
 	}
 }
 

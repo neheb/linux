@@ -1140,9 +1140,13 @@ void ath10k_debug_get_et_strings(struct ieee80211_hw *hw,
 				 struct ieee80211_vif *vif,
 				 u32 sset, u8 *data)
 {
-	if (sset == ETH_SS_STATS)
-		memcpy(data, ath10k_gstrings_stats,
-		       sizeof(ath10k_gstrings_stats));
+	int i;
+
+	if (sset != ETH_SS_STATS)
+		return;
+
+	for (i = 0; i < ATH10K_SSTATS_LEN; i++)
+		ethtool_puts(&data, ath10k_gstrings_stats[i]);
 }
 
 int ath10k_debug_get_et_sset_count(struct ieee80211_hw *hw,

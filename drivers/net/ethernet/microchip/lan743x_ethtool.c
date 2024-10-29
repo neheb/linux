@@ -816,29 +816,24 @@ static void lan743x_ethtool_get_strings(struct net_device *netdev,
 					u32 stringset, u8 *data)
 {
 	struct lan743x_adapter *adapter = netdev_priv(netdev);
+	int i;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, lan743x_set0_hw_cnt_strings,
-		       sizeof(lan743x_set0_hw_cnt_strings));
-		memcpy(&data[sizeof(lan743x_set0_hw_cnt_strings)],
-		       lan743x_set1_sw_cnt_strings,
-		       sizeof(lan743x_set1_sw_cnt_strings));
-		memcpy(&data[sizeof(lan743x_set0_hw_cnt_strings) +
-		       sizeof(lan743x_set1_sw_cnt_strings)],
-		       lan743x_set2_hw_cnt_strings,
-		       sizeof(lan743x_set2_hw_cnt_strings));
-		if (adapter->is_pci11x1x) {
-			memcpy(&data[sizeof(lan743x_set0_hw_cnt_strings) +
-			       sizeof(lan743x_set1_sw_cnt_strings) +
-			       sizeof(lan743x_set2_hw_cnt_strings)],
-			       lan743x_tx_queue_cnt_strings,
-			       sizeof(lan743x_tx_queue_cnt_strings));
-		}
+		for (i = 0; i < ARRAY_SIZE(lan743x_set0_hw_cnt_strings); i++)
+			ethtool_puts(&data, lan743x_set0_hw_cnt_strings[i]);
+		for (i = 0; i < ARRAY_SIZE(lan743x_set1_sw_cnt_strings); i++)
+			ethtool_puts(&data, lan743x_set1_sw_cnt_strings[i]);
+		for (i = 0; i < ARRAY_SIZE(lan743x_set2_hw_cnt_strings); i++)
+			ethtool_puts(&data, lan743x_set2_hw_cnt_strings[i]);
+		if (!adapter->is_pci11x1x)
+			break;
+		for (i = 0; i < ARRAY_SIZE(lan743x_tx_queue_cnt_strings); i++)
+			ethtool_puts(&data, lan743x_tx_queue_cnt_strings[i]);
 		break;
 	case ETH_SS_PRIV_FLAGS:
-		memcpy(data, lan743x_priv_flags_strings,
-		       sizeof(lan743x_priv_flags_strings));
+		for (i = 0; i < ARRAY_SIZE(lan743x_priv_flags_strings); i++)
+			ethtool_puts(&data, lan743x_priv_flags_strings[i]);
 		break;
 	}
 }

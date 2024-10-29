@@ -762,7 +762,8 @@ static void prestera_ethtool_get_strings(struct net_device *dev,
 	if (stringset != ETH_SS_STATS)
 		return;
 
-	memcpy(data, prestera_cnt_name, sizeof(prestera_cnt_name));
+	for (int i = 0; i < PRESTERA_STATS_CNT; i++)
+		ethtool_puts(&data, prestera_cnt_name[i]);
 }
 
 static void prestera_ethtool_get_stats(struct net_device *dev,

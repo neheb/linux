@@ -1527,7 +1527,8 @@ static void cp_get_strings (struct net_device *dev, u32 stringset, u8 *buf)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buf, &ethtool_stats_keys, sizeof(ethtool_stats_keys));
+		for (int i = 0; i < CP_NUM_STATS; i++)
+			ethtool_puts(&buf, ethtool_stats_keys[i].str);
 		break;
 	default:
 		BUG();

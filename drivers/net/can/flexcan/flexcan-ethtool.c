@@ -40,11 +40,11 @@ flexcan_get_ringparam(struct net_device *ndev, struct ethtool_ringparam *ring,
 static void
 flexcan_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 {
-	switch (stringset) {
-	case ETH_SS_PRIV_FLAGS:
-		memcpy(data, flexcan_priv_flags_strings,
-		       sizeof(flexcan_priv_flags_strings));
-	}
+	if (stringset != ETH_SS_PRIV_FLAGS)
+		return;
+
+	for (int i = 0; i < ARRAY_SIZE(flexcan_priv_flags_strings); i++)
+		ethtool_puts(&data, flexcan_priv_flags_strings[i]);
 }
 
 static u32 flexcan_get_priv_flags(struct net_device *ndev)

@@ -5328,12 +5328,16 @@ static void nv_self_test(struct net_device *dev, struct ethtool_test *test, u64 
 
 static void nv_get_strings(struct net_device *dev, u32 stringset, u8 *buffer)
 {
+	int i;
+
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buffer, &nv_estats_str, nv_get_sset_count(dev, ETH_SS_STATS)*sizeof(struct nv_ethtool_str));
+		for (i = 0; i < nv_get_sset_count(dev, ETH_SS_STATS); i++)
+			ethtool_puts(&buffer, nv_estats_str[i].name);
 		break;
 	case ETH_SS_TEST:
-		memcpy(buffer, &nv_etests_str, nv_get_sset_count(dev, ETH_SS_TEST)*sizeof(struct nv_ethtool_str));
+		for (i = 0; i < nv_get_sset_count(dev, ETH_SS_TEST); i++)
+			ethtool_puts(&buffer, nv_etests_str[i].name);
 		break;
 	}
 }

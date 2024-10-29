@@ -664,7 +664,8 @@ static void plfxlc_get_et_strings(struct ieee80211_hw *hw,
 				  u32 sset, u8 *data)
 {
 	if (sset == ETH_SS_STATS)
-		memcpy(data, et_strings, sizeof(et_strings));
+		for (int i = 0; i < ARRAY_SIZE(et_strings); i++)
+			ethtool_puts(&data, et_strings[i]);
 }
 
 static void plfxlc_get_et_stats(struct ieee80211_hw *hw,

@@ -117,10 +117,8 @@ u8 *page_pool_ethtool_stats_get_strings(u8 *data)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(pp_stats); i++) {
-		memcpy(data, pp_stats[i], ETH_GSTRING_LEN);
-		data += ETH_GSTRING_LEN;
-	}
+	for (i = 0; i < ARRAY_SIZE(pp_stats); i++)
+		ethtool_puts(&data, pp_stats[i]);
 
 	return data;
 }

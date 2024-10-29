@@ -1643,8 +1643,11 @@ static void get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info)
 
 static void get_strings(struct net_device *dev, u32 stringset, u8 * data)
 {
-	if (stringset == ETH_SS_STATS)
-		memcpy(data, stats_strings, sizeof(stats_strings));
+	if (stringset != ETH_SS_STATS)
+		return;
+
+	for (int i = 0; i < ARRAY_SIZE(stats_strings); i++)
+		ethtool_puts(&data, stats_strings[i]);
 }
 
 static unsigned long collect_sge_port_stats(struct adapter *adapter,

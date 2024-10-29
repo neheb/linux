@@ -23,7 +23,6 @@
 
 #include "altera_tse.h"
 
-#define TSE_STATS_LEN	31
 #define TSE_NUM_REGS	128
 
 static char const stat_gstrings[][ETH_GSTRING_LEN] = {
@@ -60,6 +59,8 @@ static char const stat_gstrings[][ETH_GSTRING_LEN] = {
 	"rx_runts",
 };
 
+#define TSE_STATS_LEN ARRAY_SIZE(stat_gstrings)
+
 static void tse_get_drvinfo(struct net_device *dev,
 			    struct ethtool_drvinfo *info)
 {
@@ -77,7 +78,10 @@ static void tse_get_drvinfo(struct net_device *dev,
  */
 static void tse_gstrings(struct net_device *dev, u32 stringset, u8 *buf)
 {
-	memcpy(buf, stat_gstrings, TSE_STATS_LEN * ETH_GSTRING_LEN);
+	int i;
+
+	for (i = 0; i < TSE_STATS_LEN; i++)
+		ethtool_puts(&buf, stat_gstrings[i]);
 }
 
 static void tse_fill_stats(struct net_device *dev, struct ethtool_stats *dummy,

@@ -332,11 +332,7 @@ static const char ethtool_driver_stats_keys[][ETH_GSTRING_LEN] = {
 #define XFRAME_I_STAT_LEN (S2IO_XENA_STAT_LEN + S2IO_DRIVER_STAT_LEN)
 #define XFRAME_II_STAT_LEN (XFRAME_I_STAT_LEN + S2IO_ENHANCED_STAT_LEN)
 
-#define XFRAME_I_STAT_STRINGS_LEN (XFRAME_I_STAT_LEN * ETH_GSTRING_LEN)
-#define XFRAME_II_STAT_STRINGS_LEN (XFRAME_II_STAT_LEN * ETH_GSTRING_LEN)
-
-#define S2IO_TEST_LEN	ARRAY_SIZE(s2io_gstrings)
-#define S2IO_STRINGS_LEN	(S2IO_TEST_LEN * ETH_GSTRING_LEN)
+#define S2IO_TEST_LEN ARRAY_SIZE(s2io_gstrings)
 
 /* copy mac addr to def_mac_addr array */
 static void do_s2io_copy_mac_addr(struct s2io_nic *sp, int offset, u64 mac_addr)
@@ -6539,25 +6535,25 @@ static int s2io_get_sset_count(struct net_device *dev, int sset)
 static void s2io_ethtool_get_strings(struct net_device *dev,
 				     u32 stringset, u8 *data)
 {
-	int stat_size = 0;
 	struct s2io_nic *sp = netdev_priv(dev);
+	int i;
 
 	switch (stringset) {
 	case ETH_SS_TEST:
-		memcpy(data, s2io_gstrings, S2IO_STRINGS_LEN);
+		for (i = 0; i < S2IO_TEST_LEN; i++)
+			ethtool_puts(&data, s2io_gstrings[i]);
 		break;
 	case ETH_SS_STATS:
-		stat_size = sizeof(ethtool_xena_stats_keys);
-		memcpy(data, &ethtool_xena_stats_keys, stat_size);
-		if (sp->device_type == XFRAME_II_DEVICE) {
-			memcpy(data + stat_size,
-			       &ethtool_enhanced_stats_keys,
-			       sizeof(ethtool_enhanced_stats_keys));
-			stat_size += sizeof(ethtool_enhanced_stats_keys);
-		}
+		for (i = 0; i < S2IO_XENA_STAT_LEN; i++)
+			ethtool_puts(&data, ethtool_xena_stats_keys[i]);
+		if (sp->device_type == XFRAME_II_DEVICE)
+			for (i = 0; i < S2IO_ENHANCED_STAT_LEN; i++)
+				ethtool_puts(&data,
+					     ethtool_enhanced_stats_keys[i]);
 
-		memcpy(data + stat_size, &ethtool_driver_stats_keys,
-		       sizeof(ethtool_driver_stats_keys));
+		for (i = 0; i < S2IO_DRIVER_STAT_LEN; i++)
+			ethtool_puts(&data, ethtool_driver_stats_keys[i]);
+		break;
 	}
 }
 

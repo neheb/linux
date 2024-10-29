@@ -1009,8 +1009,8 @@ static void ibmveth_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 	if (stringset != ETH_SS_STATS)
 		return;
 
-	for (i = 0; i < ARRAY_SIZE(ibmveth_stats); i++, data += ETH_GSTRING_LEN)
-		memcpy(data, ibmveth_stats[i].name, ETH_GSTRING_LEN);
+	for (i = 0; i < ARRAY_SIZE(ibmveth_stats); i++)
+		ethtool_puts(&data, ibmveth_stats[i].name);
 }
 
 static int ibmveth_get_sset_count(struct net_device *dev, int sset)

@@ -214,21 +214,15 @@ static void nicvf_get_qset_strings(struct nicvf *nic, u8 **data, int qset)
 	int stats, qidx;
 	int start_qidx = qset * MAX_RCV_QUEUES_PER_QS;
 
-	for (qidx = 0; qidx < nic->qs->rq_cnt; qidx++) {
-		for (stats = 0; stats < nicvf_n_queue_stats; stats++) {
-			sprintf(*data, "rxq%d: %s", qidx + start_qidx,
-				nicvf_queue_stats[stats].name);
-			*data += ETH_GSTRING_LEN;
-		}
-	}
+	for (qidx = 0; qidx < nic->qs->rq_cnt; qidx++)
+		for (stats = 0; stats < nicvf_n_queue_stats; stats++)
+			ethtool_sprintf(data, "rxq%d: %s", qidx + start_qidx,
+					nicvf_queue_stats[stats].name);
 
-	for (qidx = 0; qidx < nic->qs->sq_cnt; qidx++) {
-		for (stats = 0; stats < nicvf_n_queue_stats; stats++) {
-			sprintf(*data, "txq%d: %s", qidx + start_qidx,
-				nicvf_queue_stats[stats].name);
-			*data += ETH_GSTRING_LEN;
-		}
-	}
+	for (qidx = 0; qidx < nic->qs->sq_cnt; qidx++)
+		for (stats = 0; stats < nicvf_n_queue_stats; stats++)
+			ethtool_sprintf(data, "txq%d: %s", qidx + start_qidx,
+					nicvf_queue_stats[stats].name);
 }
 
 static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
@@ -240,15 +234,11 @@ static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 	if (sset != ETH_SS_STATS)
 		return;
 
-	for (stats = 0; stats < nicvf_n_hw_stats; stats++) {
-		memcpy(data, nicvf_hw_stats[stats].name, ETH_GSTRING_LEN);
-		data += ETH_GSTRING_LEN;
-	}
+	for (stats = 0; stats < nicvf_n_hw_stats; stats++)
+		ethtool_puts(&data, nicvf_hw_stats[stats].name);
 
-	for (stats = 0; stats < nicvf_n_drv_stats; stats++) {
-		memcpy(data, nicvf_drv_stats[stats].name, ETH_GSTRING_LEN);
-		data += ETH_GSTRING_LEN;
-	}
+	for (stats = 0; stats < nicvf_n_drv_stats; stats++)
+		ethtool_puts(&data, nicvf_drv_stats[stats].name);
 
 	nicvf_get_qset_strings(nic, &data, 0);
 
@@ -258,15 +248,11 @@ static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 		nicvf_get_qset_strings(nic->snicvf[sqs], &data, sqs + 1);
 	}
 
-	for (stats = 0; stats < BGX_RX_STATS_COUNT; stats++) {
-		sprintf(data, "bgx_rxstat%d: ", stats);
-		data += ETH_GSTRING_LEN;
-	}
+	for (stats = 0; stats < BGX_RX_STATS_COUNT; stats++)
+		ethtool_sprintf(&data, "bgx_rxstat%d: ", stats);
 
-	for (stats = 0; stats < BGX_TX_STATS_COUNT; stats++) {
-		sprintf(data, "bgx_txstat%d: ", stats);
-		data += ETH_GSTRING_LEN;
-	}
+	for (stats = 0; stats < BGX_TX_STATS_COUNT; stats++)
+		ethtool_sprintf(&data, "bgx_txstat%d: ", stats);
 }
 
 static int nicvf_get_sset_count(struct net_device *netdev, int sset)

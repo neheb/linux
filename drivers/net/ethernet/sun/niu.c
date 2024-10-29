@@ -7758,25 +7758,18 @@ static void niu_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 	if (stringset != ETH_SS_STATS)
 		return;
 
-	if (np->flags & NIU_FLAGS_XMAC) {
-		memcpy(data, niu_xmac_stat_keys,
-		       sizeof(niu_xmac_stat_keys));
-		data += sizeof(niu_xmac_stat_keys);
-	} else {
-		memcpy(data, niu_bmac_stat_keys,
-		       sizeof(niu_bmac_stat_keys));
-		data += sizeof(niu_bmac_stat_keys);
-	}
-	for (i = 0; i < np->num_rx_rings; i++) {
-		memcpy(data, niu_rxchan_stat_keys,
-		       sizeof(niu_rxchan_stat_keys));
-		data += sizeof(niu_rxchan_stat_keys);
-	}
-	for (i = 0; i < np->num_tx_rings; i++) {
-		memcpy(data, niu_txchan_stat_keys,
-		       sizeof(niu_txchan_stat_keys));
-		data += sizeof(niu_txchan_stat_keys);
-	}
+	if (np->flags & NIU_FLAGS_XMAC)
+		for (i = 0; i < NUM_XMAC_STAT_KEYS; i++)
+			ethtool_puts(&data, niu_xmac_stat_keys[i].string);
+	else
+		for (i = 0; i < NUM_BMAC_STAT_KEYS; i++)
+			ethtool_puts(&data, niu_bmac_stat_keys[i].string);
+	for (i = 0; i < np->num_rx_rings; i++)
+		for (i = 0; i < NUM_RXCHAN_STAT_KEYS; i++)
+			ethtool_puts(&data, niu_rxchan_stat_keys[i].string);
+	for (i = 0; i < np->num_tx_rings; i++)
+		for (i = 0; i < NUM_TXCHAN_STAT_KEYS; i++)
+			ethtool_puts(&data, niu_txchan_stat_keys[i].string);
 }
 
 static int niu_get_sset_count(struct net_device *dev, int stringset)

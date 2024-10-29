@@ -446,8 +446,11 @@ static int get_sset_count(struct net_device *dev, int sset)
 
 static void get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
-	if (stringset == ETH_SS_STATS)
-		memcpy(data, stats_strings, sizeof(stats_strings));
+	if (stringset != ETH_SS_STATS)
+		return;
+
+	for (int i = 0; i < ARRAY_SIZE(stats_strings); i++)
+		ethtool_puts(&data, stats_strings[i]);
 }
 
 static void get_stats(struct net_device *dev, struct ethtool_stats *stats,

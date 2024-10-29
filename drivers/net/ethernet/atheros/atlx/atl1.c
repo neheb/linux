@@ -3575,16 +3575,12 @@ static int atl1_set_pauseparam(struct net_device *netdev,
 static void atl1_get_strings(struct net_device *netdev, u32 stringset,
 	u8 *data)
 {
-	u8 *p = data;
 	int i;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		for (i = 0; i < ARRAY_SIZE(atl1_gstrings_stats); i++) {
-			memcpy(p, atl1_gstrings_stats[i].stat_string,
-				ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < ARRAY_SIZE(atl1_gstrings_stats); i++)
+			ethtool_puts(&data, atl1_gstrings_stats[i].stat_string);
 		break;
 	}
 }

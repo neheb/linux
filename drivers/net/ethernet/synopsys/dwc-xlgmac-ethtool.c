@@ -199,14 +199,14 @@ xlgmac_ethtool_set_coalesce(struct net_device *netdev,
 static void xlgmac_ethtool_get_strings(struct net_device *netdev,
 				       u32 stringset, u8 *data)
 {
+	const char *str;
 	int i;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
 		for (i = 0; i < XLGMAC_STATS_COUNT; i++) {
-			memcpy(data, xlgmac_gstring_stats[i].stat_string,
-			       ETH_GSTRING_LEN);
-			data += ETH_GSTRING_LEN;
+			str = xlgmac_gstring_stats[i].stat_string;
+			ethtool_puts(&data, str);
 		}
 		break;
 	default:

@@ -7640,14 +7640,16 @@ bnx2_self_test(struct net_device *dev, struct ethtool_test *etest, u64 *buf)
 static void
 bnx2_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 {
+	int i;
+
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buf, bnx2_stats_str_arr,
-			sizeof(bnx2_stats_str_arr));
+		for (i = 0; i < BNX2_NUM_STATS; i++)
+			ethtool_puts(&buf, bnx2_stats_str_arr[i].string);
 		break;
 	case ETH_SS_TEST:
-		memcpy(buf, bnx2_tests_str_arr,
-			sizeof(bnx2_tests_str_arr));
+		for (i = 0; i < BNX2_NUM_TESTS; i++)
+			ethtool_puts(&buf, bnx2_tests_str_arr[i].string);
 		break;
 	}
 }

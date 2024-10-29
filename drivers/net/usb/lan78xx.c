@@ -1701,8 +1701,11 @@ static int lan78xx_ethtool_set_eeprom(struct net_device *netdev,
 static void lan78xx_get_strings(struct net_device *netdev, u32 stringset,
 				u8 *data)
 {
-	if (stringset == ETH_SS_STATS)
-		memcpy(data, lan78xx_gstrings, sizeof(lan78xx_gstrings));
+	if (stringset != ETH_SS_STATS)
+		return;
+
+	for (int i = 0; i < ARRAY_SIZE(lan78xx_gstrings); i++)
+		ethtool_puts(&data, lan78xx_gstrings[i]);
 }
 
 static int lan78xx_get_sset_count(struct net_device *netdev, int sset)

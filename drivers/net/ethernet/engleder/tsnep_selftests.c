@@ -19,7 +19,7 @@ static const char tsnep_test_strings[][ETH_GSTRING_LEN] = {
 	"TAPRIO extension      (offline)",
 };
 
-#define TSNEP_TEST_COUNT (sizeof(tsnep_test_strings) / ETH_GSTRING_LEN)
+#define TSNEP_TEST_COUNT ARRAY_SIZE(tsnep_test_strings)
 
 static bool enable_gc_timeout(struct tsnep_adapter *adapter)
 {

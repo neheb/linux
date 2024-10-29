@@ -1617,15 +1617,14 @@ static int xgmac_get_sset_count(struct net_device *netdev, int sset)
 static void xgmac_get_strings(struct net_device *dev, u32 stringset,
 				   u8 *data)
 {
+	const char *str;
 	int i;
-	u8 *p = data;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
 		for (i = 0; i < XGMAC_STATS_LEN; i++) {
-			memcpy(p, xgmac_gstrings_stats[i].stat_string,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
+			str = xgmac_gstrings_stats[i].stat_string;
+			ethtool_puts(&data, str);
 		}
 		break;
 	default:

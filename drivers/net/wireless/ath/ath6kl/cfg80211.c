@@ -3761,12 +3761,13 @@ static void ath6kl_get_stats(struct net_device *dev,
 /* These stats are per NIC, not really per vdev, so we just ignore dev. */
 static void ath6kl_get_strings(struct net_device *dev, u32 sset, u8 *data)
 {
-	int sz_sta_stats = 0;
+	int i;
 
-	if (sset == ETH_SS_STATS) {
-		sz_sta_stats = sizeof(ath6kl_gstrings_sta_stats);
-		memcpy(data, ath6kl_gstrings_sta_stats, sz_sta_stats);
-	}
+	if (sset != ETH_SS_STATS)
+		return;
+
+	for (i = 0; i < ATH6KL_STATS_LEN; i++)
+		ethtool_puts(&data, ath6kl_gstrings_sta_stats[i]);
 }
 
 static const struct ethtool_ops ath6kl_ethtool_ops = {

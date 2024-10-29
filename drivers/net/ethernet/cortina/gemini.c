@@ -2056,7 +2056,8 @@ static void gmac_get_strings(struct net_device *netdev, u32 stringset, u8 *data)
 	if (stringset != ETH_SS_STATS)
 		return;
 
-	memcpy(data, gmac_stats_strings, sizeof(gmac_stats_strings));
+	for (int i = 0; i < GMAC_STATS_NUM; i++)
+		ethtool_puts(&data, gmac_stats_strings[i]);
 }
 
 static void gmac_get_ethtool_stats(struct net_device *netdev,

@@ -8917,9 +8917,12 @@ static void rtl8152_get_ethtool_stats(struct net_device *dev,
 
 static void rtl8152_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
+	int i;
+
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, rtl8152_gstrings, sizeof(rtl8152_gstrings));
+		for (i = 0; i < ARRAY_SIZE(rtl8152_gstrings); i++)
+			ethtool_puts(&data, rtl8152_gstrings[i]);
 		break;
 	}
 }

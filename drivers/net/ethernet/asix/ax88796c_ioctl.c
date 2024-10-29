@@ -123,8 +123,8 @@ ax88796c_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 {
 	switch (stringset) {
 	case ETH_SS_PRIV_FLAGS:
-		memcpy(data, ax88796c_priv_flag_names,
-		       sizeof(ax88796c_priv_flag_names));
+		for (int i = 0; i < ARRAY_SIZE(ax88796c_priv_flag_names); i++)
+			ethtool_puts(&data, ax88796c_priv_flag_names[i]);
 		break;
 	}
 }

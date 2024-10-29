@@ -270,9 +270,8 @@ static void aq_ethtool_get_strings(struct net_device *ndev,
 		unsigned int tc;
 
 		memset(tc_string, 0, sizeof(tc_string));
-		memcpy(p, aq_ethtool_stat_names,
-		       sizeof(aq_ethtool_stat_names));
-		p = p + sizeof(aq_ethtool_stat_names);
+		for (i = 0; i < ARRAY_SIZE(aq_ethtool_stat_names); i++)
+			ethtool_puts(&p, aq_ethtool_stat_names[i]);
 
 		for (tc = 0; tc < cfg->tcs; tc++) {
 			if (cfg->is_qos)
@@ -374,8 +373,8 @@ static void aq_ethtool_get_strings(struct net_device *ndev,
 		break;
 	}
 	case ETH_SS_PRIV_FLAGS:
-		memcpy(p, aq_ethtool_priv_flag_names,
-		       sizeof(aq_ethtool_priv_flag_names));
+		for (i = 0; i < ARRAY_SIZE(aq_ethtool_priv_flag_names); i++)
+			ethtool_puts(&p, aq_ethtool_priv_flag_names[i]);
 		break;
 	}
 }

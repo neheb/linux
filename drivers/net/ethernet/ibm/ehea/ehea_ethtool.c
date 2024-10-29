@@ -204,10 +204,11 @@ static const char ehea_ethtool_stats_keys[][ETH_GSTRING_LEN] = {
 
 static void ehea_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
-	if (stringset == ETH_SS_STATS) {
-		memcpy(data, &ehea_ethtool_stats_keys,
-		       sizeof(ehea_ethtool_stats_keys));
-	}
+	if (stringset != ETH_SS_STATS)
+		return;
+
+	for (int i = 0; i < ARRAY_SIZE(ehea_ethtool_stats_keys); i++)
+		ethtool_puts(&data, &ehea_ethtool_stats_keys[i]);
 }
 
 static int ehea_get_sset_count(struct net_device *dev, int sset)

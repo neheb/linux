@@ -3302,8 +3302,8 @@ static void mac80211_hwsim_get_et_strings(struct ieee80211_hw *hw,
 					  u32 sset, u8 *data)
 {
 	if (sset == ETH_SS_STATS)
-		memcpy(data, mac80211_hwsim_gstrings_stats,
-		       sizeof(mac80211_hwsim_gstrings_stats));
+		for (int i = 0; i < MAC80211_HWSIM_SSTATS_LEN; i++)
+			ethtool_puts(&data, mac80211_hwsim_gstrings_stats[i]);
 }
 
 static int mac80211_hwsim_get_et_sset_count(struct ieee80211_hw *hw,

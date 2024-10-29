@@ -626,10 +626,12 @@ static void mse102x_get_ethtool_stats(struct net_device *ndev,
 
 static void mse102x_get_strings(struct net_device *ndev, u32 stringset, u8 *buf)
 {
+	int i;
+
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buf, &mse102x_gstrings_stats,
-		       sizeof(mse102x_gstrings_stats));
+		for (i = 0; i < ARRAY_SIZE(mse102x_gstrings_stats); i++)
+			ethtool_puts(&buf, mse102x_gstrings_stats[i]);
 		break;
 	default:
 		WARN_ON(1);

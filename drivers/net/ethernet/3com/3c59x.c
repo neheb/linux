@@ -2946,7 +2946,8 @@ static void vortex_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, &ethtool_stats_keys, sizeof(ethtool_stats_keys));
+		for (int i = 0; i < VORTEX_NUM_STATS; i++)
+			ethtool_puts(&data, ethtool_stats_keys[i].str);
 		break;
 	default:
 		WARN_ON(1);

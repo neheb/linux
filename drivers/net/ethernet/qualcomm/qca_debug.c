@@ -187,8 +187,8 @@ qcaspi_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buf, &qcaspi_gstrings_stats,
-		       sizeof(qcaspi_gstrings_stats));
+		for (int i = 0; i < ARRAY_SIZE(qcaspi_gstrings_stats); i++)
+			ethtool_puts(&buf, qcaspi_gstrings_stats[i]);
 		break;
 	default:
 		WARN_ON(1);

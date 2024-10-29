@@ -148,8 +148,8 @@ static void veth_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 
 	switch(stringset) {
 	case ETH_SS_STATS:
-		memcpy(p, &ethtool_stats_keys, sizeof(ethtool_stats_keys));
-		p += sizeof(ethtool_stats_keys);
+		for (i = 0; i < ARRAY_SIZE(ethtool_stats_keys); i++)
+			ethtool_puts(&p, ethtool_stats_keys[i].string);
 		for (i = 0; i < dev->real_num_rx_queues; i++)
 			for (j = 0; j < VETH_RQ_STATS_LEN; j++)
 				ethtool_sprintf(&p, "rx_queue_%u_%.18s",

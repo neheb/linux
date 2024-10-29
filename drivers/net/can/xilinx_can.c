@@ -1665,8 +1665,8 @@ static void xcan_get_strings(struct net_device *ndev, u32 stringset, u8 *buf)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buf, &xcan_priv_flags_strings,
-		       sizeof(xcan_priv_flags_strings));
+		for (int i = 0; i < ARRAY_SIZE(xcan_priv_flags_strings); i++)
+			ethtool_puts(&buf, xcan_priv_flags_strings[i]);
 	}
 }
 

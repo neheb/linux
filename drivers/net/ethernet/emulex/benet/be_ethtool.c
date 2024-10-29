@@ -434,34 +434,27 @@ static void be_get_stat_strings(struct net_device *netdev, uint32_t stringset,
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		for (i = 0; i < ETHTOOL_STATS_NUM; i++) {
-			memcpy(data, et_stats[i].desc, ETH_GSTRING_LEN);
-			data += ETH_GSTRING_LEN;
-		}
-		for (i = 0; i < adapter->num_rx_qs; i++) {
-			for (j = 0; j < ETHTOOL_RXSTATS_NUM; j++) {
-				sprintf(data, "rxq%d: %s", i,
-					et_rx_stats[j].desc);
-				data += ETH_GSTRING_LEN;
-			}
-		}
-		for (i = 0; i < adapter->num_tx_qs; i++) {
-			for (j = 0; j < ETHTOOL_TXSTATS_NUM; j++) {
-				sprintf(data, "txq%d: %s", i,
-					et_tx_stats[j].desc);
-				data += ETH_GSTRING_LEN;
-			}
-		}
+		for (i = 0; i < ETHTOOL_STATS_NUM; i++)
+			ethtool_puts(&data, et_stats[i].desc);
+
+		for (i = 0; i < adapter->num_rx_qs; i++)
+			for (j = 0; j < ETHTOOL_RXSTATS_NUM; j++)
+				ethtool_sprintf(&data, "rxq%d: %s", i,
+						et_rx_stats[j].desc);
+
+		for (i = 0; i < adapter->num_tx_qs; i++)
+			for (j = 0; j < ETHTOOL_TXSTATS_NUM; j++)
+				ethtool_sprintf(&data, "txq%d: %s", i,
+						et_tx_stats[j].desc);
+
 		break;
 	case ETH_SS_TEST:
-		for (i = 0; i < ETHTOOL_TESTS_NUM; i++) {
-			memcpy(data, et_self_tests[i], ETH_GSTRING_LEN);
-			data += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < ETHTOOL_TESTS_NUM; i++)
+			ethtool_puts(&data, et_self_tests[i]);
 		break;
 	case ETH_SS_PRIV_FLAGS:
 		for (i = 0; i < ARRAY_SIZE(be_priv_flags); i++)
-			strcpy(data + i * ETH_GSTRING_LEN, be_priv_flags[i]);
+			ethtool_puts(&data, be_priv_flags[i]);
 		break;
 	}
 }

@@ -422,9 +422,13 @@ void ath9k_htc_get_et_strings(struct ieee80211_hw *hw,
 			      struct ieee80211_vif *vif,
 			      u32 sset, u8 *data)
 {
-	if (sset == ETH_SS_STATS)
-		memcpy(data, ath9k_htc_gstrings_stats,
-		       sizeof(ath9k_htc_gstrings_stats));
+	int i;
+
+	if (sset != ETH_SS_STATS)
+		return;
+
+	for (i = 0; i < ATH9K_HTC_SSTATS_LEN; i++)
+		ethtool_puts(&data, ath9k_htc_gstrings_stats[i]);
 }
 
 int ath9k_htc_get_et_sset_count(struct ieee80211_hw *hw,

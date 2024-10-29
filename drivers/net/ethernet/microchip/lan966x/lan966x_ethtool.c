@@ -334,8 +334,7 @@ static void lan966x_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 		return;
 
 	for (i = 0; i < lan966x->num_stats; i++)
-		memcpy(data + i * ETH_GSTRING_LEN,
-		       lan966x->stats_layout[i].name, ETH_GSTRING_LEN);
+		ethtool_puts(&data, lan966x->stats_layout[i].name);
 }
 
 static void lan966x_get_ethtool_stats(struct net_device *dev,

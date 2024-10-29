@@ -300,9 +300,12 @@ static void alx_get_ethtool_stats(struct net_device *netdev,
 
 static void alx_get_strings(struct net_device *netdev, u32 stringset, u8 *buf)
 {
+	int i;
+
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buf, &alx_gstrings_stats, sizeof(alx_gstrings_stats));
+		for (i = 0; i < ALX_NUM_STATS; i++)
+			ethtool_puts(&buf, alx_gstrings_stats[i]);
 		break;
 	default:
 		WARN_ON(1);

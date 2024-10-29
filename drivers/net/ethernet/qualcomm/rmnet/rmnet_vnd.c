@@ -187,8 +187,8 @@ static void rmnet_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buf, &rmnet_gstrings_stats,
-		       sizeof(rmnet_gstrings_stats));
+		for (int i = 0; i < ARRAY_SIZE(rmnet_gstrings_stats); i++)
+			ethtool_puts(&buf, rmnet_gstrings_stats[i]);
 		break;
 	}
 }

@@ -23,8 +23,8 @@ rkcanfd_ethtool_get_strings(struct net_device *ndev, u32 stringset, u8 *buf)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buf, rkcanfd_stats_strings,
-		       sizeof(rkcanfd_stats_strings));
+		for (int i = 0; i < ARRAY_SIZE(rkcanfd_stats_strings); i++)
+			ethtool_puts(&buf, rkcanfd_stats_strings[i]);
 	}
 }
 

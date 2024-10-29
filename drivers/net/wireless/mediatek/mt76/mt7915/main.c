@@ -1478,11 +1478,13 @@ void mt7915_get_et_strings(struct ieee80211_hw *hw,
 			   struct ieee80211_vif *vif,
 			   u32 sset, u8 *data)
 {
+	int i;
+
 	if (sset != ETH_SS_STATS)
 		return;
 
-	memcpy(data, mt7915_gstrings_stats, sizeof(mt7915_gstrings_stats));
-	data += sizeof(mt7915_gstrings_stats);
+	for (i = 0; i < MT7915_SSTATS_LEN; i++)
+		ethtool_puts(&data, mt7915_gstrings_stats[i]);
 	page_pool_ethtool_stats_get_strings(data);
 }
 

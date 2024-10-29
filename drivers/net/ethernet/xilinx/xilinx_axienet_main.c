@@ -2319,12 +2319,14 @@ static const char axienet_ethtool_stats_strings[][ETH_GSTRING_LEN] = {
 	"User Defined Counter 2",
 };
 
+#define AXIE_STATS_LEN ARRAY_SIZE(axienet_ethtool_stats_strings)
+
 static void axienet_ethtools_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, axienet_ethtool_stats_strings,
-		       sizeof(axienet_ethtool_stats_strings));
+		for (int i = 0; i < AXIE_STATS_LEN; i++)
+			ethtool_puts(&data, axienet_ethtool_stats_strings[i]);
 		break;
 	}
 }
@@ -2336,7 +2338,7 @@ static int axienet_ethtools_get_sset_count(struct net_device *dev, int sset)
 	switch (sset) {
 	case ETH_SS_STATS:
 		if (lp->features & XAE_FEATURE_STATS)
-			return ARRAY_SIZE(axienet_ethtool_stats_strings);
+			return AXIE_STATS_LEN;
 		fallthrough;
 	default:
 		return -EOPNOTSUPP;

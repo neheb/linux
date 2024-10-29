@@ -608,32 +608,24 @@ static void am65_cpsw_get_strings(struct net_device *ndev,
 {
 	const struct am65_cpsw_ethtool_stat *hw_stats;
 	u32 i, num_stats;
-	u8 *p = data;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
 		num_stats = ARRAY_SIZE(am65_host_stats);
 		hw_stats = am65_host_stats;
-		for (i = 0; i < num_stats; i++) {
-			memcpy(p, hw_stats[i].desc, ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < num_stats; i++)
+			ethtool_puts(&p, hw_stats[i].desc);
 
 		num_stats = ARRAY_SIZE(am65_slave_stats);
 		hw_stats = am65_slave_stats;
-		for (i = 0; i < num_stats; i++) {
-			memcpy(p, hw_stats[i].desc, ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < num_stats; i++)
+			ethtool_puts(&p, hw_stats[i].desc);
 		break;
 	case ETH_SS_PRIV_FLAGS:
 		num_stats = ARRAY_SIZE(am65_cpsw_ethtool_priv_flags);
 
-		for (i = 0; i < num_stats; i++) {
-			memcpy(p, am65_cpsw_ethtool_priv_flags[i],
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < num_stats; i++)
+			ethtool_puts(&p, am65_cpsw_ethtool_priv_flags[i]);
 		break;
 	}
 }

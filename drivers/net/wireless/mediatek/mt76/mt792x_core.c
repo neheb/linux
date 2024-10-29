@@ -438,12 +438,14 @@ static const char mt792x_gstrings_stats[][ETH_GSTRING_LEN] = {
 void mt792x_get_et_strings(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			   u32 sset, u8 *data)
 {
+	int i;
+
 	if (sset != ETH_SS_STATS)
 		return;
 
-	memcpy(data, mt792x_gstrings_stats, sizeof(mt792x_gstrings_stats));
+	for (i = 0; i < ARRAY_SIZE(mt792x_gstrings_stats); i++)
+		ethtool_puts(&data, mt792x_gstrings_stats[i]);
 
-	data += sizeof(mt792x_gstrings_stats);
 	page_pool_ethtool_stats_get_strings(data);
 }
 EXPORT_SYMBOL_GPL(mt792x_get_et_strings);

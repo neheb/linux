@@ -4667,8 +4667,8 @@ static int cas_get_sset_count(struct net_device *dev, int sset)
 
 static void cas_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
-	 memcpy(data, &ethtool_cassini_statnames,
-					 CAS_NUM_STAT_KEYS * ETH_GSTRING_LEN);
+	for (int i = 0; i < CAS_NUM_STAT_KEYS; i++)
+		ethtool_puts(&data, ethtool_cassini_statnames[i].name);
 }
 
 static void cas_get_ethtool_stats(struct net_device *dev,

@@ -1659,7 +1659,8 @@ static void ravb_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, info->gstrings_stats, info->gstrings_size);
+		for (int i = 0; i < info->gstrings_size; i++)
+			ethtool_puts(&data, info->gstrings_stats[i]);
 		break;
 	}
 }

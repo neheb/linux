@@ -2245,7 +2245,8 @@ static void emac_ethtool_get_strings(struct net_device *ndev, u32 stringset,
 				     u8 * buf)
 {
 	if (stringset == ETH_SS_STATS)
-		memcpy(buf, &emac_stats_keys, sizeof(emac_stats_keys));
+		for (int i = 0; i < EMAC_ETHTOOL_STATS_COUNT; i++)
+			ethtool_puts(&buf, emac_stats_keys[i]);
 }
 
 static void emac_ethtool_get_ethtool_stats(struct net_device *ndev,

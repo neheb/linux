@@ -12860,12 +12860,16 @@ static int tg3_set_channels(struct net_device *dev,
 
 static void tg3_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 {
+	int i;
+
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buf, &ethtool_stats_keys, sizeof(ethtool_stats_keys));
+		for (i = 0; i < TG3_NUM_STATS; i++)
+			ethtool_puts(&buf, ethtool_stats_keys[i].string);
 		break;
 	case ETH_SS_TEST:
-		memcpy(buf, &ethtool_test_keys, sizeof(ethtool_test_keys));
+		for (i = 0; i < TG3_NUM_TEST; i++)
+			ethtool_puts(&buf, ethtool_test_keys[i].string);
 		break;
 	default:
 		WARN_ON(1);	/* we need a WARN() */

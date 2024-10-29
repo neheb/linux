@@ -2279,10 +2279,12 @@ static void sh_eth_get_ethtool_stats(struct net_device *ndev,
 
 static void sh_eth_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 {
+	int i;
+
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, sh_eth_gstrings_stats,
-		       sizeof(sh_eth_gstrings_stats));
+		for (i = 0; i < SH_ETH_STATS_LEN; i++)
+			ethtool_puts(&data, sh_eth_gstrings_stats[i]);
 		break;
 	}
 }

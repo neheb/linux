@@ -228,21 +228,21 @@ static void get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info)
 
 static void get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
+	int i;
+
 	if (stringset == ETH_SS_STATS) {
-		memcpy(data, stats_strings, sizeof(stats_strings));
-		data += sizeof(stats_strings);
-		memcpy(data, adapter_stats_strings,
-		       sizeof(adapter_stats_strings));
-		data += sizeof(adapter_stats_strings);
-		memcpy(data, loopback_stats_strings,
-		       sizeof(loopback_stats_strings));
-	} else if (stringset == ETH_SS_PRIV_FLAGS) {
-		memcpy(data, cxgb4_priv_flags_strings,
-		       sizeof(cxgb4_priv_flags_strings));
-	} else if (stringset == ETH_SS_TEST) {
-		memcpy(data, cxgb4_selftest_strings,
-		       sizeof(cxgb4_selftest_strings));
-	}
+		for (i = 0; i < ARRAY_SIZE(stats_strings); i++)
+			ethtool_puts(&data, stats_strings[i]);
+		for (i = 0; i < ARRAY_SIZE(adapter_stats_strings); i++)
+			ethtool_puts(&data, adapter_stats_strings[i]);
+		for (i = 0; i < ARRAY_SIZE(loopback_stats_strings); i++)
+			ethtool_puts(&data, loopback_stats_strings[i]);
+	} else if (stringset == ETH_SS_PRIV_FLAGS)
+		for (i = 0; i < ARRAY_SIZE(cxgb4_priv_flags_strings); i++)
+			ethtool_puts(&data, cxgb4_priv_flags_strings[i]);
+	else if (stringset == ETH_SS_TEST)
+		for (i = 0; i < ARRAY_SIZE(cxgb4_selftest_strings); i++)
+			ethtool_puts(&data, cxgb4_selftest_strings[i]);
 }
 
 /* port stats maintained per queue of the port. They should be in the same

@@ -932,7 +932,8 @@ static int pcnet32_set_ringparam(struct net_device *dev,
 static void pcnet32_get_strings(struct net_device *dev, u32 stringset,
 				u8 *data)
 {
-	memcpy(data, pcnet32_gstrings_test, sizeof(pcnet32_gstrings_test));
+	for (int i = 0; i < PCNET32_TEST_LEN; i++)
+		ethtool_puts(&data, pcnet32_gstrings_test[i]);
 }
 
 static int pcnet32_get_sset_count(struct net_device *dev, int sset)

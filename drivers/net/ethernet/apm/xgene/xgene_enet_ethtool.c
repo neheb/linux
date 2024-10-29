@@ -189,20 +189,15 @@ static int xgene_set_link_ksettings(struct net_device *ndev,
 static void xgene_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 {
 	int i;
-	u8 *p = data;
 
 	if (stringset != ETH_SS_STATS)
 		return;
 
-	for (i = 0; i < XGENE_STATS_LEN; i++) {
-		memcpy(p, gstrings_stats[i].name, ETH_GSTRING_LEN);
-		p += ETH_GSTRING_LEN;
-	}
+	for (i = 0; i < XGENE_STATS_LEN; i++)
+		ethtool_puts(&data, gstrings_stats[i].name);
 
-	for (i = 0; i < XGENE_EXTD_STATS_LEN; i++) {
-		memcpy(p, gstrings_extd_stats[i].name, ETH_GSTRING_LEN);
-		p += ETH_GSTRING_LEN;
-	}
+	for (i = 0; i < XGENE_EXTD_STATS_LEN; i++)
+		ethtool_puts(&data, gstrings_extd_stats[i].name);
 }
 
 static int xgene_get_sset_count(struct net_device *ndev, int sset)

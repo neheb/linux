@@ -444,16 +444,12 @@ static int pch_gbe_set_pauseparam(struct net_device *netdev,
 static void pch_gbe_get_strings(struct net_device *netdev, u32 stringset,
 					u8 *data)
 {
-	u8 *p = data;
 	int i;
 
 	switch (stringset) {
 	case (u32) ETH_SS_STATS:
-		for (i = 0; i < PCH_GBE_GLOBAL_STATS_LEN; i++) {
-			memcpy(p, pch_gbe_gstrings_stats[i].string,
-			       ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < PCH_GBE_GLOBAL_STATS_LEN; i++)
+			ethtool_puts(&data, pch_gbe_gstrings_stats[i].string);
 		break;
 	}
 }

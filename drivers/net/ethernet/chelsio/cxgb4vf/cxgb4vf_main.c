@@ -1793,7 +1793,8 @@ static void cxgb4vf_get_strings(struct net_device *dev,
 {
 	switch (sset) {
 	case ETH_SS_STATS:
-		memcpy(data, stats_strings, sizeof(stats_strings));
+		for (int i = 0; i < ARRAY_SIZE(stats_strings); i++)
+			ethtool_puts(&data, stats_strings[i]);
 		break;
 	}
 }

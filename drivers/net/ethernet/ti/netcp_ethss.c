@@ -1779,11 +1779,8 @@ static void keystone_get_stat_strings(struct net_device *ndev,
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		for (i = 0; i < gbe_dev->num_et_stats; i++) {
-			memcpy(data, gbe_dev->et_stats[i].desc,
-			       ETH_GSTRING_LEN);
-			data += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < gbe_dev->num_et_stats; i++)
+			ethtool_puts(&data, gbe_dev->et_stats[i].desc);
 		break;
 	case ETH_SS_TEST:
 		break;

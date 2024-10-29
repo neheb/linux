@@ -117,8 +117,8 @@ static void vnet_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(buf, &ethtool_stats_keys, sizeof(ethtool_stats_keys));
-		buf += sizeof(ethtool_stats_keys);
+		for (int i = 0; i < ARRAY_SIZE(ethtool_stats_keys); i++)
+			ethtool_puts(&buf, ethtool_stats_keys[i]);
 
 		rcu_read_lock();
 		list_for_each_entry_rcu(port, &vp->port_list, list) {

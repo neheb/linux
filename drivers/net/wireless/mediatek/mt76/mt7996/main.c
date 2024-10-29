@@ -1847,9 +1847,13 @@ void mt7996_get_et_strings(struct ieee80211_hw *hw,
 			   struct ieee80211_vif *vif,
 			   u32 sset, u8 *data)
 {
-	if (sset == ETH_SS_STATS)
-		memcpy(data, mt7996_gstrings_stats,
-		       sizeof(mt7996_gstrings_stats));
+	int i;
+
+	if (sset != ETH_SS_STATS)
+		return;
+
+	for (i = 0; i < MT7996_SSTATS_LEN; i++)
+		ethtool_puts(&data, mt7996_gstrings_stats[i]);
 }
 
 static

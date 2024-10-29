@@ -3614,7 +3614,8 @@ static void velocity_get_strings(struct net_device *dev, u32 sset, u8 *data)
 {
 	switch (sset) {
 	case ETH_SS_STATS:
-		memcpy(data, *velocity_gstrings, sizeof(velocity_gstrings));
+		for (int i = 0; i < ARRAY_SIZE(velocity_gstrings); i++)
+			ethtool_puts(&data, velocity_gstrings[i]);
 		break;
 	}
 }

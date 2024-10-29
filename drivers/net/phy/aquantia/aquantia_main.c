@@ -118,8 +118,7 @@ static void aqr107_get_strings(struct phy_device *phydev, u8 *data)
 	int i;
 
 	for (i = 0; i < AQR107_SGMII_STAT_SZ; i++)
-		strscpy(data + i * ETH_GSTRING_LEN, aqr107_hw_stats[i].name,
-			ETH_GSTRING_LEN);
+		ethtool_puts(&data, aqr107_hw_stats[i].name);
 }
 
 static u64 aqr107_get_stat(struct phy_device *phydev, int index)

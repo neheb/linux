@@ -2248,15 +2248,12 @@ static struct rocker_port_stats {
 static void rocker_port_get_strings(struct net_device *netdev, u32 stringset,
 				    u8 *data)
 {
-	u8 *p = data;
 	int i;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		for (i = 0; i < ARRAY_SIZE(rocker_port_stats); i++) {
-			memcpy(p, rocker_port_stats[i].str, ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
-		}
+		for (i = 0; i < ARRAY_SIZE(rocker_port_stats); i++)
+			ethtool_puts(&data, rocker_port_stats[i].str);
 		break;
 	}
 }

@@ -1341,9 +1341,13 @@ static const char sc92031_ethtool_stats_strings[SILAN_STATS_NUM][ETH_GSTRING_LEN
 static void sc92031_ethtool_get_strings(struct net_device *dev,
 		u32 stringset, u8 *data)
 {
-	if (stringset == ETH_SS_STATS)
-		memcpy(data, sc92031_ethtool_stats_strings,
-				SILAN_STATS_NUM * ETH_GSTRING_LEN);
+	int i;
+
+	if (stringset != ETH_SS_STATS)
+		return;
+
+	for (i = 0; i < SILAN_STATS_NUM; i++)
+		ethtool_puts(&data, sc92031_ethtool_stats_strings[i]);
 }
 
 static int sc92031_ethtool_get_sset_count(struct net_device *dev, int sset)
