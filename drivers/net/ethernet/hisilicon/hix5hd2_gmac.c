@@ -1190,7 +1190,7 @@ static int hix5hd2_dev_probe(struct platform_device *pdev)
 			goto out_destroy_queue;
 	}
 
-	ret = register_netdev(priv->netdev);
+	ret = devm_register_netdev(dev, priv->netdev);
 	if (ret) {
 		netdev_err(ndev, "register_netdev failed!");
 		goto out_destroy_queue;
@@ -1214,7 +1214,6 @@ static void hix5hd2_dev_remove(struct platform_device *pdev)
 	struct hix5hd2_priv *priv = netdev_priv(ndev);
 
 	netif_napi_del(&priv->napi);
-	unregister_netdev(ndev);
 
 	if (HAS_CAP_TSO(priv->hw_cap))
 		hix5hd2_destroy_sg_desc_queue(priv);
