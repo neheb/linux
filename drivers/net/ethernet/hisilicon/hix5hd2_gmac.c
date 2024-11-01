@@ -275,9 +275,6 @@ struct hix5hd2_priv {
 
 static inline void hix5hd2_mac_interface_reset(struct hix5hd2_priv *priv)
 {
-	if (!priv->mac_ifc_rst)
-		return;
-
 	reset_control_assert(priv->mac_ifc_rst);
 	reset_control_deassert(priv->mac_ifc_rst);
 }
@@ -827,28 +824,11 @@ static int hix5hd2_net_open(struct net_device *dev)
 {
 	struct hix5hd2_priv *priv = netdev_priv(dev);
 	struct phy_device *phy;
-	int ret;
-
-	ret = clk_prepare_enable(priv->mac_core_clk);
-	if (ret < 0) {
-		netdev_err(dev, "failed to enable mac core clk %d\n", ret);
-		return ret;
-	}
-
-	ret = clk_prepare_enable(priv->mac_ifc_clk);
-	if (ret < 0) {
-		clk_disable_unprepare(priv->mac_core_clk);
-		netdev_err(dev, "failed to enable mac ifc clk %d\n", ret);
-		return ret;
-	}
 
 	phy = of_phy_connect(dev, priv->phy_node,
 			     &hix5hd2_adjust_link, 0, priv->phy_mode);
-	if (!phy) {
-		clk_disable_unprepare(priv->mac_ifc_clk);
-		clk_disable_unprepare(priv->mac_core_clk);
+	if (!phy)
 		return -ENODEV;
-	}
 
 	phy_start(phy);
 	hix5hd2_hw_init(priv);
@@ -878,9 +858,6 @@ static int hix5hd2_net_close(struct net_device *dev)
 		phy_stop(dev->phydev);
 		phy_disconnect(dev->phydev);
 	}
-
-	clk_disable_unprepare(priv->mac_ifc_clk);
-	clk_disable_unprepare(priv->mac_core_clk);
 
 	return 0;
 }
@@ -1049,9 +1026,6 @@ static void hix5hd2_destroy_sg_desc_queue(struct hix5hd2_priv *priv)
 
 static inline void hix5hd2_mac_core_reset(struct hix5hd2_priv *priv)
 {
-	if (!priv->mac_core_rst)
-		return;
-
 	reset_control_assert(priv->mac_core_rst);
 	reset_control_deassert(priv->mac_core_rst);
 }
@@ -1120,55 +1094,32 @@ static int hix5hd2_dev_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->ctrl_base))
 		return PTR_ERR(priv->ctrl_base);
 
-	priv->mac_core_clk = devm_clk_get(&pdev->dev, "mac_core");
+	priv->mac_core_clk = devm_clk_get_enabled(&pdev->dev, "mac_core");
 	if (IS_ERR(priv->mac_core_clk)) {
 		netdev_err(ndev, "failed to get mac core clk\n");
 		return PTR_ERR(priv->mac_core_clk);
 	}
 
-	ret = clk_prepare_enable(priv->mac_core_clk);
-	if (ret < 0) {
-		netdev_err(ndev, "failed to enable mac core clk %d\n", ret);
-		return ret;
-	}
-
-	priv->mac_ifc_clk = devm_clk_get(&pdev->dev, "mac_ifc");
-	if (IS_ERR(priv->mac_ifc_clk))
-		priv->mac_ifc_clk = NULL;
-
-	ret = clk_prepare_enable(priv->mac_ifc_clk);
-	if (ret < 0) {
-		netdev_err(ndev, "failed to enable mac ifc clk %d\n", ret);
-		goto out_disable_mac_core_clk;
-	}
-
-	priv->mac_core_rst = devm_reset_control_get(dev, "mac_core");
-	if (IS_ERR(priv->mac_core_rst))
-		priv->mac_core_rst = NULL;
+	priv->mac_ifc_clk =
+		devm_clk_get_optional_enabled(&pdev->dev, "mac_ifc");
+	priv->mac_core_rst = devm_reset_control_get_optional(dev, "mac_core");
 	hix5hd2_mac_core_reset(priv);
+	priv->mac_ifc_rst = devm_reset_control_get_optional(dev, "mac_ifc");
 
-	priv->mac_ifc_rst = devm_reset_control_get(dev, "mac_ifc");
-	if (IS_ERR(priv->mac_ifc_rst))
-		priv->mac_ifc_rst = NULL;
-
-	priv->phy_rst = devm_reset_control_get(dev, "phy");
-	if (IS_ERR(priv->phy_rst)) {
-		priv->phy_rst = NULL;
-	} else {
+	priv->phy_rst = devm_reset_control_get_optional(dev, "phy");
+	if (priv->phy_rst) {
 		ret = of_property_read_u32_array(node,
 						 PHY_RESET_DELAYS_PROPERTY,
 						 priv->phy_reset_delays,
 						 DELAYS_NUM);
 		if (ret)
-			goto out_disable_clk;
+			return ret;
 		hix5hd2_phy_reset(priv);
 	}
 
 	bus = mdiobus_alloc();
-	if (bus == NULL) {
-		ret = -ENOMEM;
-		goto out_disable_clk;
-	}
+	if (!bus)
+		return -ENOMEM;
 
 	bus->priv = priv;
 	bus->name = "hix5hd2_mii_bus";
@@ -1246,9 +1197,6 @@ static int hix5hd2_dev_probe(struct platform_device *pdev)
 		goto out_destroy_queue;
 	}
 
-	clk_disable_unprepare(priv->mac_ifc_clk);
-	clk_disable_unprepare(priv->mac_core_clk);
-
 	return ret;
 
 out_destroy_queue:
@@ -1262,10 +1210,6 @@ err_mdiobus:
 	mdiobus_unregister(bus);
 err_free_mdio:
 	mdiobus_free(bus);
-out_disable_clk:
-	clk_disable_unprepare(priv->mac_ifc_clk);
-out_disable_mac_core_clk:
-	clk_disable_unprepare(priv->mac_core_clk);
 	return ret;
 }
 
