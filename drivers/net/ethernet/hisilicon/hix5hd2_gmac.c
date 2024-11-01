@@ -1117,7 +1117,7 @@ static int hix5hd2_dev_probe(struct platform_device *pdev)
 		hix5hd2_phy_reset(priv);
 	}
 
-	bus = mdiobus_alloc();
+	bus = devm_mdiobus_alloc(dev);
 	if (!bus)
 		return -ENOMEM;
 
@@ -1129,21 +1129,20 @@ static int hix5hd2_dev_probe(struct platform_device *pdev)
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%s-mii", dev_name(&pdev->dev));
 	priv->bus = bus;
 
-	ret = of_mdiobus_register(bus, node);
+	ret = devm_mdiobus_register(dev, bus);
 	if (ret)
-		goto err_free_mdio;
+		return ret;
 
 	ret = of_get_phy_mode(node, &priv->phy_mode);
 	if (ret) {
 		netdev_err(ndev, "not find phy-mode\n");
-		goto err_mdiobus;
+		return ret;
 	}
 
 	priv->phy_node = of_parse_phandle(node, "phy-handle", 0);
 	if (!priv->phy_node) {
 		netdev_err(ndev, "not find phy-handle\n");
-		ret = -EINVAL;
-		goto err_mdiobus;
+		return -EINVAL;
 	}
 
 	ndev->irq = platform_get_irq(pdev, 0);
@@ -1206,10 +1205,6 @@ out_destroy_queue:
 	hix5hd2_destroy_hw_desc_queue(priv);
 out_phy_node:
 	of_node_put(priv->phy_node);
-err_mdiobus:
-	mdiobus_unregister(bus);
-err_free_mdio:
-	mdiobus_free(bus);
 	return ret;
 }
 
@@ -1220,8 +1215,6 @@ static void hix5hd2_dev_remove(struct platform_device *pdev)
 
 	netif_napi_del(&priv->napi);
 	unregister_netdev(ndev);
-	mdiobus_unregister(priv->bus);
-	mdiobus_free(priv->bus);
 
 	if (HAS_CAP_TSO(priv->hw_cap))
 		hix5hd2_destroy_sg_desc_queue(priv);
