@@ -900,7 +900,7 @@ static int hip04_mac_probe(struct platform_device *pdev)
 	int irq;
 	int ret;
 
-	ndev = alloc_etherdev(sizeof(struct hip04_priv));
+	ndev = devm_alloc_etherdev(d, sizeof(struct hip04_priv));
 	if (!ndev)
 		return -ENOMEM;
 
@@ -911,23 +911,19 @@ static int hip04_mac_probe(struct platform_device *pdev)
 	SET_NETDEV_DEV(ndev, &pdev->dev);
 
 	priv->base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(priv->base)) {
-		ret = PTR_ERR(priv->base);
-		goto init_fail;
-	}
+	if (IS_ERR(priv->base))
+		return PTR_ERR(priv->base);
 
 #if defined(CONFIG_HI13X1_GMAC)
 	priv->sysctrl_base = devm_platform_ioremap_resource(pdev, 1);
-	if (IS_ERR(priv->sysctrl_base)) {
-		ret = PTR_ERR(priv->sysctrl_base);
-		goto init_fail;
-	}
+	if (IS_ERR(priv->sysctrl_base))
+		return PTR_ERR(priv->sysctrl_base);
 #endif
 
 	ret = of_parse_phandle_with_fixed_args(node, "port-handle", 3, 0, &arg);
 	if (ret < 0) {
 		dev_warn(d, "no port-handle\n");
-		goto init_fail;
+		return ret;
 	}
 
 	priv->port = arg.args[0];
@@ -948,27 +944,24 @@ static int hip04_mac_probe(struct platform_device *pdev)
 	of_node_put(arg.np);
 	if (IS_ERR(priv->map)) {
 		dev_warn(d, "no syscon hisilicon,hip04-ppe\n");
-		ret = PTR_ERR(priv->map);
-		goto init_fail;
+		return PTR_ERR(priv->map);
 	}
 
 	ret = of_get_phy_mode(node, &priv->phy_mode);
 	if (ret) {
 		dev_warn(d, "not find phy-mode\n");
-		goto init_fail;
+		return ret;
 	}
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0) {
-		ret = irq;
-		goto init_fail;
-	}
+	if (irq < 0)
+		return irq;
 
 	ret = devm_request_irq(d, irq, hip04_mac_interrupt,
 			       0, pdev->name, ndev);
 	if (ret) {
 		netdev_err(ndev, "devm_request_irq failed\n");
-		goto init_fail;
+		return ret;
 	}
 
 	priv->phy_node = of_parse_phandle(node, "phy-handle", 0);
@@ -1016,7 +1009,6 @@ alloc_fail:
 	hip04_free_ring(ndev, d);
 init_fail:
 	of_node_put(priv->phy_node);
-	free_netdev(ndev);
 	return ret;
 }
 
@@ -1033,7 +1025,6 @@ static void hip04_remove(struct platform_device *pdev)
 	unregister_netdev(ndev);
 	of_node_put(priv->phy_node);
 	cancel_work_sync(&priv->tx_timeout_task);
-	free_netdev(ndev);
 }
 
 static const struct of_device_id hip04_mac_match[] = {
