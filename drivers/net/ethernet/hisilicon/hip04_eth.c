@@ -999,7 +999,7 @@ static int hip04_mac_probe(struct platform_device *pdev)
 		goto alloc_fail;
 	}
 
-	ret = register_netdev(ndev);
+	ret = devm_register_netdev(d, ndev);
 	if (ret)
 		goto alloc_fail;
 
@@ -1022,7 +1022,6 @@ static void hip04_remove(struct platform_device *pdev)
 		phy_disconnect(priv->phy);
 
 	hip04_free_ring(ndev, d);
-	unregister_netdev(ndev);
 	of_node_put(priv->phy_node);
 	cancel_work_sync(&priv->tx_timeout_task);
 }
