@@ -795,23 +795,16 @@ static int hisi_femac_drv_probe(struct platform_device *pdev)
 		return PTR_ERR(priv->glb_base);
 	}
 
-	priv->clk = devm_clk_get(&pdev->dev, NULL);
+	priv->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(priv->clk)) {
 		dev_err(dev, "failed to get clk\n");
-		return -ENODEV;
-	}
-
-	ret = clk_prepare_enable(priv->clk);
-	if (ret) {
-		dev_err(dev, "failed to enable clk %d\n", ret);
-		return ret;
+		return PTR_ERR(priv->clk);
 	}
 
 	priv->mac_rst = devm_reset_control_get(dev, "mac");
-	if (IS_ERR(priv->mac_rst)) {
-		ret = PTR_ERR(priv->mac_rst);
-		goto out_disable_clk;
-	}
+	if (IS_ERR(priv->mac_rst))
+		return PTR_ERR(priv->mac_rst);
+
 	hisi_femac_core_reset(priv);
 
 	priv->phy_rst = devm_reset_control_get(dev, "phy");
@@ -823,15 +816,14 @@ static int hisi_femac_drv_probe(struct platform_device *pdev)
 						 priv->phy_reset_delays,
 						 DELAYS_NUM);
 		if (ret)
-			goto out_disable_clk;
+			return ret;
 		hisi_femac_phy_reset(priv);
 	}
 
 	phy = of_phy_get_and_connect(ndev, node, hisi_femac_adjust_link);
 	if (!phy) {
 		dev_err(dev, "connect to PHY failed!\n");
-		ret = -ENODEV;
-		goto out_disable_clk;
+		return -ENODEV;
 	}
 
 	phy_attached_print(phy, "phy_id=0x%.8lx, phy_mode=%s\n",
@@ -882,8 +874,6 @@ static int hisi_femac_drv_probe(struct platform_device *pdev)
 out_disconnect_phy:
 	netif_napi_del(&priv->napi);
 	phy_disconnect(phy);
-out_disable_clk:
-	clk_disable_unprepare(priv->clk);
 	return ret;
 }
 
@@ -896,7 +886,6 @@ static void hisi_femac_drv_remove(struct platform_device *pdev)
 	unregister_netdev(ndev);
 
 	phy_disconnect(ndev->phydev);
-	clk_disable_unprepare(priv->clk);
 }
 
 #ifdef CONFIG_PM
