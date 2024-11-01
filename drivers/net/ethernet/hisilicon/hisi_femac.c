@@ -861,7 +861,7 @@ static int hisi_femac_drv_probe(struct platform_device *pdev)
 		goto out_disconnect_phy;
 	}
 
-	ret = register_netdev(ndev);
+	ret = devm_register_netdev(dev, ndev);
 	if (ret) {
 		dev_err(dev, "register_netdev failed!\n");
 		goto out_disconnect_phy;
@@ -881,8 +881,6 @@ static void hisi_femac_drv_remove(struct platform_device *pdev)
 	struct hisi_femac_priv *priv = netdev_priv(ndev);
 
 	netif_napi_del(&priv->napi);
-	unregister_netdev(ndev);
-
 	phy_disconnect(ndev->phydev);
 }
 
