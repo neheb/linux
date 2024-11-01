@@ -807,10 +807,8 @@ static int hisi_femac_drv_probe(struct platform_device *pdev)
 
 	hisi_femac_core_reset(priv);
 
-	priv->phy_rst = devm_reset_control_get(dev, "phy");
-	if (IS_ERR(priv->phy_rst)) {
-		priv->phy_rst = NULL;
-	} else {
+	priv->phy_rst = devm_reset_control_get_optional(dev, "phy");
+	if (priv->phy_rst) {
 		ret = of_property_read_u32_array(node,
 						 PHY_RESET_DELAYS_PROPERTY,
 						 priv->phy_reset_delays,
