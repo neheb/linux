@@ -1100,7 +1100,7 @@ static int hix5hd2_dev_probe(struct platform_device *pdev)
 	struct mii_bus *bus;
 	int ret;
 
-	ndev = alloc_etherdev(sizeof(struct hix5hd2_priv));
+	ndev = devm_alloc_etherdev(dev, sizeof(struct hix5hd2_priv));
 	if (!ndev)
 		return -ENOMEM;
 
@@ -1113,28 +1113,23 @@ static int hix5hd2_dev_probe(struct platform_device *pdev)
 	priv->hw_cap = (unsigned long)device_get_match_data(dev);
 
 	priv->base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(priv->base)) {
-		ret = PTR_ERR(priv->base);
-		goto out_free_netdev;
-	}
+	if (IS_ERR(priv->base))
+		return PTR_ERR(priv->base);
 
 	priv->ctrl_base = devm_platform_ioremap_resource(pdev, 1);
-	if (IS_ERR(priv->ctrl_base)) {
-		ret = PTR_ERR(priv->ctrl_base);
-		goto out_free_netdev;
-	}
+	if (IS_ERR(priv->ctrl_base))
+		return PTR_ERR(priv->ctrl_base);
 
 	priv->mac_core_clk = devm_clk_get(&pdev->dev, "mac_core");
 	if (IS_ERR(priv->mac_core_clk)) {
 		netdev_err(ndev, "failed to get mac core clk\n");
-		ret = -ENODEV;
-		goto out_free_netdev;
+		return PTR_ERR(priv->mac_core_clk);
 	}
 
 	ret = clk_prepare_enable(priv->mac_core_clk);
 	if (ret < 0) {
 		netdev_err(ndev, "failed to enable mac core clk %d\n", ret);
-		goto out_free_netdev;
+		return ret;
 	}
 
 	priv->mac_ifc_clk = devm_clk_get(&pdev->dev, "mac_ifc");
@@ -1271,9 +1266,6 @@ out_disable_clk:
 	clk_disable_unprepare(priv->mac_ifc_clk);
 out_disable_mac_core_clk:
 	clk_disable_unprepare(priv->mac_core_clk);
-out_free_netdev:
-	free_netdev(ndev);
-
 	return ret;
 }
 
@@ -1292,7 +1284,6 @@ static void hix5hd2_dev_remove(struct platform_device *pdev)
 	hix5hd2_destroy_hw_desc_queue(priv);
 	of_node_put(priv->phy_node);
 	cancel_work_sync(&priv->tx_timeout_task);
-	free_netdev(ndev);
 }
 
 static const struct of_device_id hix5hd2_of_match[] = {
