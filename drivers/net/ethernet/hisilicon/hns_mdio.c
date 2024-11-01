@@ -580,22 +580,18 @@ static int hns_mdio_probe(struct platform_device *pdev)
 			dev_warn(&pdev->dev, "find syscon ret = %#x\n", ret);
 			mdio_dev->subctrl_vbase = NULL;
 		}
-
-		ret = of_mdiobus_register(new_bus, pdev->dev.of_node);
 	} else if (is_acpi_node(pdev->dev.fwnode)) {
 		/* Clear all the IRQ properties */
 		memset(new_bus->irq, PHY_POLL, 4 * PHY_MAX_ADDR);
 
 		/* Mask out all PHYs from auto probing. */
 		new_bus->phy_mask = ~0;
-
-		/* Register the MDIO bus */
-		ret = mdiobus_register(new_bus);
 	} else {
 		dev_err(&pdev->dev, "Can not get cfg data from DT or ACPI\n");
 		ret = -ENXIO;
 	}
 
+	ret = devm_mdiobus_register(&pdev->dev, new_bus);
 	if (ret) {
 		dev_err(&pdev->dev, "Cannot register as MDIO bus!\n");
 		platform_set_drvdata(pdev, NULL);
@@ -603,22 +599,6 @@ static int hns_mdio_probe(struct platform_device *pdev)
 	}
 
 	return 0;
-}
-
-/**
- * hns_mdio_remove - remove mdio device
- * @pdev: mdio platform device
- *
- * Return 0 on success, negative on failure
- */
-static void hns_mdio_remove(struct platform_device *pdev)
-{
-	struct mii_bus *bus;
-
-	bus = platform_get_drvdata(pdev);
-
-	mdiobus_unregister(bus);
-	platform_set_drvdata(pdev, NULL);
 }
 
 static const struct of_device_id hns_mdio_match[] = {
@@ -636,7 +616,6 @@ MODULE_DEVICE_TABLE(acpi, hns_mdio_acpi_match);
 
 static struct platform_driver hns_mdio_driver = {
 	.probe = hns_mdio_probe,
-	.remove = hns_mdio_remove,
 	.driver = {
 		   .name = MDIO_DRV_NAME,
 		   .of_match_table = hns_mdio_match,
