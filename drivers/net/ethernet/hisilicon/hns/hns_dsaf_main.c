@@ -103,27 +103,11 @@ static int hns_dsaf_get_cfg(struct dsaf_device *dsaf_dev)
 		syscon = syscon_node_to_regmap(np_temp);
 		of_node_put(np_temp);
 		if (IS_ERR_OR_NULL(syscon)) {
-			res = platform_get_resource(pdev, IORESOURCE_MEM,
-						    res_idx++);
-			if (!res) {
-				dev_err(dsaf_dev->dev, "subctrl info is needed!\n");
-				return -ENOMEM;
-			}
-
-			dsaf_dev->sc_base = devm_ioremap_resource(&pdev->dev,
-								  res);
+			dsaf_dev->sc_base = devm_platform_ioremap_resource(pdev, res_idx++);
 			if (IS_ERR(dsaf_dev->sc_base))
 				return PTR_ERR(dsaf_dev->sc_base);
 
-			res = platform_get_resource(pdev, IORESOURCE_MEM,
-						    res_idx++);
-			if (!res) {
-				dev_err(dsaf_dev->dev, "serdes-ctrl info is needed!\n");
-				return -ENOMEM;
-			}
-
-			dsaf_dev->sds_base = devm_ioremap_resource(&pdev->dev,
-								   res);
+			dsaf_dev->sds_base = devm_platform_ioremap_resource(pdev, res_idx++);
 			if (IS_ERR(dsaf_dev->sds_base))
 				return PTR_ERR(dsaf_dev->sds_base);
 		} else {
