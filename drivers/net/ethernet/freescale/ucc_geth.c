@@ -3423,7 +3423,7 @@ static int ucc_geth_probe(struct platform_device* ofdev)
 	struct ucc_geth_info *ug_info;
 	struct device_node *phy_node;
 	struct phylink *phylink;
-	struct resource res;
+	struct resource *res;
 	int err, ucc_num;
 	const unsigned int *prop;
 	phy_interface_t phy_interface;
@@ -3455,12 +3455,12 @@ static int ucc_geth_probe(struct platform_device* ofdev)
 	if (err)
 		return err;
 
-	err = of_address_to_resource(np, 0, &res);
-	if (err)
-		return err;
+	res = platform_get_resource(ofdev, 0, IORESOURCE_MEM);
+	if (!res)
+		return -ENODEV;
 
-	ug_info->uf_info.regs = res.start;
-	ug_info->uf_info.irq = irq_of_parse_and_map(np, 0);
+	ug_info->uf_info.regs = res->start;
+	ug_info->uf_info.irq = platform_get_irq(ofdev, 0);
 
 	/* Find the TBI PHY node.  If it's not there, we don't support SGMII */
 	ug_info->tbi_node = of_parse_phandle(np, "tbi-handle", 0);
