@@ -17,6 +17,7 @@ struct ath79_usb_phy {
 	 * to make the code a bit easier to understand.
 	 */
 	struct reset_control *no_suspend_override;
+	struct regulator *vbus;
 };
 
 static int ath79_usb_phy_power_on(struct phy *phy)
@@ -34,7 +35,7 @@ static int ath79_usb_phy_power_on(struct phy *phy)
 	if (err && priv->no_suspend_override)
 		reset_control_deassert(priv->no_suspend_override);
 
-	return err;
+	return regulator_enable(priv->vbus);
 }
 
 static int ath79_usb_phy_power_off(struct phy *phy)
@@ -52,7 +53,7 @@ static int ath79_usb_phy_power_off(struct phy *phy)
 			reset_control_deassert(priv->reset);
 	}
 
-	return err;
+	return regulator_disable(priv->vbus);
 }
 
 static const struct phy_ops ath79_usb_phy_ops = {
@@ -82,6 +83,10 @@ static int ath79_usb_phy_probe(struct platform_device *pdev)
 	phy = devm_phy_create(&pdev->dev, NULL, &ath79_usb_phy_ops);
 	if (IS_ERR(phy))
 		return PTR_ERR(phy);
+
+	priv->vbus = devm_regulator_get_optional(&pdev->dev, "vbus");
+	if (IS_ERR(priv->vbus))
+		return PTR_ERR(priv->vbus);
 
 	phy_set_drvdata(phy, priv);
 
