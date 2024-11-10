@@ -64,69 +64,37 @@ static int mpc52xx_fec_mdio_write(struct mii_bus *bus, int phy_id, int reg,
 
 static int mpc52xx_fec_mdio_probe(struct platform_device *of)
 {
-	struct device *dev = &of->dev;
-	struct device_node *np = of->dev.of_node;
-	struct mii_bus *bus;
 	struct mpc52xx_fec_mdio_priv *priv;
-	struct resource res;
-	int err;
+	struct device *dev = &of->dev;
+	struct resource *res;
+	struct mii_bus *bus;
 
-	bus = mdiobus_alloc();
-	if (bus == NULL)
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
 		return -ENOMEM;
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (priv == NULL) {
-		err = -ENOMEM;
-		goto out_free;
-	}
+
+	bus = devm_mdiobus_alloc(dev);
+	if (!bus)
+		return -ENOMEM;
 
 	bus->name = "mpc52xx MII bus";
 	bus->read = mpc52xx_fec_mdio_read;
 	bus->write = mpc52xx_fec_mdio_write;
 
 	/* setup registers */
-	err = of_address_to_resource(np, 0, &res);
-	if (err)
-		goto out_free;
-	priv->regs = ioremap(res.start, resource_size(&res));
-	if (priv->regs == NULL) {
-		err = -ENOMEM;
-		goto out_free;
-	}
+	priv->regs = devm_platform_get_and_ioremap_resource(of, 0, &res);
+	if (IS_ERR(priv->regs))
+		return PTR_ERR(priv->regs);
 
-	snprintf(bus->id, MII_BUS_ID_SIZE, "%pa", &res.start);
+	snprintf(bus->id, MII_BUS_ID_SIZE, "%pa", &res->start);
 	bus->priv = priv;
 
 	bus->parent = dev;
-	dev_set_drvdata(dev, bus);
 
 	/* set MII speed */
 	out_be32(&priv->regs->mii_speed, ((mpc5xxx_get_bus_frequency(dev) >> 20) / 5) << 1);
 
-	err = of_mdiobus_register(bus, np);
-	if (err)
-		goto out_unmap;
-
-	return 0;
-
- out_unmap:
-	iounmap(priv->regs);
- out_free:
-	kfree(priv);
-	mdiobus_free(bus);
-
-	return err;
-}
-
-static void mpc52xx_fec_mdio_remove(struct platform_device *of)
-{
-	struct mii_bus *bus = platform_get_drvdata(of);
-	struct mpc52xx_fec_mdio_priv *priv = bus->priv;
-
-	mdiobus_unregister(bus);
-	iounmap(priv->regs);
-	kfree(priv);
-	mdiobus_free(bus);
+	return devm_mdiobus_register(dev, bus);
 }
 
 static const struct of_device_id mpc52xx_fec_mdio_match[] = {
@@ -144,7 +112,6 @@ struct platform_driver mpc52xx_fec_mdio_driver = {
 		.of_match_table = mpc52xx_fec_mdio_match,
 	},
 	.probe = mpc52xx_fec_mdio_probe,
-	.remove = mpc52xx_fec_mdio_remove,
 };
 
 /* let fec driver call it, since this has to be registered before it */
