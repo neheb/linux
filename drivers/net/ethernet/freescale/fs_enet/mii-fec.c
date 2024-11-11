@@ -96,44 +96,38 @@ static int fs_enet_fec_mii_write(struct mii_bus *bus, int phy_id, int location, 
 
 static int fs_enet_mdio_probe(struct platform_device *ofdev)
 {
-	struct resource res;
+	int (*get_bus_freq)(struct device *);
+	struct device *dev = &ofdev->dev;
 	struct mii_bus *new_bus;
 	struct fec_info *fec;
-	int (*get_bus_freq)(struct device *);
-	int ret = -ENOMEM, clock, speed;
+	struct resource *res;
+	int ret, clock, speed;
 
-	get_bus_freq = device_get_match_data(&ofdev->dev);
-
-	new_bus = mdiobus_alloc();
+	new_bus = devm_mdiobus_alloc(dev);
 	if (!new_bus)
-		goto out;
+		return -ENOMEM;
 
-	fec = kzalloc(sizeof(struct fec_info), GFP_KERNEL);
+	fec = devm_kzalloc(dev, sizeof(struct fec_info), GFP_KERNEL);
 	if (!fec)
-		goto out_mii;
+		return -ENOMEM;
 
 	new_bus->priv = fec;
 	new_bus->name = "FEC MII Bus";
 	new_bus->read = &fs_enet_fec_mii_read;
 	new_bus->write = &fs_enet_fec_mii_write;
 
-	ret = of_address_to_resource(ofdev->dev.of_node, 0, &res);
-	if (ret)
-		goto out_res;
+	fec->fecp = devm_platform_get_and_ioremap_resource(ofdev, 0, &res);
+	if (IS_ERR(fec->fecp))
+		return PTR_ERR(fec->fecp);
 
-	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%pap", &res.start);
+	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%pap", &res->start);
 
-	fec->fecp = ioremap(res.start, resource_size(&res));
-	if (!fec->fecp) {
-		ret = -ENOMEM;
-		goto out_fec;
-	}
-
+	get_bus_freq = device_get_match_data(dev);
 	if (get_bus_freq) {
-		clock = get_bus_freq(&ofdev->dev);
+		clock = get_bus_freq(dev);
 		if (!clock) {
 			/* Use maximum divider if clock is unknown */
-			dev_warn(&ofdev->dev, "could not determine IPS clock\n");
+			dev_warn(dev, "could not determine IPS clock\n");
 			clock = 0x3F * 5000000;
 		}
 	} else
@@ -146,8 +140,7 @@ static int fs_enet_mdio_probe(struct platform_device *ofdev)
 	speed = (clock + 4999999) / 5000000;
 	if (speed > 0x3F) {
 		speed = 0x3F;
-		dev_err(&ofdev->dev,
-			"MII clock (%d Hz) exceeds max (2.5 MHz)\n",
+		dev_err(dev, "MII clock (%d Hz) exceeds max (2.5 MHz)\n",
 			clock / speed);
 	}
 
@@ -161,35 +154,10 @@ static int fs_enet_mdio_probe(struct platform_device *ofdev)
 
 	new_bus->phy_mask = ~0;
 
-	new_bus->parent = &ofdev->dev;
+	new_bus->parent = dev;
 	platform_set_drvdata(ofdev, new_bus);
 
-	ret = of_mdiobus_register(new_bus, ofdev->dev.of_node);
-	if (ret)
-		goto out_unmap_regs;
-
-	return 0;
-
-out_unmap_regs:
-	iounmap(fec->fecp);
-out_res:
-out_fec:
-	kfree(fec);
-out_mii:
-	mdiobus_free(new_bus);
-out:
-	return ret;
-}
-
-static void fs_enet_mdio_remove(struct platform_device *ofdev)
-{
-	struct mii_bus *bus = platform_get_drvdata(ofdev);
-	struct fec_info *fec = bus->priv;
-
-	mdiobus_unregister(bus);
-	iounmap(fec->fecp);
-	kfree(fec);
-	mdiobus_free(bus);
+	return devm_mdiobus_register(dev, new_bus);
 }
 
 static const struct of_device_id fs_enet_mdio_fec_match[] = {
@@ -212,7 +180,6 @@ static struct platform_driver fs_enet_fec_mdio_driver = {
 		.of_match_table = fs_enet_mdio_fec_match,
 	},
 	.probe = fs_enet_mdio_probe,
-	.remove = fs_enet_mdio_remove,
 };
 
 module_platform_driver(fs_enet_fec_mdio_driver);
