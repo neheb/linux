@@ -808,61 +808,41 @@ static const struct net_device_ops mpc52xx_fec_netdev_ops = {
 
 static int mpc52xx_fec_probe(struct platform_device *op)
 {
-	int rv;
+	struct device *dev = &op->dev;
+	struct mpc52xx_fec_priv *priv;
 	struct net_device *ndev;
-	struct mpc52xx_fec_priv *priv = NULL;
-	struct resource mem;
+	struct device_node *np;
+	struct resource *mem;
 	const u32 *prop;
 	int prop_size;
-	struct device_node *np = op->dev.of_node;
+	int rv;
+
+	np = op->dev.of_node;
 
 	phys_addr_t rx_fifo;
 	phys_addr_t tx_fifo;
 
 	/* Get the ether ndev & it's private zone */
-	ndev = alloc_etherdev(sizeof(struct mpc52xx_fec_priv));
+	ndev = devm_alloc_etherdev(dev, sizeof(struct mpc52xx_fec_priv));
 	if (!ndev)
 		return -ENOMEM;
 
 	priv = netdev_priv(ndev);
 	priv->ndev = ndev;
 
-	/* Reserve FEC control zone */
-	rv = of_address_to_resource(np, 0, &mem);
-	if (rv) {
-		pr_err("Error while parsing device node resource\n");
-		goto err_netdev;
-	}
-	if (resource_size(&mem) < sizeof(struct mpc52xx_fec)) {
-		pr_err("invalid resource size (%lx < %x), check mpc52xx_devices.c\n",
-		       (unsigned long)resource_size(&mem),
-		       sizeof(struct mpc52xx_fec));
-		rv = -EINVAL;
-		goto err_netdev;
-	}
-
-	if (!request_mem_region(mem.start, sizeof(struct mpc52xx_fec),
-				DRIVER_NAME)) {
-		rv = -EBUSY;
-		goto err_netdev;
-	}
+	/* ioremap the zones */
+	priv->fec = devm_platform_get_and_ioremap_resource(op, 0, &mem);
+	if (IS_ERR(priv->fec))
+		return PTR_ERR(priv->fec);
 
 	/* Init ether ndev with what we have */
 	ndev->netdev_ops	= &mpc52xx_fec_netdev_ops;
 	ndev->ethtool_ops	= &mpc52xx_fec_ethtool_ops;
 	ndev->watchdog_timeo	= FEC_WATCHDOG_TIMEOUT;
-	ndev->base_addr		= mem.start;
+	ndev->base_addr		= mem->start;
 	SET_NETDEV_DEV(ndev, &op->dev);
 
 	spin_lock_init(&priv->lock);
-
-	/* ioremap the zones */
-	priv->fec = ioremap(mem.start, sizeof(struct mpc52xx_fec));
-
-	if (!priv->fec) {
-		rv = -ENOMEM;
-		goto err_mem_region;
-	}
 
 	/* Bestcomm init */
 	rx_fifo = ndev->base_addr + offsetof(struct mpc52xx_fec, rfifo_data);
@@ -946,7 +926,7 @@ static int mpc52xx_fec_probe(struct platform_device *op)
 	mpc52xx_fec_hw_init(ndev);
 	mpc52xx_fec_reset_stats(ndev);
 
-	rv = register_netdev(ndev);
+	rv = devm_register_netdev(dev, ndev);
 	if (rv < 0)
 		goto err_node;
 
@@ -965,12 +945,6 @@ err_rx_tx_dmatsk:
 		bcom_fec_rx_release(priv->rx_dmatsk);
 	if (priv->tx_dmatsk)
 		bcom_fec_tx_release(priv->tx_dmatsk);
-	iounmap(priv->fec);
-err_mem_region:
-	release_mem_region(mem.start, sizeof(struct mpc52xx_fec));
-err_netdev:
-	free_netdev(ndev);
-
 	return rv;
 }
 
@@ -983,8 +957,6 @@ mpc52xx_fec_remove(struct platform_device *op)
 	ndev = platform_get_drvdata(op);
 	priv = netdev_priv(ndev);
 
-	unregister_netdev(ndev);
-
 	of_node_put(priv->phy_node);
 	priv->phy_node = NULL;
 
@@ -992,12 +964,6 @@ mpc52xx_fec_remove(struct platform_device *op)
 
 	bcom_fec_rx_release(priv->rx_dmatsk);
 	bcom_fec_tx_release(priv->tx_dmatsk);
-
-	iounmap(priv->fec);
-
-	release_mem_region(ndev->base_addr, sizeof(struct mpc52xx_fec));
-
-	free_netdev(ndev);
 }
 
 #ifdef CONFIG_PM
