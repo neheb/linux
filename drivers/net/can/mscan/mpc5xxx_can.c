@@ -296,16 +296,13 @@ static int mpc5xxx_can_probe(struct platform_device *ofdev)
 	if (!data)
 		return -EINVAL;
 
-	base = of_iomap(np, 0);
-	if (!base)
-		return dev_err_probe(&ofdev->dev, err, "couldn't ioremap\n");
+	base = devm_platform_ioremap_resource(ofdev, 0);
+	if (IS_ERR(base))
+		return dev_err_probe(&ofdev->dev, PTR_ERR(base), "couldn't ioremap\n");
 
-	irq = irq_of_parse_and_map(np, 0);
-	if (!irq) {
-		dev_err(&ofdev->dev, "no irq found\n");
-		err = -ENODEV;
-		goto exit_unmap_mem;
-	}
+	irq = platform_get_irq(ofdev, 0);
+	if (irq < 0)
+		return -ENODEV;
 
 	dev = alloc_mscandev();
 	if (!dev)
@@ -345,9 +342,6 @@ exit_put_clock:
 	free_candev(dev);
 exit_dispose_irq:
 	irq_dispose_mapping(irq);
-exit_unmap_mem:
-	iounmap(base);
-
 	return err;
 }
 
@@ -355,14 +349,12 @@ static void mpc5xxx_can_remove(struct platform_device *ofdev)
 {
 	const struct mpc5xxx_can_data *data;
 	struct net_device *dev = platform_get_drvdata(ofdev);
-	struct mscan_priv *priv = netdev_priv(dev);
 
 	data = device_get_match_data(&ofdev->dev);
 
 	unregister_mscandev(dev);
 	if (data && data->put_clock)
 		data->put_clock(ofdev);
-	iounmap(priv->reg_base);
 	irq_dispose_mapping(dev->irq);
 	free_candev(dev);
 }
