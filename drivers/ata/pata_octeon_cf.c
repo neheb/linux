@@ -56,7 +56,7 @@ struct octeon_cf_port {
 	unsigned int cs0;
 	unsigned int cs1;
 	bool is_true_ide;
-	u64 dma_base;
+	void __iomem *dma_base;
 };
 
 static const struct scsi_host_template octeon_cf_sht = {
@@ -246,7 +246,8 @@ static void octeon_cf_set_dmamode(struct ata_port *ap, struct ata_device *dev)
 	pin_defs.u64 = cvmx_read_csr(CVMX_MIO_BOOT_PIN_DEFS);
 
 	/* DMA channel number. */
-	c = (cf_port->dma_base & 8) >> 3;
+	c = ioread32(cf_port->dma_base);
+	c = (c & 8) >> 3;
 
 	/* Invert the polarity if the default is 0*/
 	dma_tim.s.dmack_pi = (pin_defs.u64 & (1ull << (11 + c))) ? 0 : 1;
@@ -801,8 +802,6 @@ static struct ata_port_operations octeon_cf_ops = {
 
 static int octeon_cf_probe(struct platform_device *pdev)
 {
-	struct resource *res_cs0, *res_cs1;
-
 	bool is_16bit;
 	u64 reg;
 	struct device_node *node;
@@ -843,22 +842,16 @@ static int octeon_cf_probe(struct platform_device *pdev)
 					    "cavium,dma-engine-handle", 0);
 		if (dma_node) {
 			struct platform_device *dma_dev;
+
 			dma_dev = of_find_device_by_node(dma_node);
 			if (dma_dev) {
-				struct resource *res_dma;
 				int i;
-				res_dma = platform_get_resource(dma_dev, IORESOURCE_MEM, 0);
-				if (!res_dma) {
+
+				cf_port->dma_base = devm_platform_ioremap_resource(dma_dev, 0);
+				if (IS_ERR(cf_port->dma_base)) {
 					put_device(&dma_dev->dev);
 					of_node_put(dma_node);
-					return -EINVAL;
-				}
-				cf_port->dma_base = (u64)devm_ioremap(&pdev->dev, res_dma->start,
-									 resource_size(res_dma));
-				if (!cf_port->dma_base) {
-					put_device(&dma_dev->dev);
-					of_node_put(dma_node);
-					return -EINVAL;
+					return PTR_ERR(cf_port->dma_base);
 				}
 
 				i = platform_get_irq(dma_dev, 0);
@@ -870,14 +863,10 @@ static int octeon_cf_probe(struct platform_device *pdev)
 			}
 			of_node_put(dma_node);
 		}
-		res_cs1 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-		if (!res_cs1)
-			return -EINVAL;
 
-		cs1 = devm_ioremap(&pdev->dev, res_cs1->start,
-					   resource_size(res_cs1));
-		if (!cs1)
-			return -EINVAL;
+		cs1 = devm_platform_ioremap_resource(pdev, 1);
+		if (IS_ERR(cs1))
+			return PTR_ERR(cs1);
 
 		rv = of_property_read_reg(node, 1, &reg, NULL);
 		if (rv < 0)
@@ -885,14 +874,9 @@ static int octeon_cf_probe(struct platform_device *pdev)
 		cf_port->cs1 = upper_32_bits(reg);
 	}
 
-	res_cs0 = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res_cs0)
-		return -EINVAL;
-
-	cs0 = devm_ioremap(&pdev->dev, res_cs0->start,
-				   resource_size(res_cs0));
-	if (!cs0)
-		return -ENOMEM;
+	cs0 = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(cs0))
+		return PTR_ERR(cs0);
 
 	/* allocate host */
 	host = ata_host_alloc(&pdev->dev, 1);
