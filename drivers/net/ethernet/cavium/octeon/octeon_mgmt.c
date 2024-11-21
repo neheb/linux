@@ -116,9 +116,9 @@ union mgmt_port_ring_entry {
 
 struct octeon_mgmt {
 	struct net_device *netdev;
-	u64 mix;
-	u64 agl;
-	u64 agl_prt_ctl;
+	void __iomem *mix;
+	void __iomem *agl;
+	void __iomem *agl_prt_ctl;
 	int port;
 	int irq;
 	bool has_rx_tstamp;
@@ -146,12 +146,6 @@ struct octeon_mgmt {
 	struct napi_struct napi;
 	struct tasklet_struct tx_clean_tasklet;
 	struct device_node *phy_np;
-	resource_size_t mix_phys;
-	resource_size_t mix_size;
-	resource_size_t agl_phys;
-	resource_size_t agl_size;
-	resource_size_t agl_prt_ctl_phys;
-	resource_size_t agl_prt_ctl_size;
 };
 
 static void octeon_mgmt_set_rx_irq(struct octeon_mgmt *p, int enable)
@@ -1382,9 +1376,6 @@ static int octeon_mgmt_probe(struct platform_device *pdev)
 	struct net_device *netdev;
 	struct octeon_mgmt *p;
 	const __be32 *data;
-	struct resource *res_mix;
-	struct resource *res_agl;
-	struct resource *res_agl_prt_ctl;
 	int len;
 	int result;
 
@@ -1420,67 +1411,20 @@ static int octeon_mgmt_probe(struct platform_device *pdev)
 
 	p->irq = result;
 
-	res_mix = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (res_mix == NULL) {
-		dev_err(&pdev->dev, "no 'reg' resource\n");
-		result = -ENXIO;
-		goto err;
-	}
-
-	res_agl = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (res_agl == NULL) {
-		dev_err(&pdev->dev, "no 'reg' resource\n");
-		result = -ENXIO;
-		goto err;
-	}
-
-	res_agl_prt_ctl = platform_get_resource(pdev, IORESOURCE_MEM, 3);
-	if (res_agl_prt_ctl == NULL) {
-		dev_err(&pdev->dev, "no 'reg' resource\n");
-		result = -ENXIO;
-		goto err;
-	}
-
-	p->mix_phys = res_mix->start;
-	p->mix_size = resource_size(res_mix);
-	p->agl_phys = res_agl->start;
-	p->agl_size = resource_size(res_agl);
-	p->agl_prt_ctl_phys = res_agl_prt_ctl->start;
-	p->agl_prt_ctl_size = resource_size(res_agl_prt_ctl);
-
-
-	if (!devm_request_mem_region(&pdev->dev, p->mix_phys, p->mix_size,
-				     res_mix->name)) {
-		dev_err(&pdev->dev, "request_mem_region (%s) failed\n",
-			res_mix->name);
-		result = -ENXIO;
-		goto err;
-	}
-
-	if (!devm_request_mem_region(&pdev->dev, p->agl_phys, p->agl_size,
-				     res_agl->name)) {
-		result = -ENXIO;
-		dev_err(&pdev->dev, "request_mem_region (%s) failed\n",
-			res_agl->name);
-		goto err;
-	}
-
-	if (!devm_request_mem_region(&pdev->dev, p->agl_prt_ctl_phys,
-				     p->agl_prt_ctl_size, res_agl_prt_ctl->name)) {
-		result = -ENXIO;
-		dev_err(&pdev->dev, "request_mem_region (%s) failed\n",
-			res_agl_prt_ctl->name);
-		goto err;
-	}
-
-	p->mix = (u64)devm_ioremap(&pdev->dev, p->mix_phys, p->mix_size);
-	p->agl = (u64)devm_ioremap(&pdev->dev, p->agl_phys, p->agl_size);
-	p->agl_prt_ctl = (u64)devm_ioremap(&pdev->dev, p->agl_prt_ctl_phys,
-					   p->agl_prt_ctl_size);
-	if (!p->mix || !p->agl || !p->agl_prt_ctl) {
+	p->mix = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(p->mix)) {
 		dev_err(&pdev->dev, "failed to map I/O memory\n");
-		result = -ENOMEM;
-		goto err;
+		return PTR_ERR(p->mix);
+	}
+	p->agl = devm_platform_ioremap_resource(pdev, 1);
+	if (IS_ERR(p->agl)) {
+		dev_err(&pdev->dev, "failed to map I/O memory\n");
+		return PTR_ERR(p->agl);
+	}
+	p->agl_prt_ctl = devm_platform_ioremap_resource(pdev, 3);
+	if (IS_ERR(p->agl_prt_ctl)) {
+		dev_err(&pdev->dev, "failed to map I/O memory\n");
+		return PTR_ERR(p->agl_prt_ctl);
 	}
 
 	spin_lock_init(&p->lock);

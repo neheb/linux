@@ -2010,17 +2010,17 @@ static int netcp_create_interface(struct netcp_device *netcp_device,
 		}
 		size = resource_size(&res);
 
-		if (!devm_request_mem_region(dev, res.start, size,
+		if (!request_mem_region(res.start, size,
 					     dev_name(dev))) {
 			dev_err(dev, "could not reserve resource\n");
 			ret = -ENOMEM;
 			goto quit;
 		}
 
-		efuse = devm_ioremap(dev, res.start, size);
+		efuse = ioremap(res.start, size);
 		if (!efuse) {
 			dev_err(dev, "could not map resource\n");
-			devm_release_mem_region(dev, res.start, size);
+			release_mem_region(res.start, size);
 			ret = -ENOMEM;
 			goto quit;
 		}
@@ -2030,9 +2030,6 @@ static int netcp_create_interface(struct netcp_device *netcp_device,
 			eth_hw_addr_set(ndev, efuse_mac_addr);
 		else
 			eth_hw_addr_random(ndev);
-
-		devm_iounmap(dev, efuse);
-		devm_release_mem_region(dev, res.start, size);
 	} else {
 		ret = of_get_ethdev_address(node_interface, ndev);
 		if (ret)

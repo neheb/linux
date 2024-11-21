@@ -1024,7 +1024,6 @@ static const struct net_device_ops ethoc_netdev_ops = {
 static int ethoc_probe(struct platform_device *pdev)
 {
 	struct net_device *netdev = NULL;
-	struct resource *res = NULL;
 	struct resource *mmio = NULL;
 	struct resource *mem = NULL;
 	struct ethoc *priv = NULL;
@@ -1043,39 +1042,32 @@ static int ethoc_probe(struct platform_device *pdev)
 	SET_NETDEV_DEV(netdev, &pdev->dev);
 	platform_set_drvdata(pdev, netdev);
 
-	/* obtain I/O memory space */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(&pdev->dev, "cannot obtain I/O memory space\n");
-		ret = -ENXIO;
-		goto free;
-	}
+	/* setup driver-private data */
+	priv = netdev_priv(netdev);
+	priv->netdev = netdev;
 
-	mmio = devm_request_mem_region(&pdev->dev, res->start,
-			resource_size(res), res->name);
-	if (!mmio) {
-		dev_err(&pdev->dev, "cannot request I/O memory space\n");
-		ret = -ENXIO;
+	priv->iobase = devm_platform_get_and_ioremap_resource(pdev, 0, &mmio);
+	if (IS_ERR(priv->iobase)) {
+		dev_err(&pdev->dev, "cannot remap I/O memory space\n");
+		ret = PTR_ERR(priv->iobase);
 		goto free;
 	}
 
 	netdev->base_addr = mmio->start;
 
 	/* obtain buffer memory space */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (res) {
-		mem = devm_request_mem_region(&pdev->dev, res->start,
-			resource_size(res), res->name);
-		if (!mem) {
-			dev_err(&pdev->dev, "cannot request memory space\n");
-			ret = -ENXIO;
+	mem = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	if (mem) {
+		priv->membase = devm_ioremap_resource(&pdev->dev, mem);
+		if (IS_ERR(priv->membase)) {
+			dev_err(&pdev->dev, "cannot remap memory space\n");
+			ret = PTR_ERR(priv->membase);
 			goto free;
 		}
 
 		netdev->mem_start = mem->start;
 		netdev->mem_end   = mem->end;
 	}
-
 
 	/* obtain device IRQ number */
 	ret = platform_get_irq(pdev, 0);
@@ -1084,27 +1076,7 @@ static int ethoc_probe(struct platform_device *pdev)
 
 	netdev->irq = ret;
 
-	/* setup driver-private data */
-	priv = netdev_priv(netdev);
-	priv->netdev = netdev;
-
-	priv->iobase = devm_ioremap(&pdev->dev, netdev->base_addr,
-			resource_size(mmio));
-	if (!priv->iobase) {
-		dev_err(&pdev->dev, "cannot remap I/O memory space\n");
-		ret = -ENXIO;
-		goto free;
-	}
-
-	if (netdev->mem_end) {
-		priv->membase = devm_ioremap(&pdev->dev,
-			netdev->mem_start, resource_size(mem));
-		if (!priv->membase) {
-			dev_err(&pdev->dev, "cannot remap memory space\n");
-			ret = -ENXIO;
-			goto free;
-		}
-	} else {
+	if (!mem) {
 		/* Allocate buffer memory */
 		priv->membase = dmam_alloc_coherent(&pdev->dev,
 			buffer_size, (void *)&netdev->mem_start,
