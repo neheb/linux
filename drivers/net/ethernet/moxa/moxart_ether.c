@@ -457,7 +457,7 @@ static int moxart_mac_probe(struct platform_device *pdev)
 	struct net_device *ndev;
 	struct moxart_mac_priv_t *priv;
 	struct resource *res;
-	unsigned int irq;
+	int irq;
 	int ret;
 
 	ndev = alloc_etherdev(sizeof(struct moxart_mac_priv_t));
