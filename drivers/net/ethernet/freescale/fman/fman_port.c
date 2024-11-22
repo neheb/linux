@@ -1745,8 +1745,6 @@ static int fman_port_probe(struct platform_device *of_dev)
 	struct fman *fman;
 	struct device_node *fm_node, *port_node;
 	struct platform_device *fm_pdev;
-	struct resource res;
-	struct resource *dev_res;
 	u32 val;
 	int err = 0;
 	enum fman_port_type port_type;
@@ -1840,31 +1838,16 @@ static int fman_port_probe(struct platform_device *of_dev)
 		port->dts_params.qman_channel_id = qman_channel_id;
 	}
 
-	err = of_address_to_resource(port_node, 0, &res);
-	if (err < 0) {
-		dev_err(port->dev, "%s: of_address_to_resource() failed\n",
-			__func__);
-		err = -ENOMEM;
-		goto put_device;
-	}
-
 	port->dts_params.fman = fman;
 
 	put_device(&fm_pdev->dev);
 	of_node_put(port_node);
 
-	dev_res = __devm_request_region(port->dev, &res, res.start,
-					resource_size(&res), "fman-port");
-	if (!dev_res) {
-		dev_err(port->dev, "%s: __devm_request_region() failed\n",
-			__func__);
-		return -EINVAL;
-	}
-
-	port->dts_params.base_addr = devm_ioremap(port->dev, res.start,
-						  resource_size(&res));
-	if (!port->dts_params.base_addr)
+	port->dts_params.base_addr = devm_platform_ioremap_resource(of_dev, 0);
+	if (IS_ERR(port->dts_params.base_addr)) {
 		dev_err(port->dev, "%s: devm_ioremap() failed\n", __func__);
+		return PTR_ERR(port->dts_params.base_addr);
+	}
 
 	dev_set_drvdata(&of_dev->dev, port);
 
