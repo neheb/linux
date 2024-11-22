@@ -374,7 +374,7 @@ struct sxgbe_ops {
 
 /* SXGBE private data structures */
 struct sxgbe_tx_queue {
-	unsigned int irq_no;
+	int irq_no;
 	struct sxgbe_priv_data *priv_ptr;
 	struct sxgbe_tx_norm_desc *dma_tx;
 	dma_addr_t dma_tx_phy;
@@ -397,7 +397,7 @@ struct sxgbe_rx_queue {
 	struct sk_buff **rx_skbuff;
 	unsigned int cur_rx;
 	unsigned int dirty_rx;
-	unsigned int irq_no;
+	int irq_no;
 	u32 rx_riwt;
 	dma_addr_t *rx_skbuff_dma;
 	dma_addr_t dma_rx_phy;
