@@ -1850,6 +1850,7 @@ static int fman_port_probe(struct platform_device *of_dev)
 
 	port->dts_params.fman = fman;
 
+	put_device(&fm_pdev->dev);
 	of_node_put(port_node);
 
 	dev_res = __devm_request_region(port->dev, &res, res.start,
