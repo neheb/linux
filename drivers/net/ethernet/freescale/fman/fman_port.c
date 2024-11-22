@@ -1753,7 +1753,7 @@ static int fman_port_probe(struct platform_device *of_dev)
 	u16 port_speed;
 	u8 port_id;
 
-	port = kzalloc(sizeof(*port), GFP_KERNEL);
+	port = devm_kzalloc(&of_dev->dev, sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return -ENOMEM;
 
@@ -1858,8 +1858,7 @@ static int fman_port_probe(struct platform_device *of_dev)
 	if (!dev_res) {
 		dev_err(port->dev, "%s: __devm_request_region() failed\n",
 			__func__);
-		err = -EINVAL;
-		goto free_port;
+		return -EINVAL;
 	}
 
 	port->dts_params.base_addr = devm_ioremap(port->dev, res.start,
@@ -1875,8 +1874,6 @@ put_device:
 	put_device(&fm_pdev->dev);
 return_err:
 	of_node_put(port_node);
-free_port:
-	kfree(port);
 	return err;
 }
 
