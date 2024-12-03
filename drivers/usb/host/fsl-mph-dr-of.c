@@ -318,7 +318,7 @@ static int fsl_usb2_mpc5121_init(struct platform_device *pdev)
 		out_be32(pdata->regs + ISIPHYCTRL, PHYCTRL_PHYE | PHYCTRL_PXE);
 		out_be32(pdata->regs + USBGENCTRL, reg);
 	}
-	return 0;
+	return devm_regulator_get_enable_optional(pdev->dev.parent, "vbus");
 }
 
 static void fsl_usb2_mpc5121_exit(struct platform_device *pdev)
