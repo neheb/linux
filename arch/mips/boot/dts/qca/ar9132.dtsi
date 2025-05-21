@@ -56,7 +56,7 @@
 				#qca,ddr-wb-channel-cells = <1>;
 			};
 
-			uart: uart@18020000 {
+			uart: serial@18020000 {
 				compatible = "ns8250";
 				reg = <0x18020000 0x20>;
 				interrupts = <3>;
