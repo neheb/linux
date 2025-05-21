@@ -19,9 +19,21 @@ properties:
   reg:
     maxItems: 1
 
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    const: wdt
+
 required:
   - compatible
   - reg
+  - interrupts
+  - clocks
+  - clock-names
 
 unevaluatedProperties: false
 
@@ -30,4 +42,9 @@ examples:
     watchdog@18060008 {
         compatible = "qca,ar7130-wdt";
         reg = <0x18060008 0x8>;
+
+        interrupts = <4>;
+
+        clocks = <&pll ATH79_CLK_AHB>;
+        clock-names = "wdt";
     };
