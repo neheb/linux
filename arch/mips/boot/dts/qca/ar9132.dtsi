@@ -62,7 +62,7 @@
 				interrupts = <3>;
 
 				clocks = <&pll ATH79_CLK_AHB>;
-				clock-names = "uart";
+				clock-names = "core";
 
 				reg-io-width = <4>;
 				reg-shift = <2>;
