@@ -865,13 +865,13 @@ static int alx_request_msix(struct alx_priv *alx)
 		vector++;
 
 		if (np->txq && np->rxq)
-			sprintf(np->irq_lbl, "%s-TxRx-%u", netdev->name,
+			sprintf(np->irq_lbl, "%s-TxRx-%hu", netdev->name,
 				np->txq->queue_idx);
 		else if (np->txq)
-			sprintf(np->irq_lbl, "%s-tx-%u", netdev->name,
+			sprintf(np->irq_lbl, "%s-tx-%hu", netdev->name,
 				np->txq->queue_idx);
 		else if (np->rxq)
-			sprintf(np->irq_lbl, "%s-rx-%u", netdev->name,
+			sprintf(np->irq_lbl, "%s-rx-%hu", netdev->name,
 				np->rxq->queue_idx);
 		else
 			sprintf(np->irq_lbl, "%s-unused", netdev->name);
