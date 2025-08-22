@@ -1443,6 +1443,9 @@ struct ath5k_hw {
 	/* Calibration mask */
 	u8			ah_cal_mask;
 
+	u16 *nvmem_blob;	/* devres managed */
+	size_t nvmem_blob_len;
+
 	/*
 	 * Function pointers
 	 */

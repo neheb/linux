@@ -60,6 +60,7 @@
 #include <net/ieee80211_radiotap.h>
 
 #include <linux/of_net.h>
+#include <linux/nvmem-consumer.h>
 #include <linux/unaligned.h>
 
 #include <net/mac80211.h>
@@ -2572,6 +2573,55 @@ static const struct ieee80211_iface_combination if_comb = {
 	.num_different_channels = 1,
 };
 
+static int ath5k_nvmem_request_eeprom(struct ath5k_hw *ah)
+{
+	struct nvmem_cell *cell;
+	void *buf;
+	size_t len;
+	int err;
+
+	cell = nvmem_cell_get(ah->dev, "calibration");
+	if (IS_ERR(cell)) {
+		err = PTR_ERR(cell);
+
+		/* nvmem cell might not be defined, or the nvmem
+		 * subsystem isn't included. In this case, follow
+		 * the established "just return 0;" convention
+		 * to say:
+		 * "All good. Nothing to see here. Please go on."
+		 */
+		if (err == -ENOENT || err == -EOPNOTSUPP)
+			return 0;
+
+		return err;
+	}
+
+	buf = nvmem_cell_read(cell, &len);
+	nvmem_cell_put(cell);
+	if (IS_ERR(buf))
+		return PTR_ERR(buf);
+
+	/* run basic sanity checks on the returned nvram cell length.
+	 * That length has to be a multiple of a "u16" (i.e.: & 1).
+	 * Furthermore, it has to be more than "let's say" 512 bytes
+	 * but less than the maximum of 2kb.
+	 */
+	if ((len & 1) == 1 || len < 512 || len >= 2048) {
+		kfree(buf);
+		return -EINVAL;
+	}
+
+	/* devres manages the calibration values release on shutdown */
+	ah->nvmem_blob = devm_kmemdup(ah->dev, buf, len, GFP_KERNEL);
+	kfree(buf);
+	if (!ah->nvmem_blob)
+		return -ENOMEM;
+
+	ah->nvmem_blob_len = len;
+
+	return 0;
+}
+
 static int ath5k_of_init(struct ath5k_hw *ah)
 {
 	struct ath_common *common = ath5k_hw_common(ah);
@@ -2654,6 +2704,10 @@ ath5k_init_ah(struct ath5k_hw *ah, const struct ath_bus_ops *bus_ops)
 	common->clockrate = 40;
 
 	ret = ath5k_of_init(ah);
+	if (ret)
+		return ret;
+
+	ret = ath5k_nvmem_request_eeprom(ah);
 	if (ret)
 		return ret;
 
