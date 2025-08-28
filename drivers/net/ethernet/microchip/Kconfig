@@ -20,6 +20,7 @@ config ENC28J60
 	tristate "ENC28J60 support"
 	depends on SPI
 	select CRC32
+	select OF
 	help
 	  Support for the Microchip EN28J60 ethernet chip.
 
