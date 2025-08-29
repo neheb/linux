@@ -424,28 +424,14 @@ static void usb_wakeup_set(struct xhci_hcd_mtk *mtk, bool enable)
 		usb_wakeup_ip_sleep_set(mtk, enable);
 }
 
-static int xhci_mtk_clks_get(struct xhci_hcd_mtk *mtk)
-{
-	struct clk_bulk_data *clks = mtk->clks;
-
-	clks[0].id = "sys_ck";
-	clks[1].id = "xhci_ck";
-	clks[2].id = "ref_ck";
-	clks[3].id = "mcu_ck";
-	clks[4].id = "dma_ck";
-	clks[5].id = "frmcnt_ck";
-
-	return devm_clk_bulk_get_optional(mtk->dev, BULK_CLKS_NUM, clks);
-}
-
 static int xhci_mtk_vregs_get(struct xhci_hcd_mtk *mtk)
 {
-	struct regulator_bulk_data *supplies = mtk->supplies;
+	const char **supplies = mtk->supplies;
 
-	supplies[0].supply = "vbus";
-	supplies[1].supply = "vusb33";
+	supplies[0] = "vbus";
+	supplies[1] = "vusb33";
 
-	return devm_regulator_bulk_get(mtk->dev, BULK_VREGS_NUM, supplies);
+	return devm_regulator_bulk_get_enable(mtk->dev, BULK_VREGS_NUM, supplies);
 }
 
 static void xhci_mtk_quirks(struct device *dev, struct xhci_hcd *xhci)
@@ -534,7 +520,7 @@ static int xhci_mtk_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get regulators\n");
 
-	ret = xhci_mtk_clks_get(mtk);
+	ret = devm_clk_bulk_get_all_enabled(dev, &mtk->clks);
 	if (ret)
 		return ret;
 
@@ -575,24 +561,16 @@ static int xhci_mtk_probe(struct platform_device *pdev)
 	pm_runtime_enable(dev);
 	pm_runtime_get_sync(dev);
 
-	ret = regulator_bulk_enable(BULK_VREGS_NUM, mtk->supplies);
-	if (ret)
-		goto disable_pm;
-
-	ret = clk_bulk_prepare_enable(BULK_CLKS_NUM, mtk->clks);
-	if (ret)
-		goto disable_ldos;
-
 	ret = device_reset_optional(dev);
 	if (ret) {
 		dev_err_probe(dev, ret, "failed to reset controller\n");
-		goto disable_clk;
+		goto disable_pm;
 	}
 
 	hcd = usb_create_hcd(driver, dev, dev_name(dev));
 	if (!hcd) {
 		ret = -ENOMEM;
-		goto disable_clk;
+		goto disable_pm;
 	}
 
 	/*
@@ -691,12 +669,6 @@ disable_device_wakeup:
 put_usb2_hcd:
 	usb_put_hcd(hcd);
 
-disable_clk:
-	clk_bulk_disable_unprepare(BULK_CLKS_NUM, mtk->clks);
-
-disable_ldos:
-	regulator_bulk_disable(BULK_VREGS_NUM, mtk->supplies);
-
 disable_pm:
 	pm_runtime_put_noidle(dev);
 	pm_runtime_disable(dev);
@@ -727,8 +699,6 @@ static void xhci_mtk_remove(struct platform_device *pdev)
 
 	usb_put_hcd(hcd);
 	xhci_mtk_sch_exit(mtk);
-	clk_bulk_disable_unprepare(BULK_CLKS_NUM, mtk->clks);
-	regulator_bulk_disable(BULK_VREGS_NUM, mtk->supplies);
 
 	pm_runtime_disable(dev);
 	pm_runtime_put_noidle(dev);
