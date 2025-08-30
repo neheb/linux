@@ -1351,7 +1351,9 @@ static int lpc_eth_drv_probe(struct platform_device *pdev)
 	eth_hw_addr_set(ndev, addr);
 
 	if (!is_valid_ether_addr(ndev->dev_addr)) {
-		of_get_ethdev_address(np, ndev);
+		ret = of_get_ethdev_address(np, ndev);
+		if (ret == -EPROBE_DEFER)
+			goto err_out_dma_unmap;
 	}
 	if (!is_valid_ether_addr(ndev->dev_addr))
 		eth_hw_addr_random(ndev);
