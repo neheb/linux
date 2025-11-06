@@ -71,7 +71,7 @@ config PINCTRL_AMDISP
 
 config PINCTRL_APPLE_GPIO
 	tristate "Apple SoC GPIO pin controller driver"
-	depends on ARCH_APPLE
+	depends on ARCH_APPLE || COMPILE_TEST
 	select PINMUX
 	select GPIOLIB
 	select GPIOLIB_IRQCHIP
@@ -266,7 +266,7 @@ config PINCTRL_EYEQ5
 
 config PINCTRL_GEMINI
 	bool
-	depends on ARCH_GEMINI
+	depends on ARCH_GEMINI || COMPILE_TEST
 	default ARCH_GEMINI
 	select PINMUX
 	select GENERIC_PINCONF

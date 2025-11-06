@@ -98,7 +98,7 @@ config FPGA_MGR_MACHXO2_SPI
 
 config FPGA_MGR_TS73XX
 	tristate "Technologic Systems TS-73xx SBC FPGA Manager"
-	depends on ARCH_EP93XX && MACH_TS72XX
+	depends on (ARCH_EP93XX && MACH_TS72XX) || COMPILE_TEST
 	help
 	  FPGA manager driver support for the Altera Cyclone II FPGA
 	  present on the TS-73xx SBC boards.
@@ -111,7 +111,7 @@ config FPGA_BRIDGE
 
 config SOCFPGA_FPGA_BRIDGE
 	tristate "Altera SoCFPGA FPGA Bridges"
-	depends on ARCH_INTEL_SOCFPGA && FPGA_BRIDGE
+	depends on (ARCH_INTEL_SOCFPGA && FPGA_BRIDGE) || COMPILE_TEST
 	help
 	  Say Y to enable drivers for FPGA bridges for Altera SOCFPGA
 	  devices.

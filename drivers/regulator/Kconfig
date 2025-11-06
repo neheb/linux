@@ -1844,7 +1844,7 @@ config REGULATOR_VEXPRESS
 
 config REGULATOR_VQMMC_IPQ4019
 	tristate "IPQ4019 VQMMC SD LDO regulator support"
-	depends on ARCH_QCOM
+	depends on ARCH_QCOM || COMPILE_TEST
 	help
 	  This driver provides support for the VQMMC LDO I/0
 	  voltage regulator of the IPQ4019 SD/EMMC controller.

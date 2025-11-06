@@ -7,7 +7,7 @@ config NET_VENDOR_ALLWINNER
 	bool "Allwinner devices"
 	default y
 
-	depends on ARCH_SUNXI
+	depends on ARCH_SUNXI || COMPILE_TEST
 	help
 	  If you have a network (Ethernet) card belonging to this
 	  class, say Y here.
@@ -22,7 +22,7 @@ if NET_VENDOR_ALLWINNER
 
 config SUN4I_EMAC
 	tristate "Allwinner A10 EMAC support"
-	depends on ARCH_SUNXI
+	depends on ARCH_SUNXI || COMPILE_TEST
 	depends on OF
 	select CRC32
 	select MII

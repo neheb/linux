@@ -21,7 +21,7 @@ config QCOM_BAM_DMA
 
 config QCOM_GPI_DMA
         tristate "Qualcomm Technologies GPI DMA support"
-        depends on ARCH_QCOM
+        depends on ARCH_QCOM || COMPILE_TEST
         select DMA_ENGINE
         select DMA_VIRTUAL_CHANNELS
         help

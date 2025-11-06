@@ -1549,7 +1549,7 @@ config I2C_CROS_EC_TUNNEL
 
 config I2C_XGENE_SLIMPRO
 	tristate "APM X-Gene SoC I2C SLIMpro devices support"
-	depends on ARCH_XGENE && MAILBOX
+	depends on COMPILE_TEST || (ARCH_XGENE && MAILBOX)
 	help
 	  Enable I2C bus access using the APM X-Gene SoC SLIMpro
 	  co-processor. The I2C device access the I2C bus via the X-Gene

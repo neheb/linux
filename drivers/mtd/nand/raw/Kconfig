@@ -397,7 +397,7 @@ config MTD_NAND_INTEL_LGM
 
 config MTD_NAND_ROCKCHIP
 	tristate "Rockchip NAND controller"
-	depends on ARCH_ROCKCHIP && HAS_IOMEM
+	depends on COMPILE_TEST || (ARCH_ROCKCHIP && HAS_IOMEM)
 	help
 	  Enables support for NAND controller on Rockchip SoCs.
 	  There are four different versions of NAND FLASH Controllers,
@@ -424,7 +424,7 @@ config MTD_NAND_RENESAS
 
 config MTD_NAND_TS72XX
 	tristate "ts72xx NAND controller"
-	depends on ARCH_EP93XX && HAS_IOMEM
+	depends on COMPILE_TEST || (ARCH_EP93XX && HAS_IOMEM)
 	help
 	  Enables support for NAND controller on ts72xx SBCs.
 

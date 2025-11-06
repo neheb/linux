@@ -110,7 +110,7 @@ config AT_HDMAC
 
 config AT_XDMAC
 	tristate "Atmel XDMA support"
-	depends on ARCH_MICROCHIP
+	depends on ARCH_MICROCHIP || COMPILE_TEST
 	select DMA_ENGINE
 	help
 	  Support the Atmel XDMA controller.
@@ -169,7 +169,7 @@ config DMA_SA11X0
 
 config DMA_SUN4I
 	tristate "Allwinner A10 DMA SoCs support"
-	depends on MACH_SUN4I || MACH_SUN5I || MACH_SUN7I || MACH_SUNIV
+	depends on MACH_SUN4I || MACH_SUN5I || MACH_SUN7I || MACH_SUNIV || COMPILE_TEST
 	default (MACH_SUN4I || MACH_SUN5I || MACH_SUN7I || MACH_SUNIV)
 	select DMA_ENGINE
 	select DMA_VIRTUAL_CHANNELS
@@ -271,7 +271,7 @@ config IMG_MDC_DMA
 
 config IMX_DMA
 	tristate "i.MX DMA support"
-	depends on ARCH_MXC
+	depends on ARCH_MXC || COMPILE_TEST
 	select DMA_ENGINE
 	help
 	  Support the i.MX DMA engine. This engine is integrated into
@@ -279,7 +279,7 @@ config IMX_DMA
 
 config IMX_SDMA
 	tristate "i.MX SDMA support"
-	depends on ARCH_MXC
+	depends on ARCH_MXC || COMPILE_TEST
 	select DMA_ENGINE
 	select DMA_VIRTUAL_CHANNELS
 	help
@@ -443,12 +443,12 @@ config MMP_TDMA
 
 config MOXART_DMA
 	tristate "MOXART DMA support"
-	depends on ARCH_MOXART
+	depends on ARCH_MOXART || COMPILE_TEST
 	select DMA_ENGINE
 	select DMA_VIRTUAL_CHANNELS
 	help
 	  Enable support for the MOXA ART SoC DMA controller.
- 
+
 	  Say Y here if you enabled MMP ADMA, otherwise say N.
 
 config MPC512X_DMA
@@ -469,7 +469,7 @@ config MV_XOR
 
 config MV_XOR_V2
 	bool "Marvell XOR engine version 2 support "
-	depends on ARM64
+	depends on ARM64 || COMPILE_TEST
 	select DMA_ENGINE
 	select DMA_ENGINE_RAID
 	select ASYNC_TX_ENABLE_CHANNEL_SWITCH
@@ -499,7 +499,7 @@ config NBPFAXI_DMA
 
 config OWL_DMA
 	tristate "Actions Semi Owl SoCs DMA support"
-	depends on ARCH_ACTIONS
+	depends on ARCH_ACTIONS || COMPILE_TEST
 	select DMA_ENGINE
 	select DMA_VIRTUAL_CHANNELS
 	help
@@ -522,7 +522,7 @@ config PCH_DMA
 config PL330_DMA
 	tristate "DMA API Driver for PL330"
 	select DMA_ENGINE
-	depends on ARM_AMBA
+	depends on ARM_AMBA || COMPILE_TEST
 	help
 	  Select if your platform has one or more PL330 DMACs.
 	  You need to provide platform specific settings via
@@ -559,7 +559,7 @@ config SOPHGO_CV1800B_DMAMUX
 
 config STE_DMA40
 	bool "ST-Ericsson DMA40 support"
-	depends on ARCH_U8500
+	depends on ARCH_U8500 || COMPILE_TEST
 	select DMA_ENGINE
 	select SRAM
 	help

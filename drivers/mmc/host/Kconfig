@@ -25,7 +25,7 @@ config MMC_SUNPLUS
 
 config MMC_ARMMMCI
 	tristate "ARM AMBA Multimedia Card Interface support"
-	depends on ARM_AMBA
+	depends on ARM_AMBA || COMPILE_TEST
 	help
 	  This selects the ARM(R) AMBA(R) PrimeCell Multimedia Card
 	  Interface (PL180 and PL181) support.  If you have an ARM(R)
