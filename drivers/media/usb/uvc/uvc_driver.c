@@ -643,7 +643,7 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 	}
 	streaming->header.bControlSize = n;
 
-	streaming->header.bmaControls = kmemdup(&buffer[size], p * n,
+	streaming->header.bmaControls = kmemdup_array(&buffer[size], p, n,
 						GFP_KERNEL);
 	if (streaming->header.bmaControls == NULL) {
 		ret = -ENOMEM;

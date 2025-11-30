@@ -1450,7 +1450,7 @@ static int sof_link_ssp_load(struct snd_soc_component *scomp, struct snd_sof_dai
 
 	dai->number_configs = slink->num_hw_configs;
 	dai->current_config = current_config;
-	private->dai_config = kmemdup(config, size * slink->num_hw_configs, GFP_KERNEL);
+	private->dai_config = kmemdup_array(config, slink->num_hw_configs, size, GFP_KERNEL);
 	if (!private->dai_config)
 		return -ENOMEM;
 

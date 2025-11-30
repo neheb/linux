@@ -799,7 +799,7 @@ static int read_config_rom(struct fw_device *device, int generation)
 	device->max_speed = speed;
 
 	old_rom = device->config_rom;
-	new_rom = kmemdup(rom, length * 4, GFP_KERNEL);
+	new_rom = kmemdup_array(rom, length, 4, GFP_KERNEL);
 	if (new_rom == NULL)
 		return -ENOMEM;
 

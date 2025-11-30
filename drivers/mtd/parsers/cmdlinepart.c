@@ -375,7 +375,7 @@ static int parse_cmdline_partitions(struct mtd_info *master,
 		}
 	}
 
-	*pparts = kmemdup(part->parts, sizeof(*part->parts) * part->num_parts,
+	*pparts = kmemdup_array(part->parts, part->num_parts, sizeof(*part->parts),
 			  GFP_KERNEL);
 	if (!*pparts)
 		return -ENOMEM;

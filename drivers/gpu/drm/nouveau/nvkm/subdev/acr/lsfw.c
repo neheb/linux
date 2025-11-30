@@ -235,8 +235,8 @@ nvkm_acr_lsfw_load_sig_image_desc_v2(struct nvkm_subdev *subdev,
 		lsfw->ucode_id = meta[2];
 		lsfw->sig_size = hshdr->sig_prod_size / cnt;
 		lsfw->sig_nr = cnt;
-		lsfw->sigs = kmemdup(hsbl->data + hshdr->sig_prod_offset + sig,
-				     lsfw->sig_nr * lsfw->sig_size, GFP_KERNEL);
+		lsfw->sigs = kmemdup_array(hsbl->data + hshdr->sig_prod_offset + sig,
+				     lsfw->sig_nr, lsfw->sig_size, GFP_KERNEL);
 		nvkm_firmware_put(hsbl);
 		if (!lsfw->sigs)
 			ret = -ENOMEM;

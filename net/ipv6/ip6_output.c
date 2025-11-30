@@ -1334,13 +1334,13 @@ EXPORT_SYMBOL_GPL(ip6_sk_dst_lookup_flow);
 static inline struct ipv6_opt_hdr *ip6_opt_dup(struct ipv6_opt_hdr *src,
 					       gfp_t gfp)
 {
-	return src ? kmemdup(src, (src->hdrlen + 1) * 8, gfp) : NULL;
+	return src ? kmemdup_array(src, src->hdrlen + 1, 8, gfp) : NULL;
 }
 
 static inline struct ipv6_rt_hdr *ip6_rthdr_dup(struct ipv6_rt_hdr *src,
 						gfp_t gfp)
 {
-	return src ? kmemdup(src, (src->hdrlen + 1) * 8, gfp) : NULL;
+	return src ? kmemdup_array(src, src->hdrlen + 1, 8, gfp) : NULL;
 }
 
 static void ip6_append_data_mtu(unsigned int *mtu,

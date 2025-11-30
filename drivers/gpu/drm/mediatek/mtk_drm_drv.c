@@ -985,7 +985,7 @@ static int mtk_drm_of_ddp_path_build_one(struct device *dev, enum mtk_crtc_path 
 		return -EINVAL;
 	}
 
-	final_ddp_path = devm_kmemdup(dev, temp_path, idx * sizeof(temp_path[0]), GFP_KERNEL);
+	final_ddp_path = devm_kmemdup_array(dev, temp_path, idx, sizeof(temp_path[0]), GFP_KERNEL);
 	if (!final_ddp_path)
 		return -ENOMEM;
 

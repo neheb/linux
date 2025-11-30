@@ -175,7 +175,7 @@ mlx5hws_pat_add_pattern_to_cache(struct mlx5hws_pattern_cache *cache,
 	cached_pattern->mh_data.num_of_actions = num_of_actions;
 	cached_pattern->mh_data.pattern_id = pattern_id;
 	cached_pattern->mh_data.data =
-		kmemdup(actions, num_of_actions * MLX5HWS_MODIFY_ACTION_SIZE, GFP_KERNEL);
+		kmemdup_array(actions, num_of_actions, MLX5HWS_MODIFY_ACTION_SIZE, GFP_KERNEL);
 	if (!cached_pattern->mh_data.data)
 		goto free_cached_obj;
 

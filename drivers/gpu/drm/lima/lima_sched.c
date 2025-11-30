@@ -120,7 +120,7 @@ int lima_sched_task_init(struct lima_sched_task *task,
 {
 	int err, i;
 
-	task->bos = kmemdup(bos, sizeof(*bos) * num_bos, GFP_KERNEL);
+	task->bos = kmemdup_array(bos, num_bos, sizeof(*bos), GFP_KERNEL);
 	if (!task->bos)
 		return -ENOMEM;
 

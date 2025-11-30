@@ -6167,7 +6167,7 @@ static int start_service_discovery(struct sock *sk, struct hci_dev *hdev,
 	hdev->discovery.uuid_count = uuid_count;
 
 	if (uuid_count > 0) {
-		hdev->discovery.uuids = kmemdup(cp->uuids, uuid_count * 16,
+		hdev->discovery.uuids = kmemdup_array(cp->uuids, uuid_count, 16,
 						GFP_KERNEL);
 		if (!hdev->discovery.uuids) {
 			err = mgmt_cmd_complete(sk, hdev->id,
