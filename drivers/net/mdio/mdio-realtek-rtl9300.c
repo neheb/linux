@@ -351,14 +351,14 @@ static int rtl9300_mdiobus_init(struct rtl9300_mdio_priv *priv)
 }
 
 static int rtl9300_mdiobus_probe_one(struct device *dev, struct rtl9300_mdio_priv *priv,
-				     struct fwnode_handle *node)
+				     struct device_node *node)
 {
 	struct rtl9300_mdio_chan *chan;
 	struct mii_bus *bus;
 	u32 mdio_bus;
 	int err;
 
-	err = fwnode_property_read_u32(node, "reg", &mdio_bus);
+	err = of_property_read_u32(node, "reg", &mdio_bus);
 	if (err)
 		return err;
 
@@ -370,8 +370,8 @@ static int rtl9300_mdiobus_probe_one(struct device *dev, struct rtl9300_mdio_pri
 	 * compatible = "ethernet-phy-ieee802.3-c45". This does mean we can't
 	 * support both c45 and c22 on the same MDIO bus.
 	 */
-	fwnode_for_each_child_node_scoped(node, child)
-		if (fwnode_device_is_compatible(child, "ethernet-phy-ieee802.3-c45"))
+	for_each_child_of_node_scoped(node, child)
+		if (of_device_is_compatible(child, "ethernet-phy-ieee802.3-c45"))
 			priv->smi_bus_is_c45[mdio_bus] = true;
 
 	bus = devm_mdiobus_alloc_size(dev, sizeof(*chan));
@@ -393,7 +393,7 @@ static int rtl9300_mdiobus_probe_one(struct device *dev, struct rtl9300_mdio_pri
 
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%s-%d", dev_name(dev), mdio_bus);
 
-	err = devm_of_mdiobus_register(dev, bus, to_of_node(node));
+	err = devm_of_mdiobus_register(dev, bus, node);
 	if (err)
 		return dev_err_probe(dev, err, "cannot register MDIO bus\n");
 
@@ -407,23 +407,23 @@ static int rtl9300_mdiobus_probe_one(struct device *dev, struct rtl9300_mdio_pri
 static int rtl9300_mdiobus_map_ports(struct device *dev)
 {
 	struct rtl9300_mdio_priv *priv = dev_get_drvdata(dev);
-	struct device *parent = dev->parent;
+	struct device_node *parent = dev->parent->of_node;
 	int err;
 
-	struct fwnode_handle *ports __free(fwnode_handle) =
-		device_get_named_child_node(parent, "ethernet-ports");
+	struct device_node *ports __free(device_node) =
+		of_get_child_by_name(parent, "ethernet-ports");
 	if (!ports)
 		return dev_err_probe(dev, -EINVAL, "%pfwP missing ethernet-ports\n",
-				     dev_fwnode(parent));
+				     parent);
 
-	fwnode_for_each_child_node_scoped(ports, port) {
+	for_each_child_of_node_scoped(ports, port) {
 		struct device_node *mdio_dn;
 		u32 addr;
 		u32 bus;
 		u32 pn;
 
 		struct device_node *phy_dn __free(device_node) =
-			of_parse_phandle(to_of_node(port), "phy-handle", 0);
+			of_parse_phandle(port, "phy-handle", 0);
 		/* skip ports without phys */
 		if (!phy_dn)
 			continue;
@@ -433,7 +433,7 @@ static int rtl9300_mdiobus_map_ports(struct device *dev)
 		if (mdio_dn->parent != dev->of_node)
 			continue;
 
-		err = fwnode_property_read_u32(port, "reg", &pn);
+		err = of_property_read_u32(port, "reg", &pn);
 		if (err)
 			return err;
 
@@ -486,7 +486,7 @@ static int rtl9300_mdiobus_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
-	device_for_each_child_node_scoped(dev, child) {
+	for_each_child_of_node_scoped(dev->of_node, child) {
 		err = rtl9300_mdiobus_probe_one(dev, priv, child);
 		if (err)
 			return err;
