@@ -6,7 +6,6 @@ menuconfig CORESIGHT
 	tristate "CoreSight Tracing Support"
 	depends on ARM || ARM64
 	depends on OF || ACPI
-	select ARM_AMBA
 	select PERF_EVENTS
 	select CONFIGFS_FS
 	help

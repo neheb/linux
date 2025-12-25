@@ -1575,7 +1575,7 @@ config RTC_DRV_SUNPLUS
 
 config RTC_DRV_PL030
 	tristate "ARM AMBA PL030 RTC"
-	depends on ARM_AMBA
+	depends on ARM_AMBA || COMPILE_TEST
 	help
 	  If you say Y here you will get access to ARM AMBA
 	  PrimeCell PL030 RTC found on certain ARM SOCs.
@@ -1585,7 +1585,7 @@ config RTC_DRV_PL030
 
 config RTC_DRV_PL031
 	tristate "ARM AMBA PL031 RTC"
-	depends on ARM_AMBA
+	depends on ARM_AMBA || COMPILE_TEST
 	help
 	  If you say Y here you will get access to ARM AMBA
 	  PrimeCell PL031 RTC found on certain ARM SOCs.

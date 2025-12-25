@@ -10,7 +10,7 @@ if MAILBOX
 
 config ARM_MHU
 	tristate "ARM MHU Mailbox"
-	depends on ARM_AMBA
+	depends on ARM_AMBA || COMPILE_TEST
 	help
 	  Say Y here if you want to build the ARM MHU controller driver.
 	  The controller has 3 mailbox channels, the last of which can be
@@ -18,7 +18,7 @@ config ARM_MHU
 
 config ARM_MHU_V2
 	tristate "ARM MHUv2 Mailbox"
-	depends on ARM_AMBA
+	depends on ARM_AMBA || COMPILE_TEST
 	help
 	  Say Y here if you want to build the ARM MHUv2 controller driver,
 	  which provides unidirectional mailboxes between processing elements.
@@ -84,7 +84,7 @@ config PLATFORM_MHU
 
 config PL320_MBOX
 	bool "ARM PL320 Mailbox"
-	depends on ARM_AMBA
+	depends on ARM_AMBA || COMPILE_TEST
 	help
 	  An implementation of the ARM PL320 Interprocessor Communication
 	  Mailbox (IPCM), tailored for the Calxeda Highbank. It is used to

@@ -86,7 +86,7 @@ config SERIO_RPCKBD
 
 config SERIO_AMBAKMI
 	tristate "AMBA KMI keyboard controller"
-	depends on ARM_AMBA
+	depends on ARM_AMBA || COMPILE_TEST
 
 config SERIO_SA1111
 	tristate "Intel SA1111 keyboard controller"
