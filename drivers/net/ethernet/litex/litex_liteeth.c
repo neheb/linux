@@ -278,6 +278,8 @@ static int liteeth_probe(struct platform_device *pdev)
 	priv->tx_slot = 0;
 
 	err = of_get_ethdev_address(dev->of_node, netdev);
+	if (err == -EPROBE_DEFER)
+		return err;
 	if (err)
 		eth_hw_addr_random(netdev);
 

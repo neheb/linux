@@ -490,16 +490,21 @@ static netdev_tx_t mse102x_start_xmit_spi(struct sk_buff *skb,
 	return NETDEV_TX_OK;
 }
 
-static void mse102x_init_mac(struct mse102x_net *mse, struct device_node *np)
+static int mse102x_init_mac(struct mse102x_net *mse, struct device_node *np)
 {
 	struct net_device *ndev = mse->ndev;
 	int ret = of_get_ethdev_address(np, ndev);
+
+	if (ret == -EPROBE_DEFER)
+		return ret;
 
 	if (ret) {
 		eth_hw_addr_random(ndev);
 		dev_warn(ndev->dev.parent, "Using random MAC address: %pM\n",
 			 ndev->dev_addr);
 	}
+
+	return 0;
 }
 
 /* Assumption: this is called for every incoming packet */
@@ -752,7 +757,9 @@ static int mse102x_probe_spi(struct spi_device *spi)
 	ndev->netdev_ops = &mse102x_netdev_ops;
 	ndev->ethtool_ops = &mse102x_ethtool_ops;
 
-	mse102x_init_mac(mse, dev->of_node);
+	ret = mse102x_init_mac(mse, dev->of_node);
+	if (ret)
+		return ret;
 
 	ret = register_netdev(ndev);
 	if (ret) {

@@ -1214,6 +1214,8 @@ static int hix5hd2_dev_probe(struct platform_device *pdev)
 	}
 
 	ret = of_get_ethdev_address(node, ndev);
+	if (ret == -EPROBE_DEFER)
+		goto out_phy_node;
 	if (ret) {
 		eth_hw_addr_random(ndev);
 		netdev_warn(ndev, "using random MAC address %pM\n",

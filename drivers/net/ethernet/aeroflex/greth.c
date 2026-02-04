@@ -1453,6 +1453,8 @@ static int greth_of_probe(struct platform_device *ofdev)
 	}
 	if (i == 6) {
 		err = of_get_mac_address(ofdev->dev.of_node, addr);
+		if (err == -EPROBE_DEFER)
+			return err;
 		if (!err) {
 			for (i = 0; i < 6; i++)
 				macaddr[i] = (unsigned int) addr[i];

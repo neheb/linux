@@ -1300,8 +1300,13 @@ static int korina_probe(struct platform_device *pdev)
 
 	if (mac_addr)
 		eth_hw_addr_set(dev, mac_addr);
-	else if (of_get_ethdev_address(pdev->dev.of_node, dev) < 0)
-		eth_hw_addr_random(dev);
+	else {
+		rc = of_get_ethdev_address(pdev->dev.of_node, dev);
+		if (rc == -EPROBE_DEFER)
+			return rc;
+		if (rc)
+			eth_hw_addr_random(dev);
+	}
 
 	clk = devm_clk_get_optional_enabled(&pdev->dev, "mdioclk");
 	if (IS_ERR(clk))

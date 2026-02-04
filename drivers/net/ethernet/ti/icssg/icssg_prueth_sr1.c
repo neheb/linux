@@ -856,6 +856,8 @@ static int prueth_netdev_init(struct prueth *prueth,
 
 	/* get mac address from DT and set private and netdev addr */
 	ret = of_get_ethdev_address(eth_node, ndev);
+	if (ret == -EPROBE_DEFER)
+		goto free;
 	if (!is_valid_ether_addr(ndev->dev_addr)) {
 		eth_hw_addr_random(ndev);
 		dev_warn(prueth->dev, "port %d: using random MAC addr: %pM\n",

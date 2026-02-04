@@ -224,6 +224,8 @@ static int mac_probe(struct platform_device *_of_dev)
 
 	/* Get the MAC address */
 	err = of_get_mac_address(mac_node, mac_dev->addr);
+	if (err == -EPROBE_DEFER)
+		goto _return_dev_put;
 	if (err)
 		dev_warn(dev, "of_get_mac_address(%pOF) failed\n", mac_node);
 

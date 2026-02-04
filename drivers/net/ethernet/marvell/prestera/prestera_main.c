@@ -857,8 +857,11 @@ static int prestera_switch_set_base_mac_addr(struct prestera_switch *sw)
 {
 	int ret;
 
-	if (sw->np)
+	if (sw->np) {
 		ret = of_get_mac_address(sw->np, sw->base_mac);
+		if (ret == -EPROBE_DEFER)
+			return ret;
+	}
 	if (!is_valid_ether_addr(sw->base_mac) || ret) {
 		eth_random_addr(sw->base_mac);
 		dev_info(prestera_dev(sw), "using random base mac address\n");

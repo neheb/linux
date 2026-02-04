@@ -601,6 +601,8 @@ static s32 nps_enet_probe(struct platform_device *pdev)
 
 	/* set kernel MAC address to dev */
 	err = of_get_ethdev_address(dev->of_node, ndev);
+	if (err == -EPROBE_DEFER)
+		goto out_netdev;
 	if (err)
 		eth_hw_addr_random(ndev);
 

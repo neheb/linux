@@ -1501,6 +1501,8 @@ static int octeon_mgmt_probe(struct platform_device *pdev)
 	netdev->max_mtu = 16383 - OCTEON_MGMT_RX_HEADROOM - VLAN_HLEN;
 
 	result = of_get_ethdev_address(pdev->dev.of_node, netdev);
+	if (result == -EPROBE_DEFER)
+		return result;
 	if (result)
 		eth_hw_addr_random(netdev);
 

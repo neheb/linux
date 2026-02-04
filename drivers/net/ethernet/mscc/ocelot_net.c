@@ -1867,6 +1867,8 @@ int ocelot_probe_port(struct ocelot *ocelot, int port, struct regmap *target,
 	dev->features |= NETIF_F_HW_VLAN_CTAG_FILTER | NETIF_F_HW_TC;
 
 	err = of_get_ethdev_address(portnp, dev);
+	if (err == -EPROBE_DEFER)
+		goto out;
 	if (err)
 		eth_hw_addr_gen(dev, ocelot->base_mac, port);
 

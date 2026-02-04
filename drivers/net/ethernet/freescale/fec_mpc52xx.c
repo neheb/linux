@@ -893,6 +893,8 @@ static int mpc52xx_fec_probe(struct platform_device *op)
 	 * First try to read MAC address from DT
 	 */
 	rv = of_get_ethdev_address(np, ndev);
+	if (rv == -EPROBE_DEFER)
+		goto err_rx_tx_dmatsk;
 	if (rv) {
 		struct mpc52xx_fec __iomem *fec = priv->fec;
 		u8 addr[ETH_ALEN] __aligned(4);

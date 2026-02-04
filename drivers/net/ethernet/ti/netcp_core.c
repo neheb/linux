@@ -2093,6 +2093,8 @@ static int netcp_create_interface(struct netcp_device *netcp_device,
 		devm_release_mem_region(dev, res.start, size);
 	} else {
 		ret = of_get_ethdev_address(node_interface, ndev);
+		if (ret == -EPROBE_DEFER)
+			return ret;
 		if (ret)
 			eth_hw_addr_random(ndev);
 	}

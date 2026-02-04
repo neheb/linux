@@ -842,6 +842,8 @@ static int hisi_femac_drv_probe(struct platform_device *pdev)
 			   phy_modes(phy->interface));
 
 	ret = of_get_ethdev_address(node, ndev);
+	if (ret == -EPROBE_DEFER)
+		return ret;
 	if (ret) {
 		eth_hw_addr_random(ndev);
 		dev_warn(dev, "using random MAC address %pM\n",

@@ -333,6 +333,8 @@ static int qca_uart_probe(struct serdev_device *serdev)
 	of_property_read_u32(serdev->dev.of_node, "current-speed", &speed);
 
 	ret = of_get_ethdev_address(serdev->dev.of_node, qca->net_dev);
+	if (ret == -EPROBE_DEFER)
+		goto free;
 	if (ret) {
 		eth_hw_addr_random(qca->net_dev);
 		dev_info(&serdev->dev, "Using random MAC address: %pM\n",

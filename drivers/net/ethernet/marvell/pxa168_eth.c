@@ -1432,6 +1432,8 @@ static int pxa168_eth_probe(struct platform_device *pdev)
 	INIT_WORK(&pep->tx_timeout_task, pxa168_eth_tx_timeout_task);
 
 	err = of_get_ethdev_address(pdev->dev.of_node, dev);
+	if (err == -EPROBE_DEFER)
+		goto err_netdev;
 	if (err) {
 		u8 addr[ETH_ALEN];
 

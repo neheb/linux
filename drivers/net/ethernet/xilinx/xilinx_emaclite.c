@@ -1135,6 +1135,8 @@ static int xemaclite_of_probe(struct platform_device *ofdev)
 				"Failed to get and enable clock from Device Tree\n");
 
 	rc = of_get_ethdev_address(ofdev->dev.of_node, ndev);
+	if (rc == -EPROBE_DEFER)
+		return rc;
 	if (rc) {
 		dev_warn(dev, "No MAC address found, using random\n");
 		eth_hw_addr_random(ndev);
