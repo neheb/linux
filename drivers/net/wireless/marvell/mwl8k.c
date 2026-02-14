@@ -650,7 +650,6 @@ static int mwl8k_load_fw_image(struct mwl8k_priv *priv,
 				const u8 *data, size_t length)
 {
 	struct mwl8k_cmd_pkt *cmd;
-	int done;
 	int rc = 0;
 
 	cmd = kmalloc(sizeof(*cmd) + 256, GFP_KERNEL);
@@ -662,11 +661,10 @@ static int mwl8k_load_fw_image(struct mwl8k_priv *priv,
 	cmd->macid = 0;
 	cmd->result = 0;
 
-	done = 0;
 	while (length) {
-		int block_size = length > 256 ? 256 : length;
+		size_t block_size = min(length, 256);
 
-		memcpy(cmd->payload, data + done, block_size);
+		memcpy(cmd->payload, data, block_size);
 		cmd->length = cpu_to_le16(block_size);
 
 		rc = mwl8k_send_fw_load_cmd(priv, cmd,
@@ -674,7 +672,7 @@ static int mwl8k_load_fw_image(struct mwl8k_priv *priv,
 		if (rc)
 			break;
 
-		done += block_size;
+		data += block_size;
 		length -= block_size;
 	}
 
