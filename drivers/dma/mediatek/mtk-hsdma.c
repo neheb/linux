@@ -886,6 +886,7 @@ static const struct mtk_hsdma_soc mt7622_soc = {
 static const struct of_device_id mtk_hsdma_match[] = {
 	{ .compatible = "mediatek,mt7623-hsdma", .data = &mt7623_soc},
 	{ .compatible = "mediatek,mt7622-hsdma", .data = &mt7622_soc},
+	{ .compatible = "mediatek,mt7621-hsdma", .data = &mt7623_soc},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mtk_hsdma_match);
