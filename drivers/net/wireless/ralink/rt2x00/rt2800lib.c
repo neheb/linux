@@ -25,6 +25,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/nvmem-consumer.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 
 #include "rt2x00.h"
@@ -10962,6 +10963,47 @@ int rt2800_read_eeprom_efuse(struct rt2x00_dev *rt2x00dev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(rt2800_read_eeprom_efuse);
+
+int rt2800_read_eeprom_file(struct rt2x00_dev *rt2x00dev)
+{
+	struct device *dev = rt2x00dev->dev;
+	const struct firmware *ee;
+	const char *ee_name;
+	int retval;
+
+	if (device_property_read_string(dev, "ralink,eeprom", &ee_name))  {
+		rt2x00_err(rt2x00dev, "Required EEPROM name is missing.");
+		return -EINVAL;
+	}
+
+	rt2x00_info(rt2x00dev, "Loading EEPROM data from '%s'.\n", ee_name);
+
+	retval = request_firmware(&ee, ee_name, rt2x00dev->dev);
+	if (retval) {
+		rt2x00_err(rt2x00dev, "Failed to request EEPROM.\n");
+		return retval;
+	}
+
+	if (!ee || !ee->size || !ee->data) {
+		rt2x00_err(rt2x00dev, "Failed to read EEPROM file.\n");
+		return -ENOENT;
+	}
+
+	if (ee->size != rt2x00dev->ops->eeprom_size) {
+		rt2x00_err(rt2x00dev,
+			"EEPROM file size is invalid, it should be %d bytes\n",
+			rt2x00dev->ops->eeprom_size);
+		retval = -EINVAL;
+		goto err_release_ee;
+	}
+
+	memcpy(rt2x00dev->eeprom, ee->data, rt2x00dev->ops->eeprom_size);
+
+err_release_ee:
+	release_firmware(ee);
+	return retval;
+}
+EXPORT_SYMBOL_GPL(rt2800_read_eeprom_file);
 
 int rt2800_read_eeprom_nvmem(struct rt2x00_dev *rt2x00dev)
 {
