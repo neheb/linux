@@ -97,6 +97,9 @@ static int rt2800soc_read_eeprom(struct rt2x00_dev *rt2x00dev)
 	if (!rt2800_read_eeprom_nvmem(rt2x00dev))
 		return 0;
 
+	if (!rt2800_read_eeprom_file(rt2x00dev))
+		return 0;
+
 	base_addr = ioremap(0x1F040000, EEPROM_SIZE);
 	if (!base_addr)
 		return -ENOMEM;

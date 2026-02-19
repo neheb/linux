@@ -248,6 +248,7 @@ void rt2800_disable_radio(struct rt2x00_dev *rt2x00dev);
 int rt2800_efuse_detect(struct rt2x00_dev *rt2x00dev);
 int rt2800_read_eeprom_efuse(struct rt2x00_dev *rt2x00dev);
 
+int rt2800_read_eeprom_file(struct rt2x00_dev *rt2x00dev);
 int rt2800_read_eeprom_nvmem(struct rt2x00_dev *rt2x00dev);
 
 int rt2800_probe_hw(struct rt2x00_dev *rt2x00dev);
