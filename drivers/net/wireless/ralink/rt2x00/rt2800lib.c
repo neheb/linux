@@ -10953,6 +10953,16 @@ static void rt2800_efuse_read(struct rt2x00_dev *rt2x00dev, unsigned int i)
 	mutex_unlock(&rt2x00dev->csr_mutex);
 }
 
+int rt2800_read_eeprom_data(struct rt2x00_dev *rt2x00dev)
+{
+	size_t len = rt2x00dev->ops->eeprom_size / sizeof(u16);
+	struct device *dev = rt2x00dev->dev;
+
+	return device_property_read_u16_array(dev, "ralink,eeprom-data",
+			rt2x00dev->eeprom, len);
+}
+EXPORT_SYMBOL_GPL(rt2800_read_eeprom_data);
+
 int rt2800_read_eeprom_efuse(struct rt2x00_dev *rt2x00dev)
 {
 	unsigned int i;
