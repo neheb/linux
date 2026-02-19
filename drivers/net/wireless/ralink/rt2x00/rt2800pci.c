@@ -281,6 +281,9 @@ static int rt2800pci_read_eeprom(struct rt2x00_dev *rt2x00dev)
 	if (!rt2800_read_eeprom_nvmem(rt2x00dev))
 		return 0;
 
+	if (!rt2800_read_eeprom_data(rt2x00dev))
+		return 0;
+
 	if (rt2800pci_efuse_detect(rt2x00dev))
 		retval = rt2800pci_read_eeprom_efuse(rt2x00dev);
 	else
