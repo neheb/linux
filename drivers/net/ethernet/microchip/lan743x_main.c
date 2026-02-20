@@ -3666,9 +3666,7 @@ static int lan743x_pcidev_probe(struct pci_dev *pdev,
 			      NETIF_MSG_IFDOWN | NETIF_MSG_TX_QUEUED;
 	netdev->max_mtu = LAN743X_MAX_FRAME_SIZE;
 
-	ret = of_get_mac_address(pdev->dev.of_node, adapter->mac_address);
-	if (ret == -EPROBE_DEFER)
-		goto return_error;
+	of_get_mac_address(pdev->dev.of_node, adapter->mac_address);
 
 	ret = lan743x_pci_init(adapter, pdev);
 	if (ret)

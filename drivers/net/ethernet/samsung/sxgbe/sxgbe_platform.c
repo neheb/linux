@@ -118,9 +118,7 @@ static int sxgbe_platform_probe(struct platform_device *pdev)
 	}
 
 	/* Get MAC address if available (DT) */
-	ret = of_get_ethdev_address(node, priv->dev);
-	if (ret == -EPROBE_DEFER)
-		goto err_drv_remove;
+	of_get_ethdev_address(node, priv->dev);
 
 	/* Get the TX/RX IRQ numbers */
 	for (i = 0, chan = 1; i < SXGBE_TX_QUEUES; i++) {

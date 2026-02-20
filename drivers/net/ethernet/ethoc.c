@@ -1148,9 +1148,7 @@ static int ethoc_probe(struct platform_device *pdev)
 		eth_hw_addr_set(netdev, pdata->hwaddr);
 		priv->phy_id = pdata->phy_id;
 	} else {
-		ret = of_get_ethdev_address(pdev->dev.of_node, netdev);
-		if (ret == -EPROBE_DEFER)
-			goto free;
+		of_get_ethdev_address(pdev->dev.of_node, netdev);
 		priv->phy_id = -1;
 	}
 
