@@ -1902,14 +1902,12 @@ static void iwl_mld_int_mlo_scan_start(struct iwl_mld *mld,
 {
 	struct cfg80211_scan_request *req __free(kfree) = NULL;
 	struct ieee80211_scan_ies ies = {};
-	size_t size;
 	int ret;
 
 	IWL_DEBUG_SCAN(mld, "Starting Internal MLO scan: n_channels=%zu\n",
 		       n_channels);
 
-	size = struct_size(req, channels, n_channels);
-	req = kzalloc(size, GFP_KERNEL);
+	req = kzalloc_flex(*req, channels, n_channels, GFP_KERNEL);
 	if (!req)
 		return;
 

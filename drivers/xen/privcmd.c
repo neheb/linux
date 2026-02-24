@@ -1239,12 +1239,11 @@ struct privcmd_kernel_ioreq *alloc_ioreq(struct privcmd_ioeventfd *ioeventfd)
 	struct vm_area_struct *vma;
 	struct page **pages;
 	unsigned int *ports;
-	int ret, size, i;
+	int ret, i;
 
 	lockdep_assert_held(&ioreq_lock);
 
-	size = struct_size(kioreq, ports, ioeventfd->vcpus);
-	kioreq = kzalloc(size, GFP_KERNEL);
+	kioreq = kzalloc_flex(*kioreq, ports, ioeventfd->vcpus, GFP_KERNEL);
 	if (!kioreq)
 		return ERR_PTR(-ENOMEM);
 

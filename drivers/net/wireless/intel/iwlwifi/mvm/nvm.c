@@ -415,7 +415,7 @@ iwl_mvm_update_mcc(struct iwl_mvm *mvm, const char *alpha2,
 
 	int ret, resp_ver;
 	u32 status;
-	int resp_len, n_channels;
+	int n_channels;
 	u16 mcc;
 
 	if (WARN_ON_ONCE(!iwl_mvm_is_lar_supported(mvm)))
@@ -445,8 +445,7 @@ iwl_mvm_update_mcc(struct iwl_mvm *mvm, const char *alpha2,
 			resp_cp = ERR_PTR(-EINVAL);
 			goto exit;
 		}
-		resp_len = struct_size(resp_cp, channels, n_channels);
-		resp_cp = kzalloc(resp_len, GFP_KERNEL);
+		resp_cp = kzalloc_flex(*resp_cp, channels, n_channels, GFP_KERNEL);
 		if (!resp_cp) {
 			resp_cp = ERR_PTR(-ENOMEM);
 			goto exit;
@@ -470,8 +469,7 @@ iwl_mvm_update_mcc(struct iwl_mvm *mvm, const char *alpha2,
 			resp_cp = ERR_PTR(-EINVAL);
 			goto exit;
 		}
-		resp_len = struct_size(resp_cp, channels, n_channels);
-		resp_cp = kzalloc(resp_len, GFP_KERNEL);
+		resp_cp = kzalloc_flex(*resp_cp, channels, n_channels, GFP_KERNEL);
 		if (!resp_cp) {
 			resp_cp = ERR_PTR(-ENOMEM);
 			goto exit;
@@ -495,8 +493,7 @@ iwl_mvm_update_mcc(struct iwl_mvm *mvm, const char *alpha2,
 			resp_cp = ERR_PTR(-EINVAL);
 			goto exit;
 		}
-		resp_len = struct_size(resp_cp, channels, n_channels);
-		resp_cp = kzalloc(resp_len, GFP_KERNEL);
+		resp_cp = kzalloc_flex(*resp_cp, channels, n_channels, GFP_KERNEL);
 		if (!resp_cp) {
 			resp_cp = ERR_PTR(-ENOMEM);
 			goto exit;

@@ -5291,7 +5291,7 @@ static int iavf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct net_device *netdev;
 	struct iavf_adapter *adapter = NULL;
 	struct iavf_hw *hw = NULL;
-	int err, len;
+	int err;
 
 	err = pci_enable_device(pdev);
 	if (err)
@@ -5360,8 +5360,7 @@ static int iavf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	hw->bus.func = PCI_FUNC(pdev->devfn);
 	hw->bus.bus_id = pdev->bus->number;
 
-	len = struct_size(adapter->qos_caps, cap, IAVF_MAX_QOS_TC_NUM);
-	adapter->qos_caps = kzalloc(len, GFP_KERNEL);
+	adapter->qos_caps = kzalloc_flex(*adapter->qos_caps, cap, IAVF_MAX_QOS_TC_NUM, GFP_KERNEL);
 	if (!adapter->qos_caps) {
 		err = -ENOMEM;
 		goto err_alloc_qos_cap;

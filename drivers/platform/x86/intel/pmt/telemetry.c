@@ -249,7 +249,6 @@ struct pmt_feature_group *intel_pmt_get_regions_by_feature(enum pmt_feature_id i
 	struct intel_pmt_entry *entry;
 	unsigned long idx;
 	int count = 0;
-	size_t size;
 
 	if (!pmt_feature_id_is_valid(id))
 		return ERR_PTR(-EINVAL);
@@ -263,8 +262,7 @@ struct pmt_feature_group *intel_pmt_get_regions_by_feature(enum pmt_feature_id i
 	if (!count)
 		return ERR_PTR(-ENOENT);
 
-	size = struct_size(feature_group, regions, count);
-	feature_group = kzalloc(size, GFP_KERNEL);
+	feature_group = kzalloc_flex(*feature_group, regions, count, GFP_KERNEL);
 	if (!feature_group)
 		return ERR_PTR(-ENOMEM);
 
