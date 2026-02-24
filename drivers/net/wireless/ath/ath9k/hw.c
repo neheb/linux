@@ -1448,8 +1448,12 @@ static bool ath9k_hw_set_reset(struct ath_hw *ah, int type)
 	if (!AR_SREV_9100(ah))
 		REG_WRITE(ah, AR_RC, 0);
 
-	if (AR_SREV_9100(ah))
+	if (AR_SREV_9100(ah)) {
+		/* Reset the AHB-WMAC interface */
+		if (ah->external_reset)
+			ah->external_reset();
 		udelay(50);
+	}
 
 	if (AR_SREV_9330(ah) || AR_SREV_9340(ah))
 		ath9k_hw_disable_pll_lock_detect(ah);
