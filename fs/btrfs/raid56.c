@@ -151,10 +151,6 @@ static void free_raid_bio_pointers(struct btrfs_raid_bio *rbio)
 {
 	bitmap_free(rbio->error_bitmap);
 	bitmap_free(rbio->stripe_uptodate_bitmap);
-	kfree(rbio->stripe_pages);
-	kfree(rbio->bio_paddrs);
-	kfree(rbio->stripe_paddrs);
-	kfree(rbio->finish_pointers);
 }
 
 static void free_raid_bio(struct btrfs_raid_bio *rbio)
@@ -1050,6 +1046,7 @@ static struct btrfs_raid_bio *alloc_rbio(struct btrfs_fs_info *fs_info,
 	const unsigned int step = min(fs_info->sectorsize, PAGE_SIZE);
 	const unsigned int sector_nsteps = fs_info->sectorsize / step;
 	struct btrfs_raid_bio *rbio;
+	size_t alloc_size;
 
 	/*
 	 * For bs <= ps cases, ps must be aligned to bs.
@@ -1070,21 +1067,21 @@ static struct btrfs_raid_bio *alloc_rbio(struct btrfs_fs_info *fs_info,
 	ASSERT(real_stripes >= 2);
 	ASSERT(real_stripes <= U8_MAX);
 
-	rbio = kzalloc_obj(*rbio, GFP_NOFS);
+	alloc_size = struct_size(rbio, stripe_pages, num_pages);
+	alloc_size += sizeof(*rbio->bio_paddrs) * num_sectors * sector_nsteps;
+	alloc_size += sizeof(*rbio->stripe_paddrs) * num_sectors * sector_nsteps;
+	alloc_size += sizeof(*rbio->finish_pointers) * real_stripes;
+	rbio = kzalloc(alloc_size, GFP_NOFS);
 	if (!rbio)
 		return ERR_PTR(-ENOMEM);
-	rbio->stripe_pages = kzalloc_objs(struct page *, num_pages, GFP_NOFS);
-	rbio->bio_paddrs = kzalloc_objs(phys_addr_t,
-					num_sectors * sector_nsteps, GFP_NOFS);
-	rbio->stripe_paddrs = kzalloc_objs(phys_addr_t,
-					   num_sectors * sector_nsteps,
-					   GFP_NOFS);
-	rbio->finish_pointers = kcalloc(real_stripes, sizeof(void *), GFP_NOFS);
+
+	rbio->bio_paddrs = (phys_addr_t *)(rbio->stripe_pages + num_pages);
+	rbio->stripe_paddrs = rbio->bio_paddrs + (num_sectors * sector_nsteps);
+	rbio->finish_pointers = (void **)(rbio->stripe_paddrs + (num_sectors * sector_nsteps));
 	rbio->error_bitmap = bitmap_zalloc(num_sectors, GFP_NOFS);
 	rbio->stripe_uptodate_bitmap = bitmap_zalloc(num_sectors, GFP_NOFS);
 
-	if (!rbio->stripe_pages || !rbio->bio_paddrs || !rbio->stripe_paddrs ||
-	    !rbio->finish_pointers || !rbio->error_bitmap || !rbio->stripe_uptodate_bitmap) {
+	if (!rbio->error_bitmap || !rbio->stripe_uptodate_bitmap) {
 		free_raid_bio_pointers(rbio);
 		kfree(rbio);
 		return ERR_PTR(-ENOMEM);
