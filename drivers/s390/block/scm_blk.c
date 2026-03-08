@@ -68,7 +68,7 @@ static int __scm_alloc_rq(void)
 	struct aob_rq_header *aobrq;
 	struct scm_request *scmrq;
 
-	aobrq = kzalloc(sizeof(*aobrq) + sizeof(*scmrq), GFP_KERNEL);
+	aobrq = kzalloc_flex(*aobrq, data, sizeof(*scmrq));
 	if (!aobrq)
 		return -ENOMEM;
 
