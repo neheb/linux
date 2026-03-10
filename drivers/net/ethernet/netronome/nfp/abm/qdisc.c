@@ -329,7 +329,6 @@ nfp_abm_qdisc_free(struct net_device *netdev, struct nfp_abm_link *alink,
 	WARN_ON(radix_tree_delete(&alink->qdiscs,
 				  TC_H_MAJ(qdisc->handle)) != qdisc);
 
-	kfree(qdisc->children);
 	kfree(qdisc);
 
 	port->tc_offload_cnt--;
@@ -344,34 +343,26 @@ nfp_abm_qdisc_alloc(struct net_device *netdev, struct nfp_abm_link *alink,
 	struct nfp_qdisc *qdisc;
 	int err;
 
-	qdisc = kzalloc_obj(*qdisc);
+	qdisc = kzalloc_flex(*qdisc, children, children);
 	if (!qdisc)
 		return NULL;
 
-	if (children) {
-		qdisc->children = kcalloc(children, sizeof(void *), GFP_KERNEL);
-		if (!qdisc->children)
-			goto err_free_qdisc;
-	}
-
+	qdisc->num_children = children;
 	qdisc->netdev = netdev;
 	qdisc->type = type;
 	qdisc->parent_handle = parent_handle;
 	qdisc->handle = handle;
-	qdisc->num_children = children;
 
 	err = radix_tree_insert(&alink->qdiscs, TC_H_MAJ(qdisc->handle), qdisc);
 	if (err) {
 		nfp_err(alink->abm->app->cpp,
 			"Qdisc insertion into radix tree failed: %d\n", err);
-		goto err_free_child_tbl;
+		goto err_free_qdisc;
 	}
 
 	port->tc_offload_cnt++;
 	return qdisc;
 
-err_free_child_tbl:
-	kfree(qdisc->children);
 err_free_qdisc:
 	kfree(qdisc);
 	return NULL;
