@@ -156,7 +156,6 @@ struct nfp_qdisc {
 	u32 parent_handle;
 	unsigned int use_cnt;
 	unsigned int num_children;
-	struct nfp_qdisc **children;
 
 	bool params_ok;
 	bool offload_mark;
@@ -182,6 +181,8 @@ struct nfp_qdisc {
 			} band[MAX_DPs];
 		} red;
 	};
+
+	struct nfp_qdisc *children[] __counted_by(num_children);
 };
 
 /**
