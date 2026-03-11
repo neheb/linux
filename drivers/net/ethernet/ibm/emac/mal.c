@@ -37,15 +37,13 @@ int mal_register_commac(struct mal_instance *mal, struct mal_commac *commac)
 
 	spin_lock_irqsave(&mal->lock, flags);
 
-	MAL_DBG(mal, "reg(%08x, %08x)" NL,
-		commac->tx_chan_mask, commac->rx_chan_mask);
+	MAL_DBG(mal, "reg(%08x, %08x)" NL, commac->tx_chan_mask, commac->rx_chan_mask);
 
 	/* Don't let multiple commacs claim the same channel(s) */
 	if ((mal->tx_chan_mask & commac->tx_chan_mask) ||
 	    (mal->rx_chan_mask & commac->rx_chan_mask)) {
 		spin_unlock_irqrestore(&mal->lock, flags);
-		printk(KERN_WARNING "mal%d: COMMAC channels conflict!\n",
-		       mal->index);
+		printk(KERN_WARNING "mal%d: COMMAC channels conflict!\n", mal->index);
 		return -EBUSY;
 	}
 
@@ -60,15 +58,13 @@ int mal_register_commac(struct mal_instance *mal, struct mal_commac *commac)
 	return 0;
 }
 
-void mal_unregister_commac(struct mal_instance	*mal,
-		struct mal_commac *commac)
+void mal_unregister_commac(struct mal_instance *mal, struct mal_commac *commac)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&mal->lock, flags);
 
-	MAL_DBG(mal, "unreg(%08x, %08x)" NL,
-		commac->tx_chan_mask, commac->rx_chan_mask);
+	MAL_DBG(mal, "unreg(%08x, %08x)" NL, commac->tx_chan_mask, commac->rx_chan_mask);
 
 	mal->tx_chan_mask &= ~commac->tx_chan_mask;
 	mal->rx_chan_mask &= ~commac->rx_chan_mask;
@@ -81,15 +77,13 @@ void mal_unregister_commac(struct mal_instance	*mal,
 
 int mal_set_rcbs(struct mal_instance *mal, int channel, unsigned long size)
 {
-	BUG_ON(channel < 0 || channel >= mal->num_rx_chans ||
-	       size > MAL_MAX_RX_SIZE);
+	BUG_ON(channel < 0 || channel >= mal->num_rx_chans || size > MAL_MAX_RX_SIZE);
 
 	MAL_DBG(mal, "set_rbcs(%d, %lu)" NL, channel, size);
 
 	if (size & 0xf) {
-		printk(KERN_WARNING
-		       "mal%d: incorrect RX size %lu for the channel %d\n",
-		       mal->index, size, channel);
+		printk(KERN_WARNING "mal%d: incorrect RX size %lu for the channel %d\n", mal->index,
+		       size, channel);
 		return -EINVAL;
 	}
 
@@ -118,8 +112,7 @@ void mal_enable_tx_channel(struct mal_instance *mal, int channel)
 
 	MAL_DBG(mal, "enable_tx(%d)" NL, channel);
 
-	set_mal_dcrn(mal, MAL_TXCASR,
-		     get_mal_dcrn(mal, MAL_TXCASR) | MAL_CHAN_MASK(channel));
+	set_mal_dcrn(mal, MAL_TXCASR, get_mal_dcrn(mal, MAL_TXCASR) | MAL_CHAN_MASK(channel));
 
 	spin_unlock_irqrestore(&mal->lock, flags);
 }
@@ -147,8 +140,7 @@ void mal_enable_rx_channel(struct mal_instance *mal, int channel)
 
 	MAL_DBG(mal, "enable_rx(%d)" NL, channel);
 
-	set_mal_dcrn(mal, MAL_RXCASR,
-		     get_mal_dcrn(mal, MAL_RXCASR) | MAL_CHAN_MASK(channel));
+	set_mal_dcrn(mal, MAL_RXCASR, get_mal_dcrn(mal, MAL_RXCASR) | MAL_CHAN_MASK(channel));
 
 	spin_unlock_irqrestore(&mal->lock, flags);
 }
@@ -239,9 +231,8 @@ static irqreturn_t mal_serr(int irq, void *dev_instance)
 			 * incorrect physical address in BD (i.e. bug)
 			 */
 			if (net_ratelimit())
-				printk(KERN_ERR
-				       "mal%d: system error, "
-				       "PLB (ESR = 0x%08x)\n",
+				printk(KERN_ERR "mal%d: system error, "
+						"PLB (ESR = 0x%08x)\n",
 				       mal->index, esr);
 			return IRQ_HANDLED;
 		}
@@ -250,9 +241,8 @@ static irqreturn_t mal_serr(int irq, void *dev_instance)
 		 * EBC setup
 		 */
 		if (net_ratelimit())
-			printk(KERN_ERR
-			       "mal%d: system error, OPB (ESR = 0x%08x)\n",
-			       mal->index, esr);
+			printk(KERN_ERR "mal%d: system error, OPB (ESR = 0x%08x)\n", mal->index,
+			       esr);
 	}
 	return IRQ_HANDLED;
 }
@@ -283,7 +273,7 @@ static irqreturn_t mal_txeob(int irq, void *dev_instance)
 #ifdef CONFIG_PPC_DCR_NATIVE
 	if (mal_has_feature(mal, MAL_FTR_CLEAR_ICINTSTAT))
 		mtdcri(SDR0, DCRN_SDR_ICINTSTAT,
-				(mfdcri(SDR0, DCRN_SDR_ICINTSTAT) | ICINTSTAT_ICTX));
+		       (mfdcri(SDR0, DCRN_SDR_ICINTSTAT) | ICINTSTAT_ICTX));
 #endif
 
 	return IRQ_HANDLED;
@@ -303,7 +293,7 @@ static irqreturn_t mal_rxeob(int irq, void *dev_instance)
 #ifdef CONFIG_PPC_DCR_NATIVE
 	if (mal_has_feature(mal, MAL_FTR_CLEAR_ICINTSTAT))
 		mtdcri(SDR0, DCRN_SDR_ICINTSTAT,
-				(mfdcri(SDR0, DCRN_SDR_ICINTSTAT) | ICINTSTAT_ICRX));
+		       (mfdcri(SDR0, DCRN_SDR_ICINTSTAT) | ICINTSTAT_ICRX));
 #endif
 
 	return IRQ_HANDLED;
@@ -319,9 +309,7 @@ static irqreturn_t mal_txde(int irq, void *dev_instance)
 	MAL_DBG(mal, "txde %08x" NL, deir);
 
 	if (net_ratelimit())
-		printk(KERN_ERR
-		       "mal%d: TX descriptor error (TXDEIR = 0x%08x)\n",
-		       mal->index, deir);
+		printk(KERN_ERR "mal%d: TX descriptor error (TXDEIR = 0x%08x)\n", mal->index, deir);
 
 	return IRQ_HANDLED;
 }
@@ -402,8 +390,7 @@ static int mal_poll(struct napi_struct *napi, int budget)
 
 	/* Process TX skbs */
 	list_for_each(l, &mal->poll_list) {
-		struct mal_commac *mc =
-			list_entry(l, struct mal_commac, poll_list);
+		struct mal_commac *mc = list_entry(l, struct mal_commac, poll_list);
 		mc->ops->poll_tx(mc->dev);
 	}
 
@@ -413,8 +400,7 @@ static int mal_poll(struct napi_struct *napi, int budget)
 	 * fairness.
 	 */
 	list_for_each(l, &mal->poll_list) {
-		struct mal_commac *mc =
-			list_entry(l, struct mal_commac, poll_list);
+		struct mal_commac *mc = list_entry(l, struct mal_commac, poll_list);
 		int n;
 		if (unlikely(test_bit(MAL_COMMAC_POLL_DISABLED, &mc->flags)))
 			continue;
@@ -435,8 +421,7 @@ static int mal_poll(struct napi_struct *napi, int budget)
 
 	/* Check for "rotting" packet(s) */
 	list_for_each(l, &mal->poll_list) {
-		struct mal_commac *mc =
-			list_entry(l, struct mal_commac, poll_list);
+		struct mal_commac *mc = list_entry(l, struct mal_commac, poll_list);
 		if (unlikely(test_bit(MAL_COMMAC_POLL_DISABLED, &mc->flags)))
 			continue;
 		if (unlikely(mc->ops->peek_rx(mc->dev) ||
@@ -452,7 +437,7 @@ static int mal_poll(struct napi_struct *napi, int budget)
 		mc->ops->poll_tx(mc->dev);
 	}
 
- more_work:
+more_work:
 	MAL_DBG2(mal, "poll() %d <- %d" NL, budget, received);
 	return received;
 }
@@ -475,8 +460,7 @@ static void mal_reset(struct mal_instance *mal)
 
 int mal_get_regs_len(struct mal_instance *mal)
 {
-	return sizeof(struct emac_ethtool_regs_subhdr) +
-	    sizeof(struct mal_regs);
+	return sizeof(struct emac_ethtool_regs_subhdr) + sizeof(struct mal_regs);
 }
 
 void *mal_dump_regs(struct mal_instance *mal, void *buf)
@@ -524,8 +508,7 @@ static int mal_probe(struct platform_device *ofdev)
 	unsigned long irqflags;
 	irq_handler_t hdlr_serr, hdlr_txde, hdlr_rxde;
 
-	mal = devm_kzalloc(&ofdev->dev, sizeof(struct mal_instance),
-			   GFP_KERNEL);
+	mal = devm_kzalloc(&ofdev->dev, sizeof(struct mal_instance), GFP_KERNEL);
 	if (!mal)
 		return -ENOMEM;
 
@@ -537,43 +520,34 @@ static int mal_probe(struct platform_device *ofdev)
 
 	prop = of_get_property(ofdev->dev.of_node, "num-tx-chans", NULL);
 	if (prop == NULL) {
-		printk(KERN_ERR
-		       "mal%d: can't find MAL num-tx-chans property!\n",
-		       index);
+		printk(KERN_ERR "mal%d: can't find MAL num-tx-chans property!\n", index);
 		return -ENODEV;
 	}
 	mal->num_tx_chans = prop[0];
 
 	prop = of_get_property(ofdev->dev.of_node, "num-rx-chans", NULL);
 	if (prop == NULL) {
-		printk(KERN_ERR
-		       "mal%d: can't find MAL num-rx-chans property!\n",
-		       index);
+		printk(KERN_ERR "mal%d: can't find MAL num-rx-chans property!\n", index);
 		return -ENODEV;
 	}
 	mal->num_rx_chans = prop[0];
 
 	dcr_base = dcr_resource_start(ofdev->dev.of_node, 0);
 	if (dcr_base == 0) {
-		printk(KERN_ERR
-		       "mal%d: can't find DCR resource!\n", index);
+		printk(KERN_ERR "mal%d: can't find DCR resource!\n", index);
 		return -ENODEV;
 	}
 	mal->dcr_host = dcr_map(ofdev->dev.of_node, dcr_base, 0x100);
 	if (!DCR_MAP_OK(mal->dcr_host)) {
-		printk(KERN_ERR
-		       "mal%d: failed to map DCRs !\n", index);
+		printk(KERN_ERR "mal%d: failed to map DCRs !\n", index);
 		return -ENODEV;
 	}
 
 	if (of_device_is_compatible(ofdev->dev.of_node, "ibm,mcmal-405ez")) {
-#if defined(CONFIG_IBM_EMAC_MAL_CLR_ICINTSTAT) && \
-		defined(CONFIG_IBM_EMAC_MAL_COMMON_ERR)
-		mal->features |= (MAL_FTR_CLEAR_ICINTSTAT |
-				MAL_FTR_COMMON_ERR_INT);
+#if defined(CONFIG_IBM_EMAC_MAL_CLR_ICINTSTAT) && defined(CONFIG_IBM_EMAC_MAL_COMMON_ERR)
+		mal->features |= (MAL_FTR_CLEAR_ICINTSTAT | MAL_FTR_COMMON_ERR_INT);
 #else
-		printk(KERN_ERR "%pOF: Support for 405EZ not enabled!\n",
-				ofdev->dev.of_node);
+		printk(KERN_ERR "%pOF: Support for 405EZ not enabled!\n", ofdev->dev.of_node);
 		err = -ENODEV;
 		goto fail_unmap;
 #endif
@@ -589,8 +563,7 @@ static int mal_probe(struct platform_device *ofdev)
 		goto fail_unmap;
 	}
 
-	netif_napi_add_weight(mal->dummy_dev, &mal->napi, mal_poll,
-			      CONFIG_IBM_EMAC_POLL_WEIGHT);
+	netif_napi_add_weight(mal->dummy_dev, &mal->napi, mal_poll, CONFIG_IBM_EMAC_POLL_WEIGHT);
 
 	/* Load power-on reset defaults */
 	mal_reset(mal);
@@ -613,24 +586,22 @@ static int mal_probe(struct platform_device *ofdev)
 	BUG_ON(mal->num_rx_chans <= 0 || mal->num_rx_chans > 32);
 
 	bd_size = sizeof(struct mal_descriptor) *
-		(NUM_TX_BUFF * mal->num_tx_chans +
-		 NUM_RX_BUFF * mal->num_rx_chans);
-	mal->bd_virt = dma_alloc_coherent(&ofdev->dev, bd_size, &mal->bd_dma,
-					  GFP_KERNEL);
+		  (NUM_TX_BUFF * mal->num_tx_chans + NUM_RX_BUFF * mal->num_rx_chans);
+	mal->bd_virt = dma_alloc_coherent(&ofdev->dev, bd_size, &mal->bd_dma, GFP_KERNEL);
 	if (mal->bd_virt == NULL) {
 		err = -ENOMEM;
 		goto fail_dummy;
 	}
 
 	for (i = 0; i < mal->num_tx_chans; ++i)
-		set_mal_dcrn(mal, MAL_TXCTPR(i), mal->bd_dma +
-			     sizeof(struct mal_descriptor) *
-			     mal_tx_bd_offset(mal, i));
+		set_mal_dcrn(mal, MAL_TXCTPR(i),
+			     mal->bd_dma +
+				     sizeof(struct mal_descriptor) * mal_tx_bd_offset(mal, i));
 
 	for (i = 0; i < mal->num_rx_chans; ++i)
-		set_mal_dcrn(mal, MAL_RXCTPR(i), mal->bd_dma +
-			     sizeof(struct mal_descriptor) *
-			     mal_rx_bd_offset(mal, i));
+		set_mal_dcrn(mal, MAL_RXCTPR(i),
+			     mal->bd_dma +
+				     sizeof(struct mal_descriptor) * mal_rx_bd_offset(mal, i));
 
 	mal->txeob_irq = platform_get_irq(ofdev, 0);
 	mal->rxeob_irq = platform_get_irq(ofdev, 1);
@@ -649,24 +620,19 @@ static int mal_probe(struct platform_device *ofdev)
 		hdlr_rxde = mal_rxde;
 	}
 
-	err = devm_request_irq(&ofdev->dev, mal->serr_irq, hdlr_serr, irqflags,
-			       "MAL SERR", mal);
+	err = devm_request_irq(&ofdev->dev, mal->serr_irq, hdlr_serr, irqflags, "MAL SERR", mal);
 	if (err)
 		goto fail2;
-	err = devm_request_irq(&ofdev->dev, mal->txde_irq, hdlr_txde, irqflags,
-			       "MAL TX DE", mal);
+	err = devm_request_irq(&ofdev->dev, mal->txde_irq, hdlr_txde, irqflags, "MAL TX DE", mal);
 	if (err)
 		goto fail2;
-	err = devm_request_irq(&ofdev->dev, mal->txeob_irq, mal_txeob, 0,
-			       "MAL TX EOB", mal);
+	err = devm_request_irq(&ofdev->dev, mal->txeob_irq, mal_txeob, 0, "MAL TX EOB", mal);
 	if (err)
 		goto fail2;
-	err = devm_request_irq(&ofdev->dev, mal->rxde_irq, hdlr_rxde, irqflags,
-			       "MAL RX DE", mal);
+	err = devm_request_irq(&ofdev->dev, mal->rxde_irq, hdlr_rxde, irqflags, "MAL RX DE", mal);
 	if (err)
 		goto fail2;
-	err = devm_request_irq(&ofdev->dev, mal->rxeob_irq, mal_rxeob, 0,
-			       "MAL RX EOB", mal);
+	err = devm_request_irq(&ofdev->dev, mal->rxeob_irq, mal_rxeob, 0, "MAL RX EOB", mal);
 	if (err)
 		goto fail2;
 
@@ -676,10 +642,8 @@ static int mal_probe(struct platform_device *ofdev)
 	/* Enable EOB interrupt */
 	mal_enable_eob_irq(mal);
 
-	printk(KERN_INFO
-	       "MAL v%d %pOF, %d TX channels, %d RX channels\n",
-	       mal->version, ofdev->dev.of_node,
-	       mal->num_tx_chans, mal->num_rx_chans);
+	printk(KERN_INFO "MAL v%d %pOF, %d TX channels, %d RX channels\n", mal->version,
+	       ofdev->dev.of_node, mal->num_tx_chans, mal->num_rx_chans);
 
 	/* Advertise this instance to the rest of the world */
 	wmb();
@@ -687,11 +651,11 @@ static int mal_probe(struct platform_device *ofdev)
 
 	return 0;
 
- fail2:
+fail2:
 	dma_free_coherent(&ofdev->dev, bd_size, mal->bd_virt, mal->bd_dma);
- fail_dummy:
+fail_dummy:
 	free_netdev(mal->dummy_dev);
- fail_unmap:
+fail_unmap:
 	dcr_unmap(mal->dcr_host, 0x100);
 	return err;
 }
@@ -707,9 +671,7 @@ static void mal_remove(struct platform_device *ofdev)
 
 	if (!list_empty(&mal->list))
 		/* This is *very* bad */
-		WARN(1, KERN_EMERG
-		       "mal%d: commac list is not empty on remove!\n",
-		       mal->index);
+		WARN(1, KERN_EMERG "mal%d: commac list is not empty on remove!\n", mal->index);
 
 	mal_reset(mal);
 
@@ -718,28 +680,26 @@ static void mal_remove(struct platform_device *ofdev)
 	dcr_unmap(mal->dcr_host, 0x100);
 
 	dma_free_coherent(&ofdev->dev,
-			  sizeof(struct mal_descriptor) *
-				  (NUM_TX_BUFF * mal->num_tx_chans +
-				   NUM_RX_BUFF * mal->num_rx_chans),
+			  sizeof(struct mal_descriptor) * (NUM_TX_BUFF * mal->num_tx_chans +
+							   NUM_RX_BUFF * mal->num_rx_chans),
 			  mal->bd_virt, mal->bd_dma);
 }
 
-static const struct of_device_id mal_platform_match[] =
-{
+static const struct of_device_id mal_platform_match[] = {
 	{
-		.compatible	= "ibm,mcmal",
+		.compatible = "ibm,mcmal",
 	},
 	{
-		.compatible	= "ibm,mcmal2",
+		.compatible = "ibm,mcmal2",
 	},
 	/* Backward compat */
 	{
-		.type		= "mcmal-dma",
-		.compatible	= "ibm,mcmal",
+		.type = "mcmal-dma",
+		.compatible = "ibm,mcmal",
 	},
 	{
-		.type		= "mcmal-dma",
-		.compatible	= "ibm,mcmal2",
+		.type = "mcmal-dma",
+		.compatible = "ibm,mcmal2",
 	},
 	{},
 };

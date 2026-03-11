@@ -59,15 +59,12 @@ void tah_reset(struct platform_device *ofdev)
 		printk(KERN_ERR "%pOF: reset timeout\n", ofdev->dev.of_node);
 
 	/* 10KB TAH TX FIFO accommodates the max MTU of 9000 */
-	out_be32(&p->mr,
-		 TAH_MR_CVR | TAH_MR_ST_768 | TAH_MR_TFS_10KB | TAH_MR_DTFP |
-		 TAH_MR_DIG);
+	out_be32(&p->mr, TAH_MR_CVR | TAH_MR_ST_768 | TAH_MR_TFS_10KB | TAH_MR_DTFP | TAH_MR_DIG);
 }
 
 int tah_get_regs_len(struct platform_device *ofdev)
 {
-	return sizeof(struct emac_ethtool_regs_subhdr) +
-		sizeof(struct tah_regs);
+	return sizeof(struct emac_ethtool_regs_subhdr) + sizeof(struct tah_regs);
 }
 
 void *tah_dump_regs(struct platform_device *ofdev, void *buf)
@@ -90,8 +87,7 @@ static int tah_probe(struct platform_device *ofdev)
 	struct tah_instance *dev;
 	int err;
 
-	dev = devm_kzalloc(&ofdev->dev, sizeof(struct tah_instance),
-			   GFP_KERNEL);
+	dev = devm_kzalloc(&ofdev->dev, sizeof(struct tah_instance), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 
@@ -118,14 +114,13 @@ static int tah_probe(struct platform_device *ofdev)
 	return 0;
 }
 
-static const struct of_device_id tah_match[] =
-{
+static const struct of_device_id tah_match[] = {
 	{
-		.compatible	= "ibm,tah",
+		.compatible = "ibm,tah",
 	},
 	/* For backward compat with old DT */
 	{
-		.type		= "tah",
+		.type = "tah",
 	},
 	{},
 };

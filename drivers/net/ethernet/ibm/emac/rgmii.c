@@ -33,27 +33,25 @@
 // AXON spec
 
 /* RGMIIx_FER */
-#define RGMII_FER_MASK(idx)	(0x7 << ((idx) * 4))
-#define RGMII_FER_RTBI(idx)	(0x4 << ((idx) * 4))
-#define RGMII_FER_RGMII(idx)	(0x5 << ((idx) * 4))
-#define RGMII_FER_TBI(idx)	(0x6 << ((idx) * 4))
-#define RGMII_FER_GMII(idx)	(0x7 << ((idx) * 4))
-#define RGMII_FER_MII(idx)	RGMII_FER_GMII(idx)
+#define RGMII_FER_MASK(idx) (0x7 << ((idx) * 4))
+#define RGMII_FER_RTBI(idx) (0x4 << ((idx) * 4))
+#define RGMII_FER_RGMII(idx) (0x5 << ((idx) * 4))
+#define RGMII_FER_TBI(idx) (0x6 << ((idx) * 4))
+#define RGMII_FER_GMII(idx) (0x7 << ((idx) * 4))
+#define RGMII_FER_MII(idx) RGMII_FER_GMII(idx)
 
 /* RGMIIx_SSR */
-#define RGMII_SSR_MASK(idx)	(0x7 << ((idx) * 8))
-#define RGMII_SSR_10(idx)	(0x1 << ((idx) * 8))
-#define RGMII_SSR_100(idx)	(0x2 << ((idx) * 8))
-#define RGMII_SSR_1000(idx)	(0x4 << ((idx) * 8))
+#define RGMII_SSR_MASK(idx) (0x7 << ((idx) * 8))
+#define RGMII_SSR_10(idx) (0x1 << ((idx) * 8))
+#define RGMII_SSR_100(idx) (0x2 << ((idx) * 8))
+#define RGMII_SSR_1000(idx) (0x4 << ((idx) * 8))
 
 /* RGMII bridge supports only GMII/TBI and RGMII/RTBI PHYs */
 static inline int rgmii_valid_mode(int phy_mode)
 {
-	return  phy_interface_mode_is_rgmii(phy_mode) ||
-		phy_mode == PHY_INTERFACE_MODE_GMII ||
-		phy_mode == PHY_INTERFACE_MODE_MII ||
-		phy_mode == PHY_INTERFACE_MODE_TBI ||
-		phy_mode == PHY_INTERFACE_MODE_RTBI;
+	return phy_interface_mode_is_rgmii(phy_mode) || phy_mode == PHY_INTERFACE_MODE_GMII ||
+	       phy_mode == PHY_INTERFACE_MODE_MII || phy_mode == PHY_INTERFACE_MODE_TBI ||
+	       phy_mode == PHY_INTERFACE_MODE_RTBI;
 }
 
 static inline u32 rgmii_mode_mask(int mode, int input)
@@ -86,8 +84,7 @@ int rgmii_attach(struct platform_device *ofdev, int input, int mode)
 
 	/* Check if we need to attach to a RGMII */
 	if (input < 0 || !rgmii_valid_mode(mode)) {
-		printk(KERN_ERR "%pOF: unsupported settings !\n",
-		       ofdev->dev.of_node);
+		printk(KERN_ERR "%pOF: unsupported settings !\n", ofdev->dev.of_node);
 		return -ENODEV;
 	}
 
@@ -96,8 +93,8 @@ int rgmii_attach(struct platform_device *ofdev, int input, int mode)
 	/* Enable this input */
 	out_be32(&p->fer, in_be32(&p->fer) | rgmii_mode_mask(mode, input));
 
-	printk(KERN_NOTICE "%pOF: input %d in %s mode\n",
-	       ofdev->dev.of_node, input, phy_modes(mode));
+	printk(KERN_NOTICE "%pOF: input %d in %s mode\n", ofdev->dev.of_node, input,
+	       phy_modes(mode));
 
 	++dev->users;
 
@@ -194,8 +191,7 @@ void rgmii_detach(struct platform_device *ofdev, int input)
 
 int rgmii_get_regs_len(struct platform_device *ofdev)
 {
-	return sizeof(struct emac_ethtool_regs_subhdr) +
-		sizeof(struct rgmii_regs);
+	return sizeof(struct emac_ethtool_regs_subhdr) + sizeof(struct rgmii_regs);
 }
 
 void *rgmii_dump_regs(struct platform_device *ofdev, void *buf)
@@ -213,14 +209,12 @@ void *rgmii_dump_regs(struct platform_device *ofdev, void *buf)
 	return regs + 1;
 }
 
-
 static int rgmii_probe(struct platform_device *ofdev)
 {
 	struct rgmii_instance *dev;
 	int err;
 
-	dev = devm_kzalloc(&ofdev->dev, sizeof(struct rgmii_instance),
-			   GFP_KERNEL);
+	dev = devm_kzalloc(&ofdev->dev, sizeof(struct rgmii_instance), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 
@@ -244,15 +238,13 @@ static int rgmii_probe(struct platform_device *ofdev)
 	if (of_device_is_compatible(ofdev->dev.of_node, "ibm,rgmii-axon"))
 		dev->flags |= EMAC_RGMII_FLAG_HAS_MDIO;
 
-	DBG2(dev, " Boot FER = 0x%08x, SSR = 0x%08x\n",
-	     in_be32(&dev->base->fer), in_be32(&dev->base->ssr));
+	DBG2(dev, " Boot FER = 0x%08x, SSR = 0x%08x\n", in_be32(&dev->base->fer),
+	     in_be32(&dev->base->ssr));
 
 	/* Disable all inputs by default */
 	out_be32(&dev->base->fer, 0);
 
-	printk(KERN_INFO
-	       "RGMII %pOF initialized with%s MDIO support\n",
-	       ofdev->dev.of_node,
+	printk(KERN_INFO "RGMII %pOF initialized with%s MDIO support\n", ofdev->dev.of_node,
 	       (dev->flags & EMAC_RGMII_FLAG_HAS_MDIO) ? "" : "out");
 
 	wmb();
@@ -261,13 +253,12 @@ static int rgmii_probe(struct platform_device *ofdev)
 	return 0;
 }
 
-static const struct of_device_id rgmii_match[] =
-{
+static const struct of_device_id rgmii_match[] = {
 	{
-		.compatible	= "ibm,rgmii",
+		.compatible = "ibm,rgmii",
 	},
 	{
-		.type		= "emac-rgmii",
+		.type = "emac-rgmii",
 	},
 	{},
 };

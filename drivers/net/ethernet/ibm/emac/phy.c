@@ -129,8 +129,7 @@ static int genmii_setup_aneg(struct mii_phy *phy, u32 advertise)
 	adv = phy_read(phy, MII_ADVERTISE);
 	if (adv < 0)
 		return adv;
-	adv &= ~(ADVERTISE_ALL | ADVERTISE_100BASE4 | ADVERTISE_PAUSE_CAP |
-		 ADVERTISE_PAUSE_ASYM);
+	adv &= ~(ADVERTISE_ALL | ADVERTISE_100BASE4 | ADVERTISE_PAUSE_CAP | ADVERTISE_PAUSE_ASYM);
 	if (advertise & ADVERTISED_10baseT_Half)
 		adv |= ADVERTISE_10HALF;
 	if (advertise & ADVERTISED_10baseT_Full)
@@ -145,8 +144,7 @@ static int genmii_setup_aneg(struct mii_phy *phy, u32 advertise)
 		adv |= ADVERTISE_PAUSE_ASYM;
 	phy_write(phy, MII_ADVERTISE, adv);
 
-	if (phy->features &
-	    (SUPPORTED_1000baseT_Full | SUPPORTED_1000baseT_Half)) {
+	if (phy->features & (SUPPORTED_1000baseT_Full | SUPPORTED_1000baseT_Half)) {
 		adv = phy_read(phy, MII_CTRL1000);
 		if (adv < 0)
 			return adv;
@@ -225,8 +223,7 @@ static int genmii_read_link(struct mii_phy *phy)
 		if (lpa < 0)
 			return lpa;
 
-		if (phy->features &
-		    (SUPPORTED_1000baseT_Full | SUPPORTED_1000baseT_Half)) {
+		if (phy->features & (SUPPORTED_1000baseT_Full | SUPPORTED_1000baseT_Half)) {
 			int adv = phy_read(phy, MII_CTRL1000);
 			glpa = phy_read(phy, MII_STAT1000);
 
@@ -277,31 +274,27 @@ static int genmii_read_link(struct mii_phy *phy)
 }
 
 /* Generic implementation for most 10/100/1000 PHYs */
-static const struct mii_phy_ops generic_phy_ops = {
-	.setup_aneg	= genmii_setup_aneg,
-	.setup_forced	= genmii_setup_forced,
-	.poll_link	= genmii_poll_link,
-	.read_link	= genmii_read_link
-};
+static const struct mii_phy_ops generic_phy_ops = { .setup_aneg = genmii_setup_aneg,
+						    .setup_forced = genmii_setup_forced,
+						    .poll_link = genmii_poll_link,
+						    .read_link = genmii_read_link };
 
-static struct mii_phy_def genmii_phy_def = {
-	.phy_id		= 0x00000000,
-	.phy_id_mask	= 0x00000000,
-	.name		= "Generic MII",
-	.ops		= &generic_phy_ops
-};
+static struct mii_phy_def genmii_phy_def = { .phy_id = 0x00000000,
+					     .phy_id_mask = 0x00000000,
+					     .name = "Generic MII",
+					     .ops = &generic_phy_ops };
 
 /* CIS8201 */
-#define MII_CIS8201_10BTCSR	0x16
-#define  TENBTCSR_ECHO_DISABLE	0x2000
-#define MII_CIS8201_EPCR	0x17
-#define  EPCR_MODE_MASK		0x3000
-#define  EPCR_GMII_MODE		0x0000
-#define  EPCR_RGMII_MODE	0x1000
-#define  EPCR_TBI_MODE		0x2000
-#define  EPCR_RTBI_MODE		0x3000
-#define MII_CIS8201_ACSR	0x1c
-#define  ACSR_PIN_PRIO_SELECT	0x0004
+#define MII_CIS8201_10BTCSR 0x16
+#define TENBTCSR_ECHO_DISABLE 0x2000
+#define MII_CIS8201_EPCR 0x17
+#define EPCR_MODE_MASK 0x3000
+#define EPCR_GMII_MODE 0x0000
+#define EPCR_RGMII_MODE 0x1000
+#define EPCR_TBI_MODE 0x2000
+#define EPCR_RTBI_MODE 0x3000
+#define MII_CIS8201_ACSR 0x1c
+#define ACSR_PIN_PRIO_SELECT 0x0004
 
 static int cis8201_init(struct mii_phy *phy)
 {
@@ -331,8 +324,7 @@ static int cis8201_init(struct mii_phy *phy)
 	phy_write(phy, MII_CIS8201_EPCR, epcr);
 
 	/* MII regs override strap pins */
-	phy_write(phy, MII_CIS8201_ACSR,
-		  phy_read(phy, MII_CIS8201_ACSR) | ACSR_PIN_PRIO_SELECT);
+	phy_write(phy, MII_CIS8201_ACSR, phy_read(phy, MII_CIS8201_ACSR) | ACSR_PIN_PRIO_SELECT);
 
 	/* Disable TX_EN -> CRS echo mode, otherwise 10/HDX doesn't work */
 	phy_write(phy, MII_CIS8201_10BTCSR,
@@ -341,27 +333,23 @@ static int cis8201_init(struct mii_phy *phy)
 	return 0;
 }
 
-static const struct mii_phy_ops cis8201_phy_ops = {
-	.init		= cis8201_init,
-	.setup_aneg	= genmii_setup_aneg,
-	.setup_forced	= genmii_setup_forced,
-	.poll_link	= genmii_poll_link,
-	.read_link	= genmii_read_link
-};
+static const struct mii_phy_ops cis8201_phy_ops = { .init = cis8201_init,
+						    .setup_aneg = genmii_setup_aneg,
+						    .setup_forced = genmii_setup_forced,
+						    .poll_link = genmii_poll_link,
+						    .read_link = genmii_read_link };
 
-static struct mii_phy_def cis8201_phy_def = {
-	.phy_id		= 0x000fc410,
-	.phy_id_mask	= 0x000ffff0,
-	.name		= "CIS8201 Gigabit Ethernet",
-	.ops		= &cis8201_phy_ops
-};
+static struct mii_phy_def cis8201_phy_def = { .phy_id = 0x000fc410,
+					      .phy_id_mask = 0x000ffff0,
+					      .name = "CIS8201 Gigabit Ethernet",
+					      .ops = &cis8201_phy_ops };
 
 static struct mii_phy_def bcm5248_phy_def = {
 
-	.phy_id		= 0x0143bc00,
-	.phy_id_mask	= 0x0ffffff0,
-	.name		= "BCM5248 10/100 SMII Ethernet",
-	.ops		= &generic_phy_ops
+	.phy_id = 0x0143bc00,
+	.phy_id_mask = 0x0ffffff0,
+	.name = "BCM5248 10/100 SMII Ethernet",
+	.ops = &generic_phy_ops
 };
 
 static int m88e1111_init(struct mii_phy *phy)
@@ -374,7 +362,7 @@ static int m88e1111_init(struct mii_phy *phy)
 	phy_write(phy, 0x00, 0x9140);
 	phy_write(phy, 0x00, 0x1140);
 
-	return  0;
+	return 0;
 }
 
 static int m88e1112_init(struct mii_phy *phy)
@@ -401,7 +389,7 @@ static int m88e1112_init(struct mii_phy *phy)
 	/* Reset access to Page 0 */
 	phy_write(phy, 0x16, 0x0000);
 
-	return  0;
+	return 0;
 }
 
 static int et1011c_init(struct mii_phy *phy)
@@ -410,7 +398,7 @@ static int et1011c_init(struct mii_phy *phy)
 
 	reg_short = (u16)(phy_read(phy, 0x16));
 	reg_short &= ~(0x7);
-	reg_short |= 0x6;	/* RGMII Trace Delay*/
+	reg_short |= 0x6; /* RGMII Trace Delay*/
 	phy_write(phy, 0x16, reg_short);
 
 	reg_short = (u16)(phy_read(phy, 0x17));
@@ -421,91 +409,73 @@ static int et1011c_init(struct mii_phy *phy)
 	return 0;
 }
 
-static const struct mii_phy_ops et1011c_phy_ops = {
-	.init		= et1011c_init,
-	.setup_aneg	= genmii_setup_aneg,
-	.setup_forced	= genmii_setup_forced,
-	.poll_link	= genmii_poll_link,
-	.read_link	= genmii_read_link
-};
+static const struct mii_phy_ops et1011c_phy_ops = { .init = et1011c_init,
+						    .setup_aneg = genmii_setup_aneg,
+						    .setup_forced = genmii_setup_forced,
+						    .poll_link = genmii_poll_link,
+						    .read_link = genmii_read_link };
 
-static struct mii_phy_def et1011c_phy_def = {
-	.phy_id		= 0x0282f000,
-	.phy_id_mask	= 0x0fffff00,
-	.name		= "ET1011C Gigabit Ethernet",
-	.ops		= &et1011c_phy_ops
-};
+static struct mii_phy_def et1011c_phy_def = { .phy_id = 0x0282f000,
+					      .phy_id_mask = 0x0fffff00,
+					      .name = "ET1011C Gigabit Ethernet",
+					      .ops = &et1011c_phy_ops };
 
-
-
-
-
-static const struct mii_phy_ops m88e1111_phy_ops = {
-	.init		= m88e1111_init,
-	.setup_aneg	= genmii_setup_aneg,
-	.setup_forced	= genmii_setup_forced,
-	.poll_link	= genmii_poll_link,
-	.read_link	= genmii_read_link
-};
+static const struct mii_phy_ops m88e1111_phy_ops = { .init = m88e1111_init,
+						     .setup_aneg = genmii_setup_aneg,
+						     .setup_forced = genmii_setup_forced,
+						     .poll_link = genmii_poll_link,
+						     .read_link = genmii_read_link };
 
 static struct mii_phy_def m88e1111_phy_def = {
 
-	.phy_id		= 0x01410CC0,
-	.phy_id_mask	= 0x0ffffff0,
-	.name		= "Marvell 88E1111 Ethernet",
-	.ops		= &m88e1111_phy_ops,
+	.phy_id = 0x01410CC0,
+	.phy_id_mask = 0x0ffffff0,
+	.name = "Marvell 88E1111 Ethernet",
+	.ops = &m88e1111_phy_ops,
 };
 
-static const struct mii_phy_ops m88e1112_phy_ops = {
-	.init		= m88e1112_init,
-	.setup_aneg	= genmii_setup_aneg,
-	.setup_forced	= genmii_setup_forced,
-	.poll_link	= genmii_poll_link,
-	.read_link	= genmii_read_link
-};
+static const struct mii_phy_ops m88e1112_phy_ops = { .init = m88e1112_init,
+						     .setup_aneg = genmii_setup_aneg,
+						     .setup_forced = genmii_setup_forced,
+						     .poll_link = genmii_poll_link,
+						     .read_link = genmii_read_link };
 
 static struct mii_phy_def m88e1112_phy_def = {
-	.phy_id		= 0x01410C90,
-	.phy_id_mask	= 0x0ffffff0,
-	.name		= "Marvell 88E1112 Ethernet",
-	.ops		= &m88e1112_phy_ops,
+	.phy_id = 0x01410C90,
+	.phy_id_mask = 0x0ffffff0,
+	.name = "Marvell 88E1112 Ethernet",
+	.ops = &m88e1112_phy_ops,
 };
 
 static int ar8035_init(struct mii_phy *phy)
 {
 	phy_write(phy, 0x1d, 0x5); /* Address debug register 5 */
 	phy_write(phy, 0x1e, 0x2d47); /* Value copied from u-boot */
-	phy_write(phy, 0x1d, 0xb);    /* Address hib ctrl */
+	phy_write(phy, 0x1d, 0xb); /* Address hib ctrl */
 	phy_write(phy, 0x1e, 0xbc20); /* Value copied from u-boot */
 
 	return 0;
 }
 
 static const struct mii_phy_ops ar8035_phy_ops = {
-	.init		= ar8035_init,
-	.setup_aneg	= genmii_setup_aneg,
-	.setup_forced	= genmii_setup_forced,
-	.poll_link	= genmii_poll_link,
-	.read_link	= genmii_read_link,
+	.init = ar8035_init,
+	.setup_aneg = genmii_setup_aneg,
+	.setup_forced = genmii_setup_forced,
+	.poll_link = genmii_poll_link,
+	.read_link = genmii_read_link,
 };
 
 static struct mii_phy_def ar8035_phy_def = {
-	.phy_id		= 0x004dd070,
-	.phy_id_mask	= 0xfffffff0,
-	.name		= "Atheros 8035 Gigabit Ethernet",
-	.ops		= &ar8035_phy_ops,
+	.phy_id = 0x004dd070,
+	.phy_id_mask = 0xfffffff0,
+	.name = "Atheros 8035 Gigabit Ethernet",
+	.ops = &ar8035_phy_ops,
 };
 
-static struct mii_phy_def *mii_phy_table[] = {
-	&et1011c_phy_def,
-	&cis8201_phy_def,
-	&bcm5248_phy_def,
-	&m88e1111_phy_def,
-	&m88e1112_phy_def,
-	&ar8035_phy_def,
-	&genmii_phy_def,
-	NULL
-};
+static struct mii_phy_def *mii_phy_table[] = { &et1011c_phy_def,  &cis8201_phy_def,
+					       &bcm5248_phy_def,  &m88e1111_phy_def,
+					       &m88e1112_phy_def, &ar8035_phy_def,
+					       &genmii_phy_def,	  NULL };
 
 int emac_mii_phy_probe(struct mii_phy *phy, int address)
 {

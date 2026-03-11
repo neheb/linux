@@ -28,28 +28,25 @@
 #include "core.h"
 
 /* ZMIIx_FER */
-#define ZMII_FER_MDI(idx)	(0x80000000 >> ((idx) * 4))
-#define ZMII_FER_MDI_ALL	(ZMII_FER_MDI(0) | ZMII_FER_MDI(1) | \
-				 ZMII_FER_MDI(2) | ZMII_FER_MDI(3))
+#define ZMII_FER_MDI(idx) (0x80000000 >> ((idx) * 4))
+#define ZMII_FER_MDI_ALL (ZMII_FER_MDI(0) | ZMII_FER_MDI(1) | ZMII_FER_MDI(2) | ZMII_FER_MDI(3))
 
-#define ZMII_FER_SMII(idx)	(0x40000000 >> ((idx) * 4))
-#define ZMII_FER_RMII(idx)	(0x20000000 >> ((idx) * 4))
-#define ZMII_FER_MII(idx)	(0x10000000 >> ((idx) * 4))
+#define ZMII_FER_SMII(idx) (0x40000000 >> ((idx) * 4))
+#define ZMII_FER_RMII(idx) (0x20000000 >> ((idx) * 4))
+#define ZMII_FER_MII(idx) (0x10000000 >> ((idx) * 4))
 
 /* ZMIIx_SSR */
-#define ZMII_SSR_SCI(idx)	(0x40000000 >> ((idx) * 4))
-#define ZMII_SSR_FSS(idx)	(0x20000000 >> ((idx) * 4))
-#define ZMII_SSR_SP(idx)	(0x10000000 >> ((idx) * 4))
+#define ZMII_SSR_SCI(idx) (0x40000000 >> ((idx) * 4))
+#define ZMII_SSR_FSS(idx) (0x20000000 >> ((idx) * 4))
+#define ZMII_SSR_SP(idx) (0x10000000 >> ((idx) * 4))
 
 /* ZMII only supports MII, RMII and SMII
  * we also support autodetection for backward compatibility
  */
 static inline int zmii_valid_mode(int mode)
 {
-	return  mode == PHY_INTERFACE_MODE_MII ||
-		mode == PHY_INTERFACE_MODE_RMII ||
-		mode == PHY_INTERFACE_MODE_SMII ||
-		mode == PHY_INTERFACE_MODE_NA;
+	return mode == PHY_INTERFACE_MODE_MII || mode == PHY_INTERFACE_MODE_RMII ||
+	       mode == PHY_INTERFACE_MODE_SMII || mode == PHY_INTERFACE_MODE_NA;
 }
 
 static inline const char *zmii_mode_name(int mode)
@@ -80,8 +77,7 @@ static inline u32 zmii_mode_mask(int mode, int input)
 	}
 }
 
-int zmii_attach(struct platform_device *ofdev, int input,
-		phy_interface_t *mode)
+int zmii_attach(struct platform_device *ofdev, int input, phy_interface_t *mode)
 {
 	struct zmii_instance *dev = platform_get_drvdata(ofdev);
 	struct zmii_regs __iomem *p = dev->base;
@@ -119,14 +115,12 @@ int zmii_attach(struct platform_device *ofdev, int input,
 		} else {
 			dev->mode = *mode;
 		}
-		printk(KERN_NOTICE "%pOF: bridge in %s mode\n",
-		       ofdev->dev.of_node,
+		printk(KERN_NOTICE "%pOF: bridge in %s mode\n", ofdev->dev.of_node,
 		       zmii_mode_name(dev->mode));
 	} else {
 		/* All inputs must use the same mode */
 		if (*mode != PHY_INTERFACE_MODE_NA && *mode != dev->mode) {
-			printk(KERN_ERR
-			       "%pOF: invalid mode %d specified for input %d\n",
+			printk(KERN_ERR "%pOF: invalid mode %d specified for input %d\n",
 			       ofdev->dev.of_node, *mode, input);
 			mutex_unlock(&dev->lock);
 			return -EINVAL;
@@ -168,7 +162,6 @@ void zmii_put_mdio(struct platform_device *ofdev, int input)
 	mutex_unlock(&dev->lock);
 }
 
-
 void zmii_set_speed(struct platform_device *ofdev, int input, int speed)
 {
 	struct zmii_instance *dev = platform_get_drvdata(ofdev);
@@ -201,8 +194,7 @@ void zmii_detach(struct platform_device *ofdev, int input)
 	ZMII_DBG(dev, "detach(%d)" NL, input);
 
 	/* Disable this input */
-	out_be32(&dev->base->fer,
-		 in_be32(&dev->base->fer) & ~zmii_mode_mask(dev->mode, input));
+	out_be32(&dev->base->fer, in_be32(&dev->base->fer) & ~zmii_mode_mask(dev->mode, input));
 
 	--dev->users;
 
@@ -211,8 +203,7 @@ void zmii_detach(struct platform_device *ofdev, int input)
 
 int zmii_get_regs_len(struct platform_device *ofdev)
 {
-	return sizeof(struct emac_ethtool_regs_subhdr) +
-		sizeof(struct zmii_regs);
+	return sizeof(struct emac_ethtool_regs_subhdr) + sizeof(struct zmii_regs);
 }
 
 void *zmii_dump_regs(struct platform_device *ofdev, void *buf)
@@ -235,8 +226,7 @@ static int zmii_probe(struct platform_device *ofdev)
 	struct zmii_instance *dev;
 	int err;
 
-	dev = devm_kzalloc(&ofdev->dev, sizeof(struct zmii_instance),
-			   GFP_KERNEL);
+	dev = devm_kzalloc(&ofdev->dev, sizeof(struct zmii_instance), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 
@@ -266,14 +256,13 @@ static int zmii_probe(struct platform_device *ofdev)
 	return 0;
 }
 
-static const struct of_device_id zmii_match[] =
-{
+static const struct of_device_id zmii_match[] = {
 	{
-		.compatible	= "ibm,zmii",
+		.compatible = "ibm,zmii",
 	},
 	/* For backward compat with old DT */
 	{
-		.type		= "emac-zmii",
+		.type = "emac-zmii",
 	},
 	{},
 };
