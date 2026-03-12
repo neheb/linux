@@ -328,7 +328,7 @@ static ssize_t mci_reset_counters_store(struct device *dev,
 		ri->ce_count = 0;
 
 		for (chan = 0; chan < ri->nr_channels; chan++)
-			ri->channels[chan]->ce_count = 0;
+			ri->channels[chan].ce_count = 0;
 	}
 
 	mci_for_each_dimm(mci, dimm) {
@@ -455,7 +455,7 @@ static ssize_t mci_size_mb_show(struct device *dev,
 		struct csrow_info *csrow = mci->csrows[csrow_idx];
 
 		for (j = 0; j < csrow->nr_channels; j++) {
-			struct dimm_info *dimm = csrow->channels[j]->dimm;
+			struct dimm_info *dimm = csrow->channels[j].dimm;
 
 			total_pages += dimm->nr_pages;
 		}

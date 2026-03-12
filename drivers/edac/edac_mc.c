@@ -179,7 +179,7 @@ static void mci_release(struct device *dev)
 {
 	struct mem_ctl_info *mci = container_of(dev, struct mem_ctl_info, dev);
 	struct csrow_info *csr;
-	int i, chn, row;
+	int i, row;
 
 	if (mci->dimms) {
 		for (i = 0; i < mci->tot_dimms; i++)
@@ -193,11 +193,6 @@ static void mci_release(struct device *dev)
 			if (!csr)
 				continue;
 
-			if (csr->channels) {
-				for (chn = 0; chn < mci->num_cschannel; chn++)
-					kfree(csr->channels[chn]);
-				kfree(csr->channels);
-			}
 			kfree(csr);
 		}
 		kfree(mci->csrows);
@@ -222,26 +217,18 @@ static int edac_mc_alloc_csrows(struct mem_ctl_info *mci)
 	for (row = 0; row < tot_csrows; row++) {
 		struct csrow_info *csr;
 
-		csr = kzalloc_obj(**mci->csrows);
+		csr = kzalloc_flex(*csr, channels, tot_channels);
 		if (!csr)
 			return -ENOMEM;
 
+		csr->nr_channels = tot_channels;
 		mci->csrows[row] = csr;
 		csr->csrow_idx = row;
 		csr->mci = mci;
-		csr->nr_channels = tot_channels;
-		csr->channels = kzalloc_objs(*csr->channels, tot_channels);
-		if (!csr->channels)
-			return -ENOMEM;
 
 		for (chn = 0; chn < tot_channels; chn++) {
-			struct rank_info *chan;
+			struct rank_info *chan = &csr->channels[chn];
 
-			chan = kzalloc_obj(**csr->channels);
-			if (!chan)
-				return -ENOMEM;
-
-			csr->channels[chn] = chan;
 			chan->chan_idx = chn;
 			chan->csrow = csr;
 		}
@@ -272,7 +259,7 @@ static int edac_mc_alloc_dimms(struct mem_ctl_info *mci)
 		struct rank_info *chan;
 		int n, len;
 
-		chan = mci->csrows[row]->channels[chn];
+		chan = &mci->csrows[row]->channels[chn];
 
 		dimm = kzalloc_obj(**mci->dimms);
 		if (!dimm)
@@ -613,13 +600,13 @@ int edac_mc_add_mc_with_groups(struct mem_ctl_info *mci,
 			int j;
 
 			for (j = 0; j < csrow->nr_channels; j++)
-				nr_pages += csrow->channels[j]->dimm->nr_pages;
+				nr_pages += csrow->channels[j].dimm->nr_pages;
 			if (!nr_pages)
 				continue;
 			edac_mc_dump_csrow(csrow);
 			for (j = 0; j < csrow->nr_channels; j++)
-				if (csrow->channels[j]->dimm->nr_pages)
-					edac_mc_dump_channel(csrow->channels[j]);
+				if (csrow->channels[j].dimm->nr_pages)
+					edac_mc_dump_channel(&csrow->channels[j]);
 		}
 
 		mci_for_each_dimm(mci, dimm)
@@ -758,7 +745,7 @@ int edac_mc_find_csrow_by_page(struct mem_ctl_info *mci, unsigned long page)
 		struct csrow_info *csrow = csrows[i];
 		n = 0;
 		for (j = 0; j < csrow->nr_channels; j++) {
-			struct dimm_info *dimm = csrow->channels[j]->dimm;
+			struct dimm_info *dimm = csrow->channels[j].dimm;
 			n += dimm->nr_pages;
 		}
 		if (n == 0)
@@ -904,7 +891,7 @@ static void edac_inc_csrow(struct edac_raw_error_desc *e, int row, int chan)
 	if (type == HW_EVENT_ERR_CORRECTED) {
 		mci->csrows[row]->ce_count += count;
 		if (chan >= 0)
-			mci->csrows[row]->channels[chan]->ce_count += count;
+			mci->csrows[row]->channels[chan].ce_count += count;
 	} else {
 		mci->csrows[row]->ue_count += count;
 	}

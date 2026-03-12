@@ -3106,7 +3106,7 @@ static void umc_init_csrows(struct mem_ctl_info *mci)
 			if (!csrow_enabled(cs, umc, pvt))
 				continue;
 
-			dimm = mci->csrows[cs]->channels[umc]->dimm;
+			dimm = mci->csrows[cs]->channels[umc].dimm;
 
 			edac_dbg(1, "MC node: %d, csrow: %d\n",
 					pvt->mc_node_id, cs);
@@ -3162,14 +3162,14 @@ static void dct_init_csrows(struct mem_ctl_info *mci)
 
 		if (row_dct0) {
 			nr_pages = dct_get_csrow_nr_pages(pvt, 0, i);
-			csrow->channels[0]->dimm->nr_pages = nr_pages;
+			csrow->channels[0].dimm->nr_pages = nr_pages;
 		}
 
 		/* K8 has only one DCT */
 		if (pvt->fam != 0xf && row_dct1) {
 			int row_dct1_pages = dct_get_csrow_nr_pages(pvt, 1, i);
 
-			csrow->channels[1]->dimm->nr_pages = row_dct1_pages;
+			csrow->channels[1].dimm->nr_pages = row_dct1_pages;
 			nr_pages += row_dct1_pages;
 		}
 
@@ -3183,7 +3183,7 @@ static void dct_init_csrows(struct mem_ctl_info *mci)
 		}
 
 		for (j = 0; j < pvt->max_mcs; j++) {
-			dimm = csrow->channels[j]->dimm;
+			dimm = csrow->channels[j].dimm;
 			dimm->mtype = pvt->dram_type;
 			dimm->edac_mode = edac_mode;
 			dimm->grain = 64;
@@ -3588,7 +3588,7 @@ static void gpu_init_csrows(struct mem_ctl_info *mci)
 			if (!csrow_enabled(cs, umc, pvt))
 				continue;
 
-			dimm = mci->csrows[umc]->channels[cs]->dimm;
+			dimm = mci->csrows[umc]->channels[cs].dimm;
 
 			edac_dbg(1, "MC node: %d, csrow: %d\n",
 				 pvt->mc_node_id, cs);

@@ -310,7 +310,7 @@ static int i82975x_process_error_info(struct mem_ctl_info *mci,
 	chan = (mci->csrows[row]->nr_channels == 1) ? 0 : info->eap & 1;
 	offst = info->eap
 			& ((1 << PAGE_SHIFT) -
-			   (1 << mci->csrows[row]->channels[chan]->dimm->grain));
+			   (1 << mci->csrows[row]->channels[chan].dimm->grain));
 
 	if (info->errsts & 0x0002)
 		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci, 1,
@@ -404,11 +404,11 @@ static void i82975x_init_csrows(struct mem_ctl_info *mci,
 		 *   [0-3] for dual-channel; i.e. csrow->nr_channels = 2
 		 */
 		for (chan = 0; chan < csrow->nr_channels; chan++) {
-			dimm = mci->csrows[index]->channels[chan]->dimm;
+			dimm = mci->csrows[index]->channels[chan].dimm;
 
 			dimm->nr_pages = nr_pages / csrow->nr_channels;
 
-			snprintf(csrow->channels[chan]->dimm->label, EDAC_MC_LABEL_LEN, "DIMM %c%d",
+			snprintf(csrow->channels[chan].dimm->label, EDAC_MC_LABEL_LEN, "DIMM %c%d",
 				 (chan == 0) ? 'A' : 'B',
 				 index);
 			dimm->grain = 1 << 7;	/* 128Byte cache-line resolution */

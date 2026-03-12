@@ -405,7 +405,7 @@ static int i3000_probe1(struct pci_dev *pdev, int dev_idx)
 		last_cumul_size = cumul_size;
 
 		for (j = 0; j < nr_channels; j++) {
-			struct dimm_info *dimm = csrow->channels[j]->dimm;
+			struct dimm_info *dimm = csrow->channels[j].dimm;
 
 			dimm->nr_pages = nr_pages / nr_channels;
 			dimm->grain = I3000_DEAP_GRAIN;

@@ -460,7 +460,7 @@ static void dmc520_init_csrow(struct mem_ctl_info *mci)
 		csi = mci->csrows[row];
 
 		for (ch = 0; ch < csi->nr_channels; ch++) {
-			dimm		= csi->channels[ch]->dimm;
+			dimm		= csi->channels[ch].dimm;
 			dimm->grain	= pvt->mem_width_in_bytes;
 			dimm->dtype	= dt;
 			dimm->mtype	= mt;

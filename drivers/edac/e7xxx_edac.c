@@ -406,7 +406,7 @@ static void e7xxx_init_csrows(struct mem_ctl_info *mci, struct pci_dev *pdev,
 			edac_mode = EDAC_NONE;
 
 		for (j = 0; j < drc_chan + 1; j++) {
-			dimm = csrow->channels[j]->dimm;
+			dimm = csrow->channels[j].dimm;
 
 			dimm->nr_pages = nr_pages / (drc_chan + 1);
 			dimm->grain = 1 << 12;	/* 4KiB - resolution of CELOG */

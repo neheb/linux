@@ -262,7 +262,7 @@ static int init_csrows(struct mem_ctl_info *mci)
 	regmap_read(aspeed_regmap, ASPEED_MCR_CONF, &reg04);
 	dram_type = (reg04 & ASPEED_MCR_CONF_DRAM_TYPE) ? MEM_DDR4 : MEM_DDR3;
 
-	dimm = csrow->channels[0]->dimm;
+	dimm = csrow->channels[0].dimm;
 	dimm->mtype = dram_type;
 	dimm->edac_mode = EDAC_SECDED;
 	dimm->nr_pages = nr_pages / csrow->nr_channels;

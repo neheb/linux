@@ -130,7 +130,7 @@ static int pasemi_edac_init_csrows(struct mem_ctl_info *mci,
 
 	for (index = 0; index < mci->nr_csrows; index++) {
 		csrow = mci->csrows[index];
-		dimm = csrow->channels[0]->dimm;
+		dimm = csrow->channels[0].dimm;
 
 		pci_read_config_dword(pdev,
 				      MCDRAM_RANKCFG + (index * 12),
