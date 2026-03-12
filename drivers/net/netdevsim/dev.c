@@ -719,11 +719,11 @@ struct nsim_trap_item {
 
 struct nsim_trap_data {
 	struct delayed_work trap_report_dw;
-	struct nsim_trap_item *trap_items_arr;
 	u64 *trap_policers_cnt_arr;
 	u64 trap_pkt_cnt;
 	struct nsim_dev *nsim_dev;
 	spinlock_t trap_lock;	/* Protects trap_items_arr */
+	struct nsim_trap_item trap_items_arr[];
 };
 
 /* All driver-specific traps must be documented in
@@ -935,16 +935,10 @@ static int nsim_dev_traps_init(struct devlink *devlink)
 	struct nsim_trap_data *nsim_trap_data;
 	int err;
 
-	nsim_trap_data = kzalloc_obj(*nsim_trap_data);
+	nsim_trap_data = kzalloc_flex(*nsim_trap_data, trap_items_arr,
+			ARRAY_SIZE(nsim_traps_arr));
 	if (!nsim_trap_data)
 		return -ENOMEM;
-
-	nsim_trap_data->trap_items_arr = kzalloc_objs(struct nsim_trap_item,
-						      ARRAY_SIZE(nsim_traps_arr));
-	if (!nsim_trap_data->trap_items_arr) {
-		err = -ENOMEM;
-		goto err_trap_data_free;
-	}
 
 	nsim_trap_data->trap_policers_cnt_arr = kcalloc(policers_count,
 							sizeof(u64),
@@ -994,8 +988,6 @@ err_trap_policers_unregister:
 err_trap_policers_cnt_free:
 	kfree(nsim_trap_data->trap_policers_cnt_arr);
 err_trap_items_free:
-	kfree(nsim_trap_data->trap_items_arr);
-err_trap_data_free:
 	kfree(nsim_trap_data);
 	return err;
 }
@@ -1013,7 +1005,6 @@ static void nsim_dev_traps_exit(struct devlink *devlink)
 	devl_trap_policers_unregister(devlink, nsim_trap_policers_arr,
 				      ARRAY_SIZE(nsim_trap_policers_arr));
 	kfree(nsim_dev->trap_data->trap_policers_cnt_arr);
-	kfree(nsim_dev->trap_data->trap_items_arr);
 	kfree(nsim_dev->trap_data);
 }
 
