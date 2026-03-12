@@ -628,7 +628,7 @@ void cxgb4_mqprio_stop_offload(struct adapter *adap)
 	struct net_device *dev;
 	u8 i;
 
-	if (!adap->tc_mqprio || !adap->tc_mqprio->port_mqprio)
+	if (!adap->tc_mqprio)
 		return;
 
 	mutex_lock(&adap->tc_mqprio->mqprio_mutex);
@@ -648,25 +648,18 @@ void cxgb4_mqprio_stop_offload(struct adapter *adap)
 
 int cxgb4_init_tc_mqprio(struct adapter *adap)
 {
-	struct cxgb4_tc_port_mqprio *tc_port_mqprio, *port_mqprio;
+	struct cxgb4_tc_port_mqprio *port_mqprio;
 	struct cxgb4_tc_mqprio *tc_mqprio;
 	struct sge_eosw_txq *eosw_txq;
 	int ret = 0;
 	u8 i;
 
-	tc_mqprio = kzalloc_obj(*tc_mqprio);
+	tc_mqprio = kzalloc_flex(*tc_mqprio, port_mqprio, adap->params.nports);
 	if (!tc_mqprio)
 		return -ENOMEM;
 
-	tc_port_mqprio = kzalloc_objs(*tc_port_mqprio, adap->params.nports);
-	if (!tc_port_mqprio) {
-		ret = -ENOMEM;
-		goto out_free_mqprio;
-	}
-
 	mutex_init(&tc_mqprio->mqprio_mutex);
 
-	tc_mqprio->port_mqprio = tc_port_mqprio;
 	for (i = 0; i < adap->params.nports; i++) {
 		port_mqprio = &tc_mqprio->port_mqprio[i];
 		eosw_txq = kzalloc_objs(*eosw_txq, adap->tids.neotids);
@@ -686,9 +679,7 @@ out_free_ports:
 		port_mqprio = &tc_mqprio->port_mqprio[i];
 		kfree(port_mqprio->eosw_txq);
 	}
-	kfree(tc_port_mqprio);
 
-out_free_mqprio:
 	kfree(tc_mqprio);
 	return ret;
 }
@@ -700,7 +691,7 @@ void cxgb4_cleanup_tc_mqprio(struct adapter *adap)
 
 	if (adap->tc_mqprio) {
 		mutex_lock(&adap->tc_mqprio->mqprio_mutex);
-		if (adap->tc_mqprio->port_mqprio) {
+		if (adap->params.nports) {
 			for (i = 0; i < adap->params.nports; i++) {
 				struct net_device *dev = adap->port[i];
 
@@ -709,7 +700,6 @@ void cxgb4_cleanup_tc_mqprio(struct adapter *adap)
 				port_mqprio = &adap->tc_mqprio->port_mqprio[i];
 				kfree(port_mqprio->eosw_txq);
 			}
-			kfree(adap->tc_mqprio->port_mqprio);
 		}
 		mutex_unlock(&adap->tc_mqprio->mqprio_mutex);
 		kfree(adap->tc_mqprio);

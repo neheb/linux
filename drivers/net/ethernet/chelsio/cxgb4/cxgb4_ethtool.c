@@ -2244,23 +2244,14 @@ void cxgb4_cleanup_ethtool_filters(struct adapter *adap)
 
 int cxgb4_init_ethtool_filters(struct adapter *adap)
 {
-	struct cxgb4_ethtool_filter_info *eth_filter_info;
 	struct cxgb4_ethtool_filter *eth_filter;
 	struct tid_info *tids = &adap->tids;
 	u32 nentries, i;
 	int ret;
 
-	eth_filter = kzalloc_obj(*eth_filter);
+	eth_filter = kzalloc_flex(*eth_filter, port, adap->params.nports);
 	if (!eth_filter)
 		return -ENOMEM;
-
-	eth_filter_info = kzalloc_objs(*eth_filter_info, adap->params.nports);
-	if (!eth_filter_info) {
-		ret = -ENOMEM;
-		goto free_eth_filter;
-	}
-
-	eth_filter->port = eth_filter_info;
 
 	nentries = tids->nhpftids + tids->nftids;
 	if (is_hashfilter(adap))
@@ -2291,9 +2282,6 @@ free_eth_finfo:
 		bitmap_free(eth_filter->port[i].bmap);
 		kvfree(eth_filter->port[i].loc_array);
 	}
-	kfree(eth_filter_info);
-
-free_eth_filter:
 	kfree(eth_filter);
 
 	return ret;
