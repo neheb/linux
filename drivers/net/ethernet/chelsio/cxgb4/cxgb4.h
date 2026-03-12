@@ -1098,7 +1098,7 @@ struct cxgb4_ethtool_filter_info {
 
 struct cxgb4_ethtool_filter {
 	u32 nentries; /* Adapter wide number of supported filters */
-	struct cxgb4_ethtool_filter_info *port; /* Per port entry */
+	struct cxgb4_ethtool_filter_info port[]; /* Per port entry */
 };
 
 struct adapter {
