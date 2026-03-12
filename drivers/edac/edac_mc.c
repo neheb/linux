@@ -193,11 +193,8 @@ static void mci_release(struct device *dev)
 			if (!csr)
 				continue;
 
-			if (csr->channels) {
-				for (chn = 0; chn < mci->num_cschannel; chn++)
-					kfree(csr->channels[chn]);
-				kfree(csr->channels);
-			}
+			for (chn = 0; chn < mci->num_cschannel; chn++)
+				kfree(csr->channels[chn]);
 			kfree(csr);
 		}
 		kfree(mci->csrows);
@@ -222,17 +219,14 @@ static int edac_mc_alloc_csrows(struct mem_ctl_info *mci)
 	for (row = 0; row < tot_csrows; row++) {
 		struct csrow_info *csr;
 
-		csr = kzalloc_obj(**mci->csrows);
+		csr = kzalloc_flex(*csr, channels, tot_channels);
 		if (!csr)
 			return -ENOMEM;
 
+		csr->nr_channels = tot_channels;
 		mci->csrows[row] = csr;
 		csr->csrow_idx = row;
 		csr->mci = mci;
-		csr->nr_channels = tot_channels;
-		csr->channels = kzalloc_objs(*csr->channels, tot_channels);
-		if (!csr->channels)
-			return -ENOMEM;
 
 		for (chn = 0; chn < tot_channels; chn++) {
 			struct rank_info *chan;
