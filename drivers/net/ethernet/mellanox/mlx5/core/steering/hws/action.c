@@ -2621,31 +2621,23 @@ mlx5hws_action_template_create(enum mlx5hws_action_type action_type[])
 	u8 num_actions = 0;
 	int i;
 
-	at = kzalloc_obj(*at);
-	if (!at)
-		return NULL;
-
 	while (action_type[num_actions++] != MLX5HWS_ACTION_TYP_LAST)
 		;
 
-	at->num_actions = num_actions - 1;
-	at->action_type_arr = kzalloc_objs(*action_type, num_actions);
-	if (!at->action_type_arr)
-		goto free_at;
+	at = kzalloc_flex(*at, action_type_arr, num_actions);
+	if (!at)
+		return NULL;
+
+	at->num_actions = num_actions;
 
 	for (i = 0; i < num_actions; i++)
 		at->action_type_arr[i] = action_type[i];
 
 	return at;
-
-free_at:
-	kfree(at);
-	return NULL;
 }
 
 int mlx5hws_action_template_destroy(struct mlx5hws_action_template *at)
 {
-	kfree(at->action_type_arr);
 	kfree(at);
 	return 0;
 }
