@@ -181,7 +181,7 @@ struct qlcnic_sriov {
 	u16				vlan;
 	struct qlcnic_resources		ff_max;
 	struct qlcnic_back_channel	bc;
-	struct qlcnic_vf_info		*vf_info;
+	struct qlcnic_vf_info		vf_info[] __counted_by(num_vfs);
 };
 
 int qlcnic_sriov_init(struct qlcnic_adapter *, int);
