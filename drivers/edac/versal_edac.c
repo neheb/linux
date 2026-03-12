@@ -600,7 +600,7 @@ static void init_csrows(struct mem_ctl_info *mci)
 	for (row = 0; row < mci->nr_csrows; row++) {
 		csi = mci->csrows[row];
 		for (ch = 0; ch < csi->nr_channels; ch++) {
-			dimm = csi->channels[ch]->dimm;
+			dimm = csi->channels[ch].dimm;
 			dimm->edac_mode	= EDAC_SECDED;
 			dimm->mtype = MEM_DDR4;
 			dimm->nr_pages = (size >> PAGE_SHIFT) / csi->nr_channels;

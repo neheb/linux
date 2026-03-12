@@ -497,7 +497,7 @@ static void mc_init(struct mem_ctl_info *mci, struct device *dev)
 	for (row = 0; row < mci->nr_csrows; row++) {
 		csi = mci->csrows[row];
 		for (ch = 0; ch < csi->nr_channels; ch++) {
-			dimm = csi->channels[ch]->dimm;
+			dimm = csi->channels[ch].dimm;
 			dimm->edac_mode = EDAC_SECDED;
 			dimm->mtype = MEM_DDR5;
 			dimm->grain = MC5_ERR_GRAIN;

@@ -373,7 +373,7 @@ static void i82875p_init_csrows(struct mem_ctl_info *mci,
 		last_cumul_size = cumul_size;
 
 		for (j = 0; j < nr_chans; j++) {
-			dimm = csrow->channels[j]->dimm;
+			dimm = csrow->channels[j].dimm;
 
 			dimm->nr_pages = nr_pages / nr_chans;
 			dimm->grain = 1 << 12;	/* I82875P_EAP has 4KiB reolution */

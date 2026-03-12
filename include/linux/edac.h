@@ -448,7 +448,7 @@ struct csrow_info {
 
 	/* channel information for this csrow */
 	u32 nr_channels;
-	struct rank_info **channels;
+	struct rank_info channels[] __counted_by(nr_channels);
 };
 
 /*

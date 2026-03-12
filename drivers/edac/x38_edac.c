@@ -383,7 +383,7 @@ static int x38_probe1(struct pci_dev *pdev, int dev_idx)
 			continue;
 
 		for (j = 0; j < x38_channel_num; j++) {
-			struct dimm_info *dimm = csrow->channels[j]->dimm;
+			struct dimm_info *dimm = csrow->channels[j].dimm;
 
 			dimm->nr_pages = nr_pages / x38_channel_num;
 			dimm->grain = nr_pages << PAGE_SHIFT;

@@ -460,7 +460,7 @@ static void fsl_ddr_init_csrows(struct mem_ctl_info *mci)
 		u32 end;
 
 		csrow = mci->csrows[index];
-		dimm = csrow->channels[0]->dimm;
+		dimm = csrow->channels[0].dimm;
 
 		cs_bnds = ddr_in32(pdata, FSL_MC_CS_BNDS_0 +
 				   (index * FSL_MC_CS_BNDS_OFS));

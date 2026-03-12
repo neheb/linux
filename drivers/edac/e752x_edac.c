@@ -1123,7 +1123,7 @@ static void e752x_init_csrows(struct mem_ctl_info *mci, struct pci_dev *pdev,
 		} else
 			edac_mode = EDAC_NONE;
 		for (i = 0; i < csrow->nr_channels; i++) {
-			struct dimm_info *dimm = csrow->channels[i]->dimm;
+			struct dimm_info *dimm = csrow->channels[i].dimm;
 
 			edac_dbg(3, "Initializing rank at (%i,%i)\n", index, i);
 			dimm->nr_pages = nr_pages / csrow->nr_channels;

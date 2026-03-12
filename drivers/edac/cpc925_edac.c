@@ -366,7 +366,7 @@ static void cpc925_init_csrows(struct mem_ctl_info *mci)
 		break;
 		}
 		for (j = 0; j < csrow->nr_channels; j++) {
-			dimm = csrow->channels[j]->dimm;
+			dimm = csrow->channels[j].dimm;
 			dimm->nr_pages = nr_pages / csrow->nr_channels;
 			dimm->mtype = MEM_RDDR;
 			dimm->edac_mode = EDAC_SECDED;
