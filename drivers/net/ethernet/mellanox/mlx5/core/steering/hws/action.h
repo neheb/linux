@@ -112,10 +112,10 @@ struct mlx5hws_actions_wqe_setter {
 
 struct mlx5hws_action_template {
 	struct mlx5hws_actions_wqe_setter setters[MLX5HWS_ACTION_MAX_STE];
-	enum mlx5hws_action_type *action_type_arr;
 	u8 num_of_action_stes;
 	u8 num_actions;
 	u8 only_term;
+	enum mlx5hws_action_type action_type_arr[] __counted_by(num_actions);
 };
 
 struct mlx5hws_range_action_table {
