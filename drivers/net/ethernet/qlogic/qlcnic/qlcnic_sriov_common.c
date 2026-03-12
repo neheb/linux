@@ -149,25 +149,20 @@ int qlcnic_sriov_init(struct qlcnic_adapter *adapter, int num_vfs)
 	if (!qlcnic_sriov_enable_check(adapter))
 		return -EIO;
 
-	sriov  = kzalloc_obj(struct qlcnic_sriov);
+	sriov  = kzalloc_flex(*sriov, vf_info, num_vfs);
 	if (!sriov)
 		return -ENOMEM;
 
-	adapter->ahw->sriov = sriov;
 	sriov->num_vfs = num_vfs;
+	adapter->ahw->sriov = sriov;
 	bc = &sriov->bc;
-	sriov->vf_info = kzalloc_objs(struct qlcnic_vf_info, num_vfs);
-	if (!sriov->vf_info) {
-		err = -ENOMEM;
-		goto qlcnic_free_sriov;
-	}
 
 	wq = create_singlethread_workqueue("bc-trans");
 	if (wq == NULL) {
 		err = -ENOMEM;
 		dev_err(&adapter->pdev->dev,
 			"Cannot create bc-trans workqueue\n");
-		goto qlcnic_free_vf_info;
+		goto qlcnic_free_sriov;
 	}
 
 	bc->bc_trans_wq = wq;
@@ -227,9 +222,6 @@ qlcnic_destroy_async_wq:
 qlcnic_destroy_trans_wq:
 	destroy_workqueue(bc->bc_trans_wq);
 
-qlcnic_free_vf_info:
-	kfree(sriov->vf_info);
-
 qlcnic_free_sriov:
 	kfree(adapter->ahw->sriov);
 	return err;
@@ -282,7 +274,6 @@ void __qlcnic_sriov_cleanup(struct qlcnic_adapter *adapter)
 	for (i = 0; i < sriov->num_vfs; i++)
 		kfree(sriov->vf_info[i].vp);
 
-	kfree(sriov->vf_info);
 	kfree(adapter->ahw->sriov);
 }
 
