@@ -335,6 +335,13 @@ config CLK_LS1028A_PLLDIG
           features of the PLL are currently supported by the driver. By default,
           configured bypass mode with this PLL.
 
+config CLK_TEGRA
+	bool "Clock driver for Nvidia Tegra platforms"
+	depends on ARCH_TEGRA || COMPILE_TEST
+	help
+	  This adds the clock driver support for Nvidia Tegra platforms
+	  using common clock framework.
+
 config COMMON_CLK_XGENE
 	bool "Clock driver for APM XGene SoC"
 	default ARCH_XGENE
