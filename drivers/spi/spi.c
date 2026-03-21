@@ -1164,7 +1164,7 @@ static void *spi_res_alloc(struct spi_device *spi, spi_res_release_t release,
 {
 	struct spi_res *sres;
 
-	sres = kzalloc(sizeof(*sres) + size, gfp);
+	sres = kzalloc_flex(*sres, data, size, gfp);
 	if (!sres)
 		return NULL;
 
