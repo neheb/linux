@@ -92,7 +92,7 @@ struct counter_device *counter_alloc(size_t sizeof_priv)
 	struct device *dev;
 	int err;
 
-	ch = kzalloc(sizeof(*ch) + sizeof_priv, GFP_KERNEL);
+	ch = kzalloc_flex(*ch, privdata, sizeof_priv);
 	if (!ch)
 		return NULL;
 
