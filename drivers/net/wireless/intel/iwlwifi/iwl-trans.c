@@ -275,7 +275,7 @@ struct iwl_trans *iwl_trans_alloc(unsigned int priv_size,
 	static struct lock_class_key __sync_cmd_key;
 #endif
 
-	trans = devm_kzalloc(dev, sizeof(*trans) + priv_size, GFP_KERNEL);
+	trans = devm_kzalloc(dev, struct_size(trans, trans_specific, priv_size), GFP_KERNEL);
 	if (!trans)
 		return NULL;
 
