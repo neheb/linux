@@ -6837,14 +6837,18 @@ static s32 brcmf_init_priv_mem(struct brcmf_cfg80211_info *cfg)
 	cfg->extra_buf = kzalloc(WL_EXTRA_BUF_MAX, GFP_KERNEL);
 	if (!cfg->extra_buf)
 		goto init_priv_mem_out;
-	cfg->wowl.nd = kzalloc(sizeof(*cfg->wowl.nd) + sizeof(u32), GFP_KERNEL);
+	cfg->wowl.nd = kzalloc_flex(*cfg->wowl.nd, channels, 1);
 	if (!cfg->wowl.nd)
 		goto init_priv_mem_out;
-	cfg->wowl.nd_info = kzalloc(sizeof(*cfg->wowl.nd_info) +
-				    sizeof(struct cfg80211_wowlan_nd_match *),
-				    GFP_KERNEL);
+
+	cfg->wowl.nd->n_channels = 1;
+
+	cfg->wowl.nd_info = kzalloc_flex(*cfg->wowl.nd_info, matches, 1);
 	if (!cfg->wowl.nd_info)
 		goto init_priv_mem_out;
+
+	cfg->wowl.nd_info->n_matches = 1;
+
 	cfg->escan_info.escan_buf = kzalloc(BRCMF_ESCAN_BUF_SIZE, GFP_KERNEL);
 	if (!cfg->escan_info.escan_buf)
 		goto init_priv_mem_out;
