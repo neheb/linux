@@ -568,13 +568,11 @@ of_at91_clk_pll_get_characteristics(struct device_node *np)
 		return NULL;
 	num_output /= num_cells;
 
-	characteristics = kzalloc_obj(*characteristics);
+	characteristics = kzalloc_flex(*characteristics, output, num_output);
 	if (!characteristics)
 		return NULL;
 
-	output = kzalloc_objs(*output, num_output);
-	if (!output)
-		goto out_free_characteristics;
+	characteristics->num_output = num_output;
 
 	if (num_cells > 2) {
 		out = kcalloc(num_output, sizeof(*out), GFP_KERNEL);
@@ -589,17 +587,18 @@ of_at91_clk_pll_get_characteristics(struct device_node *np)
 	}
 
 	for (i = 0; i < num_output; i++) {
+		output = &characteristics->output[i];
 		offset = i * num_cells;
 		if (of_property_read_u32_index(np,
 					       "atmel,pll-clk-output-ranges",
 					       offset, &tmp))
 			goto out_free_output;
-		output[i].min = tmp;
+		output->min = tmp;
 		if (of_property_read_u32_index(np,
 					       "atmel,pll-clk-output-ranges",
 					       offset + 1, &tmp))
 			goto out_free_output;
-		output[i].max = tmp;
+		output->max = tmp;
 
 		if (num_cells == 2)
 			continue;
@@ -621,8 +620,6 @@ of_at91_clk_pll_get_characteristics(struct device_node *np)
 	}
 
 	characteristics->input = input;
-	characteristics->num_output = num_output;
-	characteristics->output = output;
 	characteristics->out = out;
 	characteristics->icpll = icpll;
 	return characteristics;
@@ -630,8 +627,6 @@ of_at91_clk_pll_get_characteristics(struct device_node *np)
 out_free_output:
 	kfree(icpll);
 	kfree(out);
-	kfree(output);
-out_free_characteristics:
 	kfree(characteristics);
 	return NULL;
 }
