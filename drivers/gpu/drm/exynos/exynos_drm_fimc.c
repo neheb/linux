@@ -99,7 +99,6 @@ struct fimc_context {
 	void		*dma_priv;
 	struct device	*dev;
 	struct exynos_drm_ipp_task	*task;
-	struct exynos_drm_ipp_formats	*formats;
 	unsigned int			num_formats;
 
 	void __iomem	*regs;
@@ -108,6 +107,7 @@ struct fimc_context {
 	struct fimc_scaler	sc;
 	int	id;
 	int	irq;
+	struct exynos_drm_ipp_formats	formats[] __counted_by(num_formats);
 };
 
 static u32 fimc_read(struct fimc_context *ctx, u32 reg)
@@ -1264,7 +1264,7 @@ static const struct drm_exynos_ipp_limit fimc_4210_limits_tiled_v2[] = {
 static int fimc_probe(struct platform_device *pdev)
 {
 	const struct drm_exynos_ipp_limit *limits;
-	struct exynos_drm_ipp_formats *formats;
+	struct exynos_drm_ipp_formats *format;
 	struct device *dev = &pdev->dev;
 	struct fimc_context *ctx;
 	int ret;
@@ -1273,19 +1273,15 @@ static int fimc_probe(struct platform_device *pdev)
 	if (exynos_drm_check_fimc_device(dev) != 0)
 		return -ENODEV;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
+	num_formats = ARRAY_SIZE(fimc_formats) + ARRAY_SIZE(fimc_tiled_formats);
+	ctx = devm_kzalloc(dev, struct_size(ctx, formats, num_formats), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
+	ctx->num_formats = num_formats;
+
 	ctx->dev = dev;
 	ctx->id = of_alias_get_id(dev->of_node, "fimc");
-
-	/* construct formats/limits array */
-	num_formats = ARRAY_SIZE(fimc_formats) + ARRAY_SIZE(fimc_tiled_formats);
-	formats = devm_kcalloc(dev, num_formats, sizeof(*formats),
-			       GFP_KERNEL);
-	if (!formats)
-		return -ENOMEM;
 
 	/* linear formats */
 	if (ctx->id < 3) {
@@ -1296,11 +1292,13 @@ static int fimc_probe(struct platform_device *pdev)
 		num_limits = ARRAY_SIZE(fimc_4210_limits_v2);
 	}
 	for (i = 0; i < ARRAY_SIZE(fimc_formats); i++) {
-		formats[i].fourcc = fimc_formats[i];
-		formats[i].type = DRM_EXYNOS_IPP_FORMAT_SOURCE |
+		format = &ctx->formats[i];
+
+		format->fourcc = fimc_formats[i];
+		format->type = DRM_EXYNOS_IPP_FORMAT_SOURCE |
 				  DRM_EXYNOS_IPP_FORMAT_DESTINATION;
-		formats[i].limits = limits;
-		formats[i].num_limits = num_limits;
+		format->limits = limits;
+		format->num_limits = num_limits;
 	}
 
 	/* tiled formats */
@@ -1312,16 +1310,15 @@ static int fimc_probe(struct platform_device *pdev)
 		num_limits = ARRAY_SIZE(fimc_4210_limits_tiled_v2);
 	}
 	for (j = i, i = 0; i < ARRAY_SIZE(fimc_tiled_formats); j++, i++) {
-		formats[j].fourcc = fimc_tiled_formats[i];
-		formats[j].modifier = DRM_FORMAT_MOD_SAMSUNG_64_32_TILE;
-		formats[j].type = DRM_EXYNOS_IPP_FORMAT_SOURCE |
-				  DRM_EXYNOS_IPP_FORMAT_DESTINATION;
-		formats[j].limits = limits;
-		formats[j].num_limits = num_limits;
-	}
+		format = &ctx->formats[j];
 
-	ctx->formats = formats;
-	ctx->num_formats = num_formats;
+		format->fourcc = fimc_tiled_formats[i];
+		format->modifier = DRM_FORMAT_MOD_SAMSUNG_64_32_TILE;
+		format->type = DRM_EXYNOS_IPP_FORMAT_SOURCE |
+				  DRM_EXYNOS_IPP_FORMAT_DESTINATION;
+		format->limits = limits;
+		format->num_limits = num_limits;
+	}
 
 	/* resource memory */
 	ctx->regs = devm_platform_ioremap_resource(pdev, 0);
