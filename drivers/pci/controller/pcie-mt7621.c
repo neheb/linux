@@ -226,19 +226,18 @@ static int mt7621_pcie_parse_port(struct mt7621_pcie *pcie,
 	}
 
 	snprintf(name, sizeof(name), "pcie-phy%d", slot);
-	port->phy = devm_of_phy_get(dev, node, name);
+	port->phy = of_phy_get(node, name);
 	if (IS_ERR(port->phy)) {
 		dev_err(dev, "failed to get pcie-phy%d\n", slot);
 		err = PTR_ERR(port->phy);
 		goto remove_reset;
 	}
 
-	port->gpio_rst = devm_gpiod_get_index_optional(dev, "reset", slot,
-						       GPIOD_OUT_LOW);
+	port->gpio_rst = gpiod_get_index_optional(dev, "reset", slot, GPIOD_OUT_LOW);
 	if (IS_ERR(port->gpio_rst)) {
 		dev_err(dev, "failed to get GPIO for PCIe%d\n", slot);
 		err = PTR_ERR(port->gpio_rst);
-		goto remove_reset;
+		goto remove_phy;
 	}
 
 	port->slot = slot;
@@ -249,6 +248,8 @@ static int mt7621_pcie_parse_port(struct mt7621_pcie *pcie,
 
 	return 0;
 
+remove_phy:
+	of_phy_put(port->phy);
 remove_reset:
 	reset_control_put(port->pcie_rst);
 	return err;
@@ -522,10 +523,22 @@ remove_resets:
 static void mt7621_pcie_remove(struct platform_device *pdev)
 {
 	struct mt7621_pcie *pcie = platform_get_drvdata(pdev);
-	struct mt7621_pcie_port *port;
+	struct pci_host_bridge *host = pci_host_bridge_from_priv(pcie);
+	struct mt7621_pcie_port *port, *tmp;
 
-	list_for_each_entry(port, &pcie->ports, list)
+	pci_stop_root_bus(host->bus);
+	pci_remove_root_bus(host->bus);
+	pci_free_resource_list(&host->windows);
+
+	list_for_each_entry_safe(port, tmp, &pcie->ports, list) {
+		list_del(&port->list);
+		gpiod_put(port->gpio_rst);
+		phy_power_off(port->phy);
+		phy_exit(port->phy);
+		of_phy_put(port->phy);
 		reset_control_put(port->pcie_rst);
+		clk_disable_unprepare(port->clk);
+	}
 }
 
 static const struct of_device_id mt7621_pcie_ids[] = {
