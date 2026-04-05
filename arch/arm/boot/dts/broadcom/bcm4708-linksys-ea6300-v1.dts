@@ -51,6 +51,10 @@
 	status = "okay";
 };
 
+&usb3 {
+	vcc-gpio = <&chipcommon 10 GPIO_ACTIVE_HIGH>;
+};
+
 &srab {
 	status = "okay";
 
