@@ -570,32 +570,23 @@ struct crc_data {
 	wait_queue_head_t done;                   /* crc update done */
 	u32 *crc32;                               /* points to handle's crc32 */
 	size_t **unc_len;			  /* uncompressed lengths */
-	unsigned char **unc;			  /* uncompressed data */
+	unsigned char *unc[];			  /* uncompressed data */
 };
 
 static struct crc_data *alloc_crc_data(int nr_threads)
 {
 	struct crc_data *crc;
+	size_t alloc_size;
 
-	crc = kzalloc_obj(*crc);
+	alloc_size = struct_size(crc, unc, nr_threads);
+	alloc_size += sizeof(*crc->unc_len) * nr_threads;
+	crc = kzalloc(alloc_size, GFP_KERNEL);
 	if (!crc)
 		return NULL;
 
-	crc->unc = kcalloc(nr_threads, sizeof(*crc->unc), GFP_KERNEL);
-	if (!crc->unc)
-		goto err_free_crc;
-
-	crc->unc_len = kzalloc_objs(*crc->unc_len, nr_threads);
-	if (!crc->unc_len)
-		goto err_free_unc;
+	crc->unc_len = (size_t **)(crc->unc + nr_threads);
 
 	return crc;
-
-err_free_unc:
-	kfree(crc->unc);
-err_free_crc:
-	kfree(crc);
-	return NULL;
 }
 
 static void free_crc_data(struct crc_data *crc)
@@ -606,8 +597,6 @@ static void free_crc_data(struct crc_data *crc)
 	if (crc->thr)
 		kthread_stop(crc->thr);
 
-	kfree(crc->unc_len);
-	kfree(crc->unc);
 	kfree(crc);
 }
 
