@@ -31,11 +31,11 @@ struct scpi_thermal_zone {
 
 struct scpi_sensors {
 	struct scpi_ops *scpi_ops;
-	struct sensor_data *data;
 	struct list_head thermal_zones;
 	struct attribute **attrs;
 	struct attribute_group group;
 	const struct attribute_group *groups[2];
+	struct sensor_data data[];
 };
 
 static const u32 gxbb_scpi_scale[] = {
@@ -154,13 +154,9 @@ static int scpi_hwmon_probe(struct platform_device *pdev)
 	if (!nr_sensors)
 		return -ENODEV;
 
-	scpi_sensors = devm_kzalloc(dev, sizeof(*scpi_sensors), GFP_KERNEL);
+	scpi_sensors = devm_kzalloc(dev, struct_size(scpi_sensors, data, nr_sensors),
+			GFP_KERNEL);
 	if (!scpi_sensors)
-		return -ENOMEM;
-
-	scpi_sensors->data = devm_kcalloc(dev, nr_sensors,
-				   sizeof(*scpi_sensors->data), GFP_KERNEL);
-	if (!scpi_sensors->data)
 		return -ENOMEM;
 
 	scpi_sensors->attrs = devm_kcalloc(dev, (nr_sensors * 2) + 1,
