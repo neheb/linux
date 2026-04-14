@@ -552,7 +552,7 @@ static INLINING ret_t forward_to_next_hop(struct __sk_buff *skb, encap_headers_t
 	}
 
 	/* Remove ip->saddr, add next_hop->s_addr */
-	const uint64_t off = offsetof(typeof(*encap), ip.check);
+	const uint64_t off = struct_offset(encap, ip.check);
 	int ret = bpf_l3_csum_replace(skb, off, old_saddr, next_hop->s_addr, 4);
 	if (ret < 0) {
 		return TC_ACT_SHOT;

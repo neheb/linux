@@ -1753,7 +1753,7 @@ ieee80211_process_tdls_channel_switch_resp(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_tdls_data *tf = (void *)skb->data;
 	bool local_initiator;
 	struct ieee80211_rx_status *rx_status = IEEE80211_SKB_RXCB(skb);
-	int baselen = offsetof(typeof(*tf), u.chan_switch_resp.variable);
+	int baselen = struct_offset(tf, u.chan_switch_resp.variable);
 	struct ieee80211_tdls_ch_sw_params params = {};
 	int ret;
 
@@ -1854,7 +1854,7 @@ ieee80211_process_tdls_channel_switch_req(struct ieee80211_sub_if_data *sdata,
 	enum nl80211_band band;
 	struct ieee80211_tdls_data *tf = (void *)skb->data;
 	struct ieee80211_rx_status *rx_status = IEEE80211_SKB_RXCB(skb);
-	int baselen = offsetof(typeof(*tf), u.chan_switch_req.variable);
+	int baselen = struct_offset(tf, u.chan_switch_req.variable);
 	struct ieee80211_tdls_ch_sw_params params = {};
 	int ret = 0;
 

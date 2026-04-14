@@ -461,7 +461,7 @@ static ssize_t sequence_store(struct device *dev, struct device_attribute *attr,
 	param = (struct ec_params_lightbar *)msg->data;
 	param->cmd = LIGHTBAR_CMD_SEQ;
 	param->seq.num = num;
-	msg->outsize = offsetof(typeof(*param), seq) + sizeof(param->seq);
+	msg->outsize = struct_offset(param, seq) + sizeof(param->seq);
 	msg->insize = 0;
 	ret = lb_throttle();
 	if (ret)
@@ -505,7 +505,7 @@ static ssize_t program_store(struct device *dev, struct device_attribute *attr,
 			return -EINVAL;
 		}
 	} else {
-		extra_bytes = offsetof(typeof(*param), set_program_ex) +
+		extra_bytes = struct_offset(param, set_program_ex) +
 			sizeof(param->set_program_ex);
 		max_size = ec->ec_dev->max_request - extra_bytes;
 	}

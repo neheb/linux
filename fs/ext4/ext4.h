@@ -867,7 +867,7 @@ struct ext4_inode {
  * inode-size = GOOD_OLD_INODE_SIZE + i_extra_isize
  */
 #define EXT4_FITS_IN_INODE(ext4_inode, einode, field)	\
-	((offsetof(typeof(*ext4_inode), field) +	\
+	((struct_offset(ext4_inode, field) +		\
 	  sizeof((ext4_inode)->field))			\
 	<= (EXT4_GOOD_OLD_INODE_SIZE +			\
 	    (einode)->i_extra_isize))			\

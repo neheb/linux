@@ -1107,7 +1107,7 @@ do {									\
 	typeof (ptr) ___p = (ptr);					\
 									\
 	if (___p) {							\
-		BUILD_BUG_ON(offsetof(typeof(*(ptr)), rhf) >= 4096);	\
+		BUILD_BUG_ON(struct_offset(ptr, rhf) >= 4096);		\
 		kvfree_call_rcu(&((___p)->rhf), (void *) (___p));	\
 	}								\
 } while (0)

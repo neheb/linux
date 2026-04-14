@@ -613,7 +613,7 @@ static void complete_transaction(struct fw_card *card, int rcode, u32 request_ts
 		// to stay compatible with a pre-2.6.27 bug.  Since the bug is harmless
 		// for short reads and some apps depended on it, this is both safe
 		// and prudent for compatibility.
-		if (rsp->length <= sizeof(*rsp) - offsetof(typeof(*rsp), data))
+		if (rsp->length <= sizeof(*rsp) - struct_offset(rsp, data))
 			queue_event(client, &e->event, rsp, sizeof(*rsp), rsp->data, rsp->length);
 		else
 			queue_event(client, &e->event, rsp, sizeof(*rsp) + rsp->length, NULL, 0);

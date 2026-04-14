@@ -1042,7 +1042,7 @@ ieee802_11_parse_elems_full(struct ieee80211_elems_parse_params *params)
 	size_t scratch_len = 3 * params->len;
 	bool multi_link_inner = false;
 
-	BUILD_BUG_ON(offsetof(typeof(*elems_parse), elems) != 0);
+	BUILD_BUG_ON(struct_offset(elems_parse, elems) != 0);
 
 	/* cannot parse for both a specific link and non-transmitted BSS */
 	if (WARN_ON(params->link_id >= 0 && params->bss))

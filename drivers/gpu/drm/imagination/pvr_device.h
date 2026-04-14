@@ -760,7 +760,7 @@ pvr_ioctl_union_padding_check(void *instance, size_t union_offset,
 	({                                                                   \
 		typeof(struct_instance_) __instance = (struct_instance_);    \
 		size_t __union_offset = PVR_STATIC_ASSERT_64BIT_ALIGNED(     \
-			offsetof(typeof(*__instance), union_));              \
+			struct_offset(*__instance, union_));                 \
 		size_t __union_size = PVR_STATIC_ASSERT_64BIT_ALIGNED(       \
 			sizeof(__instance->union_));                         \
 		size_t __member_size = PVR_STATIC_ASSERT_64BIT_ALIGNED(      \

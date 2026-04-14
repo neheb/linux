@@ -280,8 +280,8 @@ struct iommufd_object *_iommufd_object_alloc(struct iommufd_ctx *ictx,
 	container_of(_iommufd_object_alloc(                                    \
 			     ictx,                                             \
 			     sizeof(*(ptr)) + BUILD_BUG_ON_ZERO(               \
-						      offsetof(typeof(*(ptr)), \
-							       obj) != 0),     \
+						      struct_offset(ptr, obj)  \
+						      != 0),                   \
 			     type),                                            \
 		     typeof(*(ptr)), obj)
 
@@ -300,8 +300,8 @@ _iommufd_object_alloc_ucmd(struct iommufd_ucmd *ucmd, size_t size,
 	container_of(_iommufd_object_alloc_ucmd(                               \
 			     ucmd,                                             \
 			     sizeof(*(ptr)) + BUILD_BUG_ON_ZERO(               \
-						      offsetof(typeof(*(ptr)), \
-							       obj) != 0),     \
+						      struct_offset(ptr, obj)  \
+						      != 0),                   \
 			     type),                                            \
 		     typeof(*(ptr)), obj)
 

@@ -4630,7 +4630,7 @@ int perf_file_header__read(struct perf_file_header *header,
 
 	if (header->size != sizeof(*header)) {
 		/* Support the previous format */
-		if (header->size == offsetof(typeof(*header), adds_features))
+		if (header->size == struct_offset(header, adds_features))
 			bitmap_zero(header->adds_features, HEADER_FEAT_BITS);
 		else
 			return -1;

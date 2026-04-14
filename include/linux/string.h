@@ -531,8 +531,8 @@ void memcpy_and_pad(void *dest, size_t dest_len, const void *src, size_t count,
 ({									\
 	u8 *__ptr = (u8 *)(obj);					\
 	typeof(v) __val = (v);						\
-	memset(__ptr + offsetof(typeof(*(obj)), member), __val,		\
-	       sizeof(*(obj)) - offsetof(typeof(*(obj)), member));	\
+	memset(__ptr + struct_offset(obj, member), __val,		\
+	       sizeof(*(obj)) - struct_offset(obj, member));		\
 })
 
 /**

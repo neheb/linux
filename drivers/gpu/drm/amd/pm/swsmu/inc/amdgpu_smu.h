@@ -1562,8 +1562,8 @@ struct pptable_funcs {
 	 * @get_ecc_table:  message SMU to get ECC INFO table.
 	 */
 	ssize_t (*get_ecc_info)(struct smu_context *smu, void *table);
-	
-	
+
+
 	/**
 	 * @stb_collect_info: Collects Smart Trace Buffers data.
 	 */
@@ -1770,9 +1770,9 @@ enum smu_baco_seq {
 #define smu_memcpy_trailing(dst, first_dst_member, last_dst_member,	   \
 			    src, first_src_member)			   \
 ({									   \
-	size_t __src_offset = offsetof(typeof(*(src)), first_src_member);  \
+	size_t __src_offset = struct_offset(src, first_src_member);	   \
 	size_t __src_size = sizeof(*(src)) - __src_offset;		   \
-	size_t __dst_offset = offsetof(typeof(*(dst)), first_dst_member);  \
+	size_t __dst_offset = struct_offset(dst, first_dst_member);	   \
 	size_t __dst_size = offsetofend(typeof(*(dst)), last_dst_member) - \
 			    __dst_offset;				   \
 	BUILD_BUG_ON(__src_size != __dst_size);				   \

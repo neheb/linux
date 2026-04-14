@@ -124,7 +124,7 @@ static inline bool llist_on_list(const struct llist_node *node)
  * container_of() macro.
  */
 #define member_address_is_nonnull(ptr, member)	\
-	((uintptr_t)(ptr) + offsetof(typeof(*(ptr)), member) != 0)
+	((uintptr_t)(ptr) + struct_offset(ptr, member) != 0)
 
 /**
  * llist_for_each - iterate over some deleted entries of a lock-less list
