@@ -187,28 +187,31 @@ static void ks8851_read_mac_addr(struct net_device *dev)
  * we try that. If no valid mac address is found we use eth_random_addr()
  * to create a new one.
  */
-static void ks8851_init_mac(struct ks8851_net *ks, struct device_node *np)
+static int ks8851_init_mac(struct ks8851_net *ks, struct device_node *np)
 {
 	struct net_device *dev = ks->netdev;
 	int ret;
 
 	ret = of_get_ethdev_address(np, dev);
+	if (ret == -EPROBE_DEFER)
+		return ret;
+
 	if (!ret) {
 		ks8851_write_mac_addr(dev);
-		return;
+		return 0;
 	}
 
 	if (ks->rc_ccr & CCR_EEPROM) {
 		ks8851_read_mac_addr(dev);
-		if (is_valid_ether_addr(dev->dev_addr))
-			return;
-
-		netdev_err(ks->netdev, "invalid mac address read %pM\n",
-				dev->dev_addr);
+		if (!is_valid_ether_addr(dev->dev_addr))
+			netdev_err(ks->netdev, "invalid mac address read %pM\n",
+					dev->dev_addr);
 	}
 
 	eth_hw_addr_random(dev);
 	ks8851_write_mac_addr(dev);
+
+	return 0;
 }
 
 /**
@@ -1177,7 +1180,9 @@ int ks8851_probe_common(struct net_device *netdev, struct device *dev,
 	ks->rc_ccr = ks8851_rdreg16(ks, KS_CCR);
 
 	ks8851_read_selftest(ks);
-	ks8851_init_mac(ks, dev->of_node);
+	ret = ks8851_init_mac(ks, dev->of_node);
+	if (ret)
+		return ret;
 
 	ret = register_netdev(netdev);
 	if (ret) {
