@@ -119,12 +119,14 @@ static void ravb_set_rate_rcar(struct net_device *ndev)
  * Ethernet AVB device doesn't have ROM for MAC address.
  * This function gets the MAC address that was used by a bootloader.
  */
-static void ravb_read_mac_address(struct device_node *np,
+static int ravb_read_mac_address(struct device_node *np,
 				  struct net_device *ndev)
 {
 	int ret;
 
 	ret = of_get_ethdev_address(np, ndev);
+	if (ret == -EPROBE_DEFER)
+		return ret;
 	if (ret) {
 		u32 mahr = ravb_read(ndev, MAHR);
 		u32 malr = ravb_read(ndev, MALR);
@@ -138,6 +140,8 @@ static void ravb_read_mac_address(struct device_node *np,
 		addr[5] = (malr >>  0) & 0xFF;
 		eth_hw_addr_set(ndev, addr);
 	}
+
+	return 0;
 }
 
 static void ravb_mdio_ctrl(struct mdiobb_ctrl *ctrl, u32 mask, int set)
@@ -3057,7 +3061,10 @@ static int ravb_probe(struct platform_device *pdev)
 		goto out_rpm_put;
 
 	/* Read and set MAC address */
-	ravb_read_mac_address(np, ndev);
+	error = ravb_read_mac_address(np, ndev);
+	if (error)
+		goto out_rpm_put;
+
 	if (!is_valid_ether_addr(ndev->dev_addr)) {
 		dev_warn(&pdev->dev,
 			 "no valid MAC address supplied, using a random one\n");
