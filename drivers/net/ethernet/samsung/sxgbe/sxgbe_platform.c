@@ -118,7 +118,9 @@ static int sxgbe_platform_probe(struct platform_device *pdev)
 	}
 
 	/* Get MAC address if available (DT) */
-	of_get_ethdev_address(node, priv->dev);
+	ret = of_get_ethdev_address(node, priv->dev);
+	if (ret == -EPROBE_DEFER)
+		goto err_irq_unmap;
 
 	/* Get the TX/RX IRQ numbers */
 	for (i = 0, chan = 1; i < SXGBE_TX_QUEUES; i++) {
@@ -156,6 +158,7 @@ err_rx_irq_unmap:
 err_tx_irq_unmap:
 	while (i--)
 		irq_dispose_mapping(priv->txq[i]->irq_no);
+err_irq_unmap:
 	irq_dispose_mapping(priv->irq);
 err_drv_remove:
 	sxgbe_drv_remove(ndev);
