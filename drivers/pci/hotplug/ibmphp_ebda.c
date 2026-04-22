@@ -63,37 +63,17 @@ static struct ebda_hpc_list * __init alloc_ebda_hpc_list(void)
 static struct controller *alloc_ebda_hpc(u32 slot_count, u32 bus_count)
 {
 	struct controller *controller;
-	struct ebda_hpc_slot *slots;
-	struct ebda_hpc_bus *buses;
+	size_t alloc_size;
 
-	controller = kzalloc_obj(struct controller);
+	alloc_size = struct_size(controller, slots, slot_count);
+	alloc_size += sizeof(*controller->buses) * bus_count;
+	controller = kzalloc(alloc_size, GFP_KERNEL);
 	if (!controller)
-		goto error;
+		return NULL;
 
-	slots = kzalloc_objs(struct ebda_hpc_slot, slot_count);
-	if (!slots)
-		goto error_contr;
-	controller->slots = slots;
-
-	buses = kzalloc_objs(struct ebda_hpc_bus, bus_count);
-	if (!buses)
-		goto error_slots;
-	controller->buses = buses;
+	controller->buses = (struct ebda_hpc_bus *)(controller->slots + slot_count);
 
 	return controller;
-error_slots:
-	kfree(controller->slots);
-error_contr:
-	kfree(controller);
-error:
-	return NULL;
-}
-
-static void free_ebda_hpc(struct controller *controller)
-{
-	kfree(controller->slots);
-	kfree(controller->buses);
-	kfree(controller);
 }
 
 static struct ebda_rsrc_list * __init alloc_ebda_rsrc_list(void)
@@ -908,7 +888,7 @@ static int __init ebda_rsrc_controller(void)
 error:
 	kfree(tmp_slot);
 error_no_slot:
-	free_ebda_hpc(hpc_ptr);
+	kfree(hpc_ptr);
 	return rc;
 }
 
@@ -1051,7 +1031,7 @@ void ibmphp_free_ebda_hpc_queue(void)
 			++pci_flag;
 			pci_unregister_driver(&ibmphp_driver);
 		}
-		free_ebda_hpc(controller);
+		kfree(controller);
 	}
 }
 
