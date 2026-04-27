@@ -202,23 +202,15 @@ static int mt76_led_init(struct mt76_phy *phy)
 	if (!phy->leds.cdev.brightness_set && !phy->leds.cdev.blink_set)
 		return 0;
 
-	np = of_get_child_by_name(np, "led");
+	np = of_get_available_child_by_name(np, "led");
 	if (np) {
-		if (!of_device_is_available(np)) {
-			of_node_put(np);
-			dev_info(dev->dev,
-				"led registration was explicitly disabled by dts\n");
-			return 0;
-		}
-
 		if (phy == &dev->phy) {
 			int led_pin;
 
 			if (!of_property_read_u32(np, "led-sources", &led_pin))
 				phy->leds.pin = led_pin;
 
-			phy->leds.al =
-				of_property_read_bool(np, "led-active-low");
+			phy->leds.al = of_property_present(np, "led-active-low");
 		}
 
 		of_node_put(np);
