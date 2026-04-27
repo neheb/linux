@@ -38,13 +38,12 @@ static int mt76_get_of_eeprom_data(struct mt76_dev *dev, void *eep, int len)
 int mt76_get_of_data_from_nvmem(struct mt76_dev *dev, void *eep,
 				const char *cell_name, int len)
 {
-	struct device_node *np = dev->dev->of_node;
 	struct nvmem_cell *cell;
 	const void *data;
 	size_t retlen;
 	int ret = 0;
 
-	cell = of_nvmem_cell_get(np, cell_name);
+	cell = nvmem_cell_get(dev->dev, cell_name);
 	if (IS_ERR(cell))
 		return PTR_ERR(cell);
 

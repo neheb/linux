@@ -314,9 +314,7 @@ static void mt7622_apply_cal_free_data(struct mt7615_dev *dev)
 
 static void mt7615_cal_free_data(struct mt7615_dev *dev)
 {
-	struct device_node *np = dev->mt76.dev->of_node;
-
-	if (!np || !of_property_read_bool(np, "mediatek,eeprom-merge-otp"))
+	if (!device_property_present(dev->mt76.dev, "mediatek,eeprom-merge-otp"))
 		return;
 
 	switch (mt76_chip(&dev->mt76)) {
