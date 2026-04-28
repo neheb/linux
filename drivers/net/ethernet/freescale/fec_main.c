@@ -5219,8 +5219,8 @@ fec_probe(struct platform_device *pdev)
 	fec_enet_get_queue_num(pdev, &num_tx_qs, &num_rx_qs);
 
 	/* Init network device */
-	ndev = alloc_etherdev_mqs(sizeof(struct fec_enet_private) +
-				  FEC_STATS_SIZE, num_tx_qs, num_rx_qs);
+	ndev = alloc_etherdev_mqs(struct_size(fep, ethtool_stats, ARRAY_SIZE(fec_stats)),
+				  num_tx_qs, num_rx_qs);
 	if (!ndev)
 		return -ENOMEM;
 
@@ -5236,8 +5236,6 @@ fec_probe(struct platform_device *pdev)
 		fep->quirks = dev_info->quirks;
 
 	fep->netdev = ndev;
-	fep->num_rx_queues = num_rx_qs;
-	fep->num_tx_queues = num_tx_qs;
 
 	/* default enable pause frame auto negotiation */
 	if (fep->quirks & FEC_QUIRK_HAS_GBIT)
