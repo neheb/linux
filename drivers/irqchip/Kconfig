@@ -269,7 +269,7 @@ config ORION_IRQCHIP
 	select IRQ_DOMAIN
 
 config PIC32_EVIC
-	def_bool MACH_PIC32 || COMPILE_TEST
+	def_bool MACH_PIC32
 	select GENERIC_IRQ_CHIP
 	select IRQ_DOMAIN
 	help
