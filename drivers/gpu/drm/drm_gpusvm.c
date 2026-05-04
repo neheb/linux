@@ -1554,12 +1554,16 @@ map_pages:
 				goto err_unmap;
 			}
 
-			if (!i)
-				dma_iova_try_alloc(gpusvm->drm->dev, state,
-						   npages * PAGE_SIZE >=
-						   HPAGE_PMD_SIZE ?
-						   HPAGE_PMD_SIZE : 0,
-						   npages * PAGE_SIZE);
+			if (!i) {
+				if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) && (npages * PAGE_SIZE >= HPAGE_PMD_SIZE))
+					dma_iova_try_alloc(gpusvm->drm->dev, state,
+							   HPAGE_PMD_SIZE,
+							   npages * PAGE_SIZE);
+				else
+					dma_iova_try_alloc(gpusvm->drm->dev, state,
+							   0,
+							   npages * PAGE_SIZE);
+			}
 
 			if (dma_use_iova(state)) {
 				err = dma_iova_link(gpusvm->drm->dev, state,
