@@ -143,6 +143,17 @@ config I8259
 	bool
 	select IRQ_DOMAIN
 
+config ATH79_CPU
+	bool "Atheros ATH79 CPU interrupt controller"
+	depends on ATH79 || COMPILE_TEST
+	default ATH79
+	select GENERIC_IRQ_CHIP
+	select IRQ_DOMAIN
+	help
+	  Enable support for the Atheros ATH79 CPU interrupt controller.
+
+	  If unsure say n.
+
 config BCM2712_MIP
 	tristate "Broadcom BCM2712 MSI-X Interrupt Peripheral support"
 	depends on ARCH_BRCMSTB || ARCH_BCM2835 || COMPILE_TEST
