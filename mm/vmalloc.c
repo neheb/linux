@@ -845,8 +845,10 @@ struct page *vmalloc_to_page(const void *vmalloc_addr)
 	p4d = p4d_offset(pgd, addr);
 	if (p4d_none(*p4d))
 		return NULL;
-	if (p4d_leaf(*p4d))
-		return p4d_page(*p4d) + ((addr & ~P4D_MASK) >> PAGE_SHIFT);
+	if (p4d_leaf(*p4d)) {
+		page = p4d_page(*p4d);
+		return page ? page + ((addr & ~P4D_MASK) >> PAGE_SHIFT) : NULL;
+	}
 	if (WARN_ON_ONCE(p4d_bad(*p4d)))
 		return NULL;
 
