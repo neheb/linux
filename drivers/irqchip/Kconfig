@@ -489,7 +489,8 @@ config STM32_EXTI
 
 config QCOM_IRQ_COMBINER
 	bool "Qualcomm IRQ combiner support"
-	depends on ARCH_QCOM && ACPI
+	depends on ARCH_QCOM || COMPILE_TEST
+	depends on ACPI
 	select IRQ_DOMAIN_HIERARCHY
 	help
 	  Say yes here to add support for the IRQ combiner devices embedded
