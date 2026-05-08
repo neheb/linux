@@ -524,9 +524,92 @@ static void dispc_save_context(struct dispc_device *dispc)
 	DSSDBG("context saved\n");
 }
 
+static noinline_for_stack void dispc_restore_mgr_context(struct dispc_device *dispc,
+							 int i)
+{
+	RR(dispc, DEFAULT_COLOR(i));
+	RR(dispc, TRANS_COLOR(i));
+	RR(dispc, SIZE_MGR(i));
+	if (i == OMAP_DSS_CHANNEL_DIGIT)
+		return;
+	RR(dispc, TIMING_H(i));
+	RR(dispc, TIMING_V(i));
+	RR(dispc, POL_FREQ(i));
+	RR(dispc, DIVISORo(i));
+
+	RR(dispc, DATA_CYCLE1(i));
+	RR(dispc, DATA_CYCLE2(i));
+	RR(dispc, DATA_CYCLE3(i));
+
+	if (dispc_has_feature(dispc, FEAT_CPR)) {
+		RR(dispc, CPR_COEF_R(i));
+		RR(dispc, CPR_COEF_G(i));
+		RR(dispc, CPR_COEF_B(i));
+	}
+}
+
+static noinline_for_stack void dispc_restore_ovl_context(struct dispc_device *dispc,
+							 int i)
+{
+	int j;
+
+	RR(dispc, OVL_BA0(i));
+	RR(dispc, OVL_BA1(i));
+	RR(dispc, OVL_POSITION(i));
+	RR(dispc, OVL_SIZE(i));
+	RR(dispc, OVL_ATTRIBUTES(i));
+	RR(dispc, OVL_FIFO_THRESHOLD(i));
+	RR(dispc, OVL_ROW_INC(i));
+	RR(dispc, OVL_PIXEL_INC(i));
+	if (dispc_has_feature(dispc, FEAT_PRELOAD))
+		RR(dispc, OVL_PRELOAD(i));
+	if (i == OMAP_DSS_GFX) {
+		RR(dispc, OVL_WINDOW_SKIP(i));
+		RR(dispc, OVL_TABLE_BA(i));
+		return;
+	}
+	RR(dispc, OVL_FIR(i));
+	RR(dispc, OVL_PICTURE_SIZE(i));
+	RR(dispc, OVL_ACCU0(i));
+	RR(dispc, OVL_ACCU1(i));
+
+	for (j = 0; j < 8; j++)
+		RR(dispc, OVL_FIR_COEF_H(i, j));
+
+	for (j = 0; j < 8; j++)
+		RR(dispc, OVL_FIR_COEF_HV(i, j));
+
+	for (j = 0; j < 5; j++)
+		RR(dispc, OVL_CONV_COEF(i, j));
+
+	if (dispc_has_feature(dispc, FEAT_FIR_COEF_V)) {
+		for (j = 0; j < 8; j++)
+			RR(dispc, OVL_FIR_COEF_V(i, j));
+	}
+
+	if (dispc_has_feature(dispc, FEAT_HANDLE_UV_SEPARATE)) {
+		RR(dispc, OVL_BA0_UV(i));
+		RR(dispc, OVL_BA1_UV(i));
+		RR(dispc, OVL_FIR2(i));
+		RR(dispc, OVL_ACCU2_0(i));
+		RR(dispc, OVL_ACCU2_1(i));
+
+		for (j = 0; j < 8; j++)
+			RR(dispc, OVL_FIR_COEF_H2(i, j));
+
+		for (j = 0; j < 8; j++)
+			RR(dispc, OVL_FIR_COEF_HV2(i, j));
+
+		for (j = 0; j < 8; j++)
+			RR(dispc, OVL_FIR_COEF_V2(i, j));
+	}
+	if (dispc_has_feature(dispc, FEAT_ATTR2))
+		RR(dispc, OVL_ATTRIBUTES2(i));
+}
+
 static noinline_for_stack void dispc_restore_context(struct dispc_device *dispc)
 {
-	int i, j;
+	int i;
 
 	DSSDBG("dispc_restore_context\n");
 
@@ -545,82 +628,11 @@ static noinline_for_stack void dispc_restore_context(struct dispc_device *dispc)
 	if (dispc_has_feature(dispc, FEAT_MGR_LCD3))
 		RR(dispc, CONFIG3);
 
-	for (i = 0; i < dispc_get_num_mgrs(dispc); i++) {
-		RR(dispc, DEFAULT_COLOR(i));
-		RR(dispc, TRANS_COLOR(i));
-		RR(dispc, SIZE_MGR(i));
-		if (i == OMAP_DSS_CHANNEL_DIGIT)
-			continue;
-		RR(dispc, TIMING_H(i));
-		RR(dispc, TIMING_V(i));
-		RR(dispc, POL_FREQ(i));
-		RR(dispc, DIVISORo(i));
+	for (i = 0; i < dispc_get_num_mgrs(dispc); i++)
+		dispc_restore_mgr_context(dispc, i);
 
-		RR(dispc, DATA_CYCLE1(i));
-		RR(dispc, DATA_CYCLE2(i));
-		RR(dispc, DATA_CYCLE3(i));
-
-		if (dispc_has_feature(dispc, FEAT_CPR)) {
-			RR(dispc, CPR_COEF_R(i));
-			RR(dispc, CPR_COEF_G(i));
-			RR(dispc, CPR_COEF_B(i));
-		}
-	}
-
-	for (i = 0; i < dispc_get_num_ovls(dispc); i++) {
-		RR(dispc, OVL_BA0(i));
-		RR(dispc, OVL_BA1(i));
-		RR(dispc, OVL_POSITION(i));
-		RR(dispc, OVL_SIZE(i));
-		RR(dispc, OVL_ATTRIBUTES(i));
-		RR(dispc, OVL_FIFO_THRESHOLD(i));
-		RR(dispc, OVL_ROW_INC(i));
-		RR(dispc, OVL_PIXEL_INC(i));
-		if (dispc_has_feature(dispc, FEAT_PRELOAD))
-			RR(dispc, OVL_PRELOAD(i));
-		if (i == OMAP_DSS_GFX) {
-			RR(dispc, OVL_WINDOW_SKIP(i));
-			RR(dispc, OVL_TABLE_BA(i));
-			continue;
-		}
-		RR(dispc, OVL_FIR(i));
-		RR(dispc, OVL_PICTURE_SIZE(i));
-		RR(dispc, OVL_ACCU0(i));
-		RR(dispc, OVL_ACCU1(i));
-
-		for (j = 0; j < 8; j++)
-			RR(dispc, OVL_FIR_COEF_H(i, j));
-
-		for (j = 0; j < 8; j++)
-			RR(dispc, OVL_FIR_COEF_HV(i, j));
-
-		for (j = 0; j < 5; j++)
-			RR(dispc, OVL_CONV_COEF(i, j));
-
-		if (dispc_has_feature(dispc, FEAT_FIR_COEF_V)) {
-			for (j = 0; j < 8; j++)
-				RR(dispc, OVL_FIR_COEF_V(i, j));
-		}
-
-		if (dispc_has_feature(dispc, FEAT_HANDLE_UV_SEPARATE)) {
-			RR(dispc, OVL_BA0_UV(i));
-			RR(dispc, OVL_BA1_UV(i));
-			RR(dispc, OVL_FIR2(i));
-			RR(dispc, OVL_ACCU2_0(i));
-			RR(dispc, OVL_ACCU2_1(i));
-
-			for (j = 0; j < 8; j++)
-				RR(dispc, OVL_FIR_COEF_H2(i, j));
-
-			for (j = 0; j < 8; j++)
-				RR(dispc, OVL_FIR_COEF_HV2(i, j));
-
-			for (j = 0; j < 8; j++)
-				RR(dispc, OVL_FIR_COEF_V2(i, j));
-		}
-		if (dispc_has_feature(dispc, FEAT_ATTR2))
-			RR(dispc, OVL_ATTRIBUTES2(i));
-	}
+	for (i = 0; i < dispc_get_num_ovls(dispc); i++)
+		dispc_restore_ovl_context(dispc, i);
 
 	if (dispc_has_feature(dispc, FEAT_CORE_CLK_DIV))
 		RR(dispc, DIVISOR);
