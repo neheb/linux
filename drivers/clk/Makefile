@@ -143,9 +143,7 @@ obj-y					+= keystone/
 obj-y					+= mediatek/
 obj-$(CONFIG_ARCH_MESON)		+= meson/
 obj-y					+= microchip/
-ifeq ($(CONFIG_COMMON_CLK), y)
-obj-$(CONFIG_ARCH_MMP)			+= mmp/
-endif
+obj-y					+= mmp/
 obj-y					+= mstar/
 obj-y					+= mvebu/
 obj-$(CONFIG_ARCH_MXS)			+= mxs/
