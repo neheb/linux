@@ -161,7 +161,7 @@ static int __init of_tb10x_init_irq(struct device_node *ictl,
 	ab_irqctl_writereg(gc, AB_IRQCTL_INT_ENABLE, 0);
 	ab_irqctl_writereg(gc, AB_IRQCTL_INT_MODE, 0);
 	ab_irqctl_writereg(gc, AB_IRQCTL_INT_POLARITY, 0);
-	ab_irqctl_writereg(gc, AB_IRQCTL_INT_STATUS, ~0UL);
+	ab_irqctl_writereg(gc, AB_IRQCTL_INT_STATUS, ~0U);
 
 	return 0;
 
