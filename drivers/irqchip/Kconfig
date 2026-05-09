@@ -89,11 +89,13 @@ config ARMADA_370_XP_IRQ
 	select GENERIC_IRQ_EFFECTIVE_AFF_MASK if SMP
 
 config ALPINE_MSI
-	bool
+	bool "Annapurna Labs Alpine MSI controller" if COMPILE_TEST
 	depends on PCI
 	select PCI_MSI
 	select IRQ_MSI_LIB
 	select GENERIC_IRQ_CHIP
+	help
+	  Support the MSI controller found on Annapurna Labs Alpine SoCs.
 
 config AL_FIC
 	bool "Amazon's Annapurna Labs Fabric Interrupt Controller"
@@ -193,9 +195,13 @@ config DAVINCI_CP_INTC
 	select IRQ_DOMAIN
 
 config DW_APB_ICTL
-	bool
+	bool "Synopsys DesignWare APB interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
 	select GENERIC_IRQ_CHIP
 	select IRQ_DOMAIN_HIERARCHY
+	help
+	  Support the Synopsys DesignWare APB interrupt controller.
 
 config ECONET_EN751221_INTC
 	bool
@@ -231,7 +237,10 @@ config LAN966X_OIC
 	  will be called irq-lan966x-oic.
 
 config MADERA_IRQ
-	tristate
+	tristate "Cirrus Logic Madera codec interrupt controller" if COMPILE_TEST
+	select REGMAP_IRQ
+	help
+	  Support the interrupt controller found on Cirrus Logic Madera codecs.
 
 config IRQ_MIPS_CPU
 	bool
@@ -346,13 +355,22 @@ config SUN4I_INTC
 	bool
 
 config SUN6I_R_INTC
-	bool
+	bool "Allwinner sun6i/sun8i/sun50i R_INTC interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
 	select IRQ_DOMAIN_HIERARCHY
 	select IRQ_FASTEOI_HIERARCHY_HANDLERS
+	help
+	  Support the interrupt controller in the Allwinner R_INTC block.
 
 config SUNXI_NMI_INTC
-	bool
+	bool "Allwinner sunxi NMI interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
 	select GENERIC_IRQ_CHIP
+	help
+	  Support the non-maskable interrupt controller found on Allwinner
+	  sunxi SoCs.
 
 config TB10X_IRQC
 	bool
@@ -391,7 +409,8 @@ config XILINX_INTC
 	  be used as a secondary chained controller on other platforms.
 
 config IRQ_CROSSBAR
-	bool
+	bool "IRQ crossbar support" if COMPILE_TEST
+	depends on OF
 	help
 	  Support for a CROSSBAR ip that precedes the main interrupt controller.
 	  The primary irqchip invokes the crossbar's callback which inturn allocates
@@ -430,7 +449,9 @@ config INGENIC_TCU_IRQ
 	  If unsure, say N.
 
 config IMX_GPCV2
-	bool
+	bool "i.MX GPCv2 wakeup interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
 	select IRQ_DOMAIN
 	help
 	  Enables the wakeup IRQs for IMX platforms with GPCv2 block
@@ -441,9 +462,13 @@ config IRQ_MXS
 	select STMP_DEVICE
 
 config MSCC_OCELOT_IRQ
-	bool
+	bool "Microsemi Ocelot interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
 	select IRQ_DOMAIN
 	select GENERIC_IRQ_CHIP
+	help
+	  Support the interrupt controller found on Microsemi Ocelot SoCs.
 
 config MVEBU_GICP
 	bool "Marvell EBU GICP interrupt controller" if COMPILE_TEST
@@ -506,9 +531,13 @@ config STM32MP_EXTI
 	  Support STM32MP EXTI (extended interrupts and event) controller.
 
 config STM32_EXTI
-	bool
+	bool "STM32 EXTI interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
 	select IRQ_DOMAIN
 	select GENERIC_IRQ_CHIP
+	help
+	  Support the STM32 EXTI interrupt controller.
 
 config QCOM_IRQ_COMBINER
 	bool "Qualcomm IRQ combiner support"
@@ -824,9 +853,13 @@ config WPCM450_AIC
 	  Support for the interrupt controller in the Nuvoton WPCM450 BMC SoC.
 
 config IRQ_IDT3243X
-	bool
+	bool "IDT 79RC3243x interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
 	select GENERIC_IRQ_CHIP
 	select IRQ_DOMAIN
+	help
+	  Support the interrupt controller found on IDT 79RC3243x SoCs.
 
 config APPLE_AIC
 	bool "Apple Interrupt Controller (AIC)"
