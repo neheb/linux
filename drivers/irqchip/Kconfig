@@ -373,9 +373,13 @@ config SUNXI_NMI_INTC
 	  sunxi SoCs.
 
 config TB10X_IRQC
-	bool
+	bool "Abilis Systems TB10x interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
 	select IRQ_DOMAIN
 	select GENERIC_IRQ_CHIP
+	help
+	  Support the interrupt controller found on Abilis Systems TB10x SoCs.
 
 config TS4800_IRQ
 	tristate "TS-4800 IRQ controller"
