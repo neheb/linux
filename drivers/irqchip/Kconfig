@@ -446,22 +446,43 @@ config MSCC_OCELOT_IRQ
 	select GENERIC_IRQ_CHIP
 
 config MVEBU_GICP
+	bool "Marvell EBU GICP interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
 	select IRQ_MSI_LIB
-	bool
+	help
+	  Support the Marvell EBU GICP interrupt controller.
 
 config MVEBU_ICU
-	bool
+	bool "Marvell EBU ICU interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
+	select GENERIC_MSI_IRQ
+	help
+	  Support the Marvell EBU ICU interrupt controller.
 
 config MVEBU_ODMI
-	bool
+	bool "Marvell EBU ODMI interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
 	select IRQ_MSI_LIB
 	select GENERIC_MSI_IRQ
+	help
+	  Support the Marvell EBU ODMI interrupt controller.
 
 config MVEBU_PIC
-	bool
+	bool "Marvell EBU PIC interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
+	help
+	  Support the Marvell EBU PIC interrupt controller.
 
 config MVEBU_SEI
-        bool
+	bool "Marvell EBU SEI interrupt controller" if COMPILE_TEST
+	depends on OF
+	depends on HAS_IOMEM
+	help
+	  Support the Marvell EBU SEI interrupt controller.
 
 config LS_EXTIRQ
 	bool "Freescale Layerscape external IRQ support" if COMPILE_TEST
