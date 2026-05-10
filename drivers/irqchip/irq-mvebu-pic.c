@@ -24,7 +24,7 @@
 #define PIC_MASK	       0x4
 
 #define PIC_MAX_IRQS		32
-#define PIC_MAX_IRQ_MASK	((1UL << PIC_MAX_IRQS) - 1)
+#define PIC_MAX_IRQ_MASK	GENMASK(PIC_MAX_IRQS - 1, 0)
 
 struct mvebu_pic {
 	void __iomem *base;
@@ -44,7 +44,7 @@ static void mvebu_pic_eoi_irq(struct irq_data *d)
 {
 	struct mvebu_pic *pic = irq_data_get_irq_chip_data(d);
 
-	writel(1 << d->hwirq, pic->base + PIC_CAUSE);
+	writel(BIT(d->hwirq), pic->base + PIC_CAUSE);
 }
 
 static void mvebu_pic_mask_irq(struct irq_data *d)
@@ -53,7 +53,7 @@ static void mvebu_pic_mask_irq(struct irq_data *d)
 	u32 reg;
 
 	reg =  readl(pic->base + PIC_MASK);
-	reg |= (1 << d->hwirq);
+	reg |= BIT(d->hwirq);
 	writel(reg, pic->base + PIC_MASK);
 }
 
@@ -63,7 +63,7 @@ static void mvebu_pic_unmask_irq(struct irq_data *d)
 	u32 reg;
 
 	reg = readl(pic->base + PIC_MASK);
-	reg &= ~(1 << d->hwirq);
+	reg &= ~BIT(d->hwirq);
 	writel(reg, pic->base + PIC_MASK);
 }
 
