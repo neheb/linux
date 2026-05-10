@@ -11726,7 +11726,9 @@ static const struct rf_channel rf_vals_7620[] = {
 
 static int rt2800_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 {
-	struct hw_mode_spec *spec = &rt2x00dev->spec;
+	const struct rf_channel *channels;
+	unsigned int num_channels = 0;
+	struct hw_mode_spec *spec;
 	struct channel_info *info;
 	s8 *default_power1;
 	s8 *default_power2;
@@ -11788,19 +11790,17 @@ static int rt2800_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 	/*
 	 * Initialize hw_mode information.
 	 */
-	spec->supported_rates = SUPPORT_RATE_CCK | SUPPORT_RATE_OFDM;
-
 	switch (rt2x00dev->chip.rf) {
 	case RF2720:
 	case RF2820:
-		spec->num_channels = 14;
-		spec->channels = rf_vals;
+		num_channels = 14;
+		channels = rf_vals;
 		break;
 
 	case RF2750:
 	case RF2850:
-		spec->num_channels = ARRAY_SIZE(rf_vals);
-		spec->channels = rf_vals;
+		num_channels = ARRAY_SIZE(rf_vals);
+		channels = rf_vals;
 		break;
 
 	case RF2020:
@@ -11818,43 +11818,50 @@ static int rt2800_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 	case RF5372:
 	case RF5390:
 	case RF5392:
-		spec->num_channels = 14;
+		num_channels = 14;
 		if (rt2800_clk_is_20mhz(rt2x00dev))
-			spec->channels = rf_vals_3x_xtal20;
+			channels = rf_vals_3x_xtal20;
 		else
-			spec->channels = rf_vals_3x;
+			channels = rf_vals_3x;
 		break;
 
 	case RF7620:
-		spec->num_channels = ARRAY_SIZE(rf_vals_7620);
-		spec->channels = rf_vals_7620;
+		num_channels = ARRAY_SIZE(rf_vals_7620);
+		channels = rf_vals_7620;
 		break;
 
 	case RF3052:
 	case RF3053:
-		spec->num_channels = ARRAY_SIZE(rf_vals_3x);
-		spec->channels = rf_vals_3x;
+		num_channels = ARRAY_SIZE(rf_vals_3x);
+		channels = rf_vals_3x;
 		break;
 
 	case RF3853:
-		spec->num_channels = ARRAY_SIZE(rf_vals_3853);
-		spec->channels = rf_vals_3853;
+		num_channels = ARRAY_SIZE(rf_vals_3853);
+		channels = rf_vals_3853;
 		break;
 
 	case RF5592:
 		reg = rt2800_register_read(rt2x00dev, MAC_DEBUG_INDEX);
 		if (rt2x00_get_field32(reg, MAC_DEBUG_INDEX_XTAL)) {
-			spec->num_channels = ARRAY_SIZE(rf_vals_5592_xtal40);
-			spec->channels = rf_vals_5592_xtal40;
+			num_channels = ARRAY_SIZE(rf_vals_5592_xtal40);
+			channels = rf_vals_5592_xtal40;
 		} else {
-			spec->num_channels = ARRAY_SIZE(rf_vals_5592_xtal20);
-			spec->channels = rf_vals_5592_xtal20;
+			num_channels = ARRAY_SIZE(rf_vals_5592_xtal20);
+			channels = rf_vals_5592_xtal20;
 		}
 		break;
+	default:
+		return -ENODEV;
 	}
 
-	if (WARN_ON_ONCE(!spec->channels))
-		return -ENODEV;
+	spec = kzalloc_flex(*spec, channels_info, num_channels);
+	if (!spec)
+		return -ENOMEM;
+
+	spec->num_channels = num_channels;
+	spec->channels = channels;
+	spec->supported_rates = SUPPORT_RATE_CCK | SUPPORT_RATE_OFDM;
 
 	spec->supported_bands = SUPPORT_BAND_2GHZ;
 	if (spec->num_channels > 14)
@@ -11907,18 +11914,12 @@ static int rt2800_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 	/*
 	 * Create channel information and survey arrays
 	 */
-	info = kzalloc_objs(*info, spec->num_channels);
-	if (!info)
-		return -ENOMEM;
-
 	rt2x00dev->chan_survey =
 		kzalloc_objs(struct rt2x00_chan_survey, spec->num_channels);
 	if (!rt2x00dev->chan_survey) {
-		kfree(info);
+		kfree(spec);
 		return -ENOMEM;
 	}
-
-	spec->channels_info = info;
 
 	default_power1 = rt2800_eeprom_addr(rt2x00dev, EEPROM_TXPOWER_BG1);
 	default_power2 = rt2800_eeprom_addr(rt2x00dev, EEPROM_TXPOWER_BG2);
@@ -11930,10 +11931,11 @@ static int rt2800_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 		default_power3 = NULL;
 
 	for (i = 0; i < 14; i++) {
-		info[i].default_power1 = default_power1[i];
-		info[i].default_power2 = default_power2[i];
+		info = &spec->channels_info[i];
+		info->default_power1 = default_power1[i];
+		info->default_power2 = default_power2[i];
 		if (default_power3)
-			info[i].default_power3 = default_power3[i];
+			info->default_power3 = default_power3[i];
 	}
 
 	if (spec->num_channels > 14) {
@@ -11950,10 +11952,11 @@ static int rt2800_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 			default_power3 = NULL;
 
 		for (i = 14; i < spec->num_channels; i++) {
-			info[i].default_power1 = default_power1[i - 14];
-			info[i].default_power2 = default_power2[i - 14];
+			info = &spec->channels_info[i];
+			info->default_power1 = default_power1[i - 14];
+			info->default_power2 = default_power2[i - 14];
 			if (default_power3)
-				info[i].default_power3 = default_power3[i - 14];
+				info->default_power3 = default_power3[i - 14];
 		}
 	}
 
@@ -11980,6 +11983,8 @@ static int rt2800_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 		__set_bit(CAPABILITY_VCO_RECALIBRATION, &rt2x00dev->cap_flags);
 		break;
 	}
+
+	rt2x00dev->spec = spec;
 
 	return 0;
 }

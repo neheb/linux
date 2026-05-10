@@ -165,7 +165,7 @@ void rt2x00lib_config_antenna(struct rt2x00_dev *rt2x00dev,
 static u16 rt2x00ht_center_channel(struct rt2x00_dev *rt2x00dev,
 				   struct ieee80211_conf *conf)
 {
-	struct hw_mode_spec *spec = &rt2x00dev->spec;
+	struct hw_mode_spec *spec = rt2x00dev->spec;
 	int center_channel;
 	u16 i;
 
@@ -194,6 +194,7 @@ void rt2x00lib_config(struct rt2x00_dev *rt2x00dev,
 		      struct ieee80211_conf *conf,
 		      unsigned int ieee80211_flags)
 {
+	struct hw_mode_spec *spec = rt2x00dev->spec;
 	struct rt2x00lib_conf libconf;
 	u16 hw_value;
 	u16 autowake_timeout;
@@ -218,13 +219,8 @@ void rt2x00lib_config(struct rt2x00_dev *rt2x00dev,
 			hw_value = conf->chandef.chan->hw_value;
 		}
 
-		memcpy(&libconf.rf,
-		       &rt2x00dev->spec.channels[hw_value],
-		       sizeof(libconf.rf));
-
-		memcpy(&libconf.channel,
-		       &rt2x00dev->spec.channels_info[hw_value],
-		       sizeof(libconf.channel));
+		memcpy(&libconf.rf, &spec->channels[hw_value], sizeof(libconf.rf));
+		memcpy(&libconf.channel, &spec->channels_info[hw_value], sizeof(libconf.channel));
 
 		/* Used for VCO periodic calibration */
 		rt2x00dev->rf_channel = libconf.rf.channel;

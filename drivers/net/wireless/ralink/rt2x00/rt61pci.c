@@ -2654,7 +2654,10 @@ static const struct rf_channel rf_vals_seq[] = {
 
 static int rt61pci_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 {
-	struct hw_mode_spec *spec = &rt2x00dev->spec;
+	const struct rf_channel *channels;
+	unsigned int num_channels = 0;
+	unsigned int supported_bands;
+	struct hw_mode_spec *spec;
 	struct channel_info *info;
 	u8 *tx_power;
 	unsigned int i;
@@ -2693,45 +2696,50 @@ static int rt61pci_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 	/*
 	 * Initialize hw_mode information.
 	 */
-	spec->supported_bands = SUPPORT_BAND_2GHZ;
-	spec->supported_rates = SUPPORT_RATE_CCK | SUPPORT_RATE_OFDM;
+	supported_bands = SUPPORT_BAND_2GHZ;
 
 	if (!rt2x00_has_cap_rf_sequence(rt2x00dev)) {
-		spec->num_channels = 14;
-		spec->channels = rf_vals_noseq;
+		num_channels = 14;
+		channels = rf_vals_noseq;
 	} else {
-		spec->num_channels = 14;
-		spec->channels = rf_vals_seq;
+		num_channels = 14;
+		channels = rf_vals_seq;
 	}
 
 	if (rt2x00_rf(rt2x00dev, RF5225) || rt2x00_rf(rt2x00dev, RF5325)) {
-		spec->supported_bands |= SUPPORT_BAND_5GHZ;
-		spec->num_channels = ARRAY_SIZE(rf_vals_seq);
+		supported_bands |= SUPPORT_BAND_5GHZ;
+		num_channels = ARRAY_SIZE(rf_vals_seq);
 	}
 
 	/*
 	 * Create channel information array
 	 */
-	info = kzalloc_objs(*info, spec->num_channels);
-	if (!info)
+	spec = kzalloc_flex(*spec, channels_info, num_channels);
+	if (!spec)
 		return -ENOMEM;
 
-	spec->channels_info = info;
+	spec->num_channels = num_channels;
+	spec->channels = channels;
+	spec->supported_bands = supported_bands;
+	spec->supported_rates = SUPPORT_RATE_CCK | SUPPORT_RATE_OFDM;
 
 	tx_power = rt2x00_eeprom_addr(rt2x00dev, EEPROM_TXPOWER_G_START);
 	for (i = 0; i < 14; i++) {
-		info[i].max_power = MAX_TXPOWER;
-		info[i].default_power1 = TXPOWER_FROM_DEV(tx_power[i]);
+		info = &spec->channels_info[i];
+		info->max_power = MAX_TXPOWER;
+		info->default_power1 = TXPOWER_FROM_DEV(tx_power[i]);
 	}
 
 	if (spec->num_channels > 14) {
 		tx_power = rt2x00_eeprom_addr(rt2x00dev, EEPROM_TXPOWER_A_START);
 		for (i = 14; i < spec->num_channels; i++) {
-			info[i].max_power = MAX_TXPOWER;
-			info[i].default_power1 =
-					TXPOWER_FROM_DEV(tx_power[i - 14]);
+			info = &spec->channels_info[i];
+			info->max_power = MAX_TXPOWER;
+			info->default_power1 = TXPOWER_FROM_DEV(tx_power[i - 14]);
 		}
 	}
+
+	rt2x00dev->spec = spec;
 
 	return 0;
 }

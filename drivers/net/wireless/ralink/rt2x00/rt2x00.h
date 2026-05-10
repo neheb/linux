@@ -404,9 +404,9 @@ struct hw_mode_spec {
 
 	unsigned int num_channels;
 	const struct rf_channel *channels;
-	const struct channel_info *channels_info;
 
 	struct ieee80211_sta_ht_cap ht;
+	struct channel_info channels_info[] __counted_by(num_channels);
 };
 
 /*
@@ -802,7 +802,7 @@ struct rt2x00_dev {
 	/*
 	 * hw capability specifications.
 	 */
-	struct hw_mode_spec spec;
+	struct hw_mode_spec *spec;
 
 	/*
 	 * This is the default TX/RX antenna setup as indicated
