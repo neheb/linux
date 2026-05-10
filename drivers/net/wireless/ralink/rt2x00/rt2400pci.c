@@ -1559,7 +1559,7 @@ static const struct rf_channel rf_vals_b[] = {
 
 static int rt2400pci_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 {
-	struct hw_mode_spec *spec = &rt2x00dev->spec;
+	struct hw_mode_spec *spec;
 	struct channel_info *info;
 	u8 *tx_power;
 	unsigned int i;
@@ -1580,26 +1580,24 @@ static int rt2400pci_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 	/*
 	 * Initialize hw_mode information.
 	 */
-	spec->supported_bands = SUPPORT_BAND_2GHZ;
-	spec->supported_rates = SUPPORT_RATE_CCK;
+	spec = kzalloc_flex(*spec, channels_info, ARRAY_SIZE(rf_vals_b));
+	if (!spec)
+		return -ENOMEM;
 
 	spec->num_channels = ARRAY_SIZE(rf_vals_b);
 	spec->channels = rf_vals_b;
 
-	/*
-	 * Create channel information array
-	 */
-	info = kzalloc_objs(*info, spec->num_channels);
-	if (!info)
-		return -ENOMEM;
-
-	spec->channels_info = info;
+	spec->supported_bands = SUPPORT_BAND_2GHZ;
+	spec->supported_rates = SUPPORT_RATE_CCK;
 
 	tx_power = rt2x00_eeprom_addr(rt2x00dev, EEPROM_TXPOWER_START);
 	for (i = 0; i < 14; i++) {
-		info[i].max_power = TXPOWER_FROM_DEV(MAX_TXPOWER);
-		info[i].default_power1 = TXPOWER_FROM_DEV(tx_power[i]);
+		info = &spec->channels_info[i];
+		info->max_power = TXPOWER_FROM_DEV(MAX_TXPOWER);
+		info->default_power1 = TXPOWER_FROM_DEV(tx_power[i]);
 	}
+
+	rt2x00dev->spec = spec;
 
 	return 0;
 }

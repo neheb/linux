@@ -1097,7 +1097,7 @@ static void rt2x00lib_remove_hw(struct rt2x00_dev *rt2x00dev)
 		rt2x00dev->hw->wiphy->bands[NL80211_BAND_5GHZ] = NULL;
 	}
 
-	kfree(rt2x00dev->spec.channels_info);
+	kfree(rt2x00dev->spec);
 	kfree(rt2x00dev->chan_survey);
 }
 
@@ -1116,7 +1116,7 @@ static const struct ieee80211_tpt_blink rt2x00_tpt_blink[] = {
 
 static int rt2x00lib_probe_hw(struct rt2x00_dev *rt2x00dev)
 {
-	struct hw_mode_spec *spec = &rt2x00dev->spec;
+	struct hw_mode_spec *spec = rt2x00dev->spec;
 	int status;
 
 	if (test_bit(DEVICE_STATE_REGISTERED_HW, &rt2x00dev->flags))

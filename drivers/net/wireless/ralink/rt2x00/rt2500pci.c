@@ -1854,7 +1854,10 @@ static const struct rf_channel rf_vals_5222[] = {
 
 static int rt2500pci_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 {
-	struct hw_mode_spec *spec = &rt2x00dev->spec;
+	const struct rf_channel *channels;
+	unsigned int num_channels = 0;
+	unsigned int supported_bands;
+	struct hw_mode_spec *spec;
 	struct channel_info *info;
 	u8 *tx_power;
 	unsigned int i;
@@ -1880,51 +1883,59 @@ static int rt2500pci_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 	/*
 	 * Initialize hw_mode information.
 	 */
-	spec->supported_bands = SUPPORT_BAND_2GHZ;
-	spec->supported_rates = SUPPORT_RATE_CCK | SUPPORT_RATE_OFDM;
+	supported_bands = SUPPORT_BAND_2GHZ;
 
 	if (rt2x00_rf(rt2x00dev, RF2522)) {
-		spec->num_channels = ARRAY_SIZE(rf_vals_bg_2522);
-		spec->channels = rf_vals_bg_2522;
+		num_channels = ARRAY_SIZE(rf_vals_bg_2522);
+		channels = rf_vals_bg_2522;
 	} else if (rt2x00_rf(rt2x00dev, RF2523)) {
-		spec->num_channels = ARRAY_SIZE(rf_vals_bg_2523);
-		spec->channels = rf_vals_bg_2523;
+		num_channels = ARRAY_SIZE(rf_vals_bg_2523);
+		channels = rf_vals_bg_2523;
 	} else if (rt2x00_rf(rt2x00dev, RF2524)) {
-		spec->num_channels = ARRAY_SIZE(rf_vals_bg_2524);
-		spec->channels = rf_vals_bg_2524;
+		num_channels = ARRAY_SIZE(rf_vals_bg_2524);
+		channels = rf_vals_bg_2524;
 	} else if (rt2x00_rf(rt2x00dev, RF2525)) {
-		spec->num_channels = ARRAY_SIZE(rf_vals_bg_2525);
-		spec->channels = rf_vals_bg_2525;
+		num_channels = ARRAY_SIZE(rf_vals_bg_2525);
+		channels = rf_vals_bg_2525;
 	} else if (rt2x00_rf(rt2x00dev, RF2525E)) {
-		spec->num_channels = ARRAY_SIZE(rf_vals_bg_2525e);
-		spec->channels = rf_vals_bg_2525e;
+		num_channels = ARRAY_SIZE(rf_vals_bg_2525e);
+		channels = rf_vals_bg_2525e;
 	} else if (rt2x00_rf(rt2x00dev, RF5222)) {
-		spec->supported_bands |= SUPPORT_BAND_5GHZ;
-		spec->num_channels = ARRAY_SIZE(rf_vals_5222);
-		spec->channels = rf_vals_5222;
+		supported_bands |= SUPPORT_BAND_5GHZ;
+		num_channels = ARRAY_SIZE(rf_vals_5222);
+		channels = rf_vals_5222;
+	} else {
+		return -ENODEV;
 	}
 
 	/*
 	 * Create channel information array
 	 */
-	info = kzalloc_objs(*info, spec->num_channels);
-	if (!info)
+	spec = kzalloc_flex(*spec, channels_info, num_channels);
+	if (!spec)
 		return -ENOMEM;
 
-	spec->channels_info = info;
+	spec->num_channels = num_channels;
+	spec->channels = channels;
+	spec->supported_bands = supported_bands;
+	spec->supported_rates = SUPPORT_RATE_CCK | SUPPORT_RATE_OFDM;
 
 	tx_power = rt2x00_eeprom_addr(rt2x00dev, EEPROM_TXPOWER_START);
 	for (i = 0; i < 14; i++) {
-		info[i].max_power = MAX_TXPOWER;
-		info[i].default_power1 = TXPOWER_FROM_DEV(tx_power[i]);
+		info = &spec->channels_info[i];
+		info->max_power = MAX_TXPOWER;
+		info->default_power1 = TXPOWER_FROM_DEV(tx_power[i]);
 	}
 
 	if (spec->num_channels > 14) {
 		for (i = 14; i < spec->num_channels; i++) {
-			info[i].max_power = MAX_TXPOWER;
-			info[i].default_power1 = DEFAULT_TXPOWER;
+			info = &spec->channels_info[i];
+			info->max_power = MAX_TXPOWER;
+			info->default_power1 = DEFAULT_TXPOWER;
 		}
 	}
+
+	rt2x00dev->spec = spec;
 
 	return 0;
 }
