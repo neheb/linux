@@ -3308,12 +3308,16 @@ struct tty_driver *__tty_alloc_driver(unsigned int lines, struct module *owner,
 	if (!lines || (flags & TTY_DRIVER_UNNUMBERED_NODE && lines > 1))
 		return ERR_PTR(-EINVAL);
 
-	driver = kzalloc_obj(*driver);
+	if (!(flags & TTY_DRIVER_DYNAMIC_ALLOC))
+		cdevs = lines;
+
+	driver = kzalloc_flex(*driver, cdevs, cdevs);
 	if (!driver)
 		return ERR_PTR(-ENOMEM);
 
-	kref_init(&driver->kref);
 	driver->num = lines;
+
+	kref_init(&driver->kref);
 	driver->owner = owner;
 	driver->flags = flags;
 
@@ -3332,13 +3336,6 @@ struct tty_driver *__tty_alloc_driver(unsigned int lines, struct module *owner,
 			err = -ENOMEM;
 			goto err_free_all;
 		}
-		cdevs = lines;
-	}
-
-	driver->cdevs = kzalloc_objs(*driver->cdevs, cdevs);
-	if (!driver->cdevs) {
-		err = -ENOMEM;
-		goto err_free_all;
 	}
 
 	return driver;
@@ -3346,7 +3343,6 @@ err_free_all:
 	kfree(driver->ports);
 	kfree(driver->ttys);
 	kfree(driver->termios);
-	kfree(driver->cdevs);
 	kfree(driver);
 	return ERR_PTR(err);
 }
@@ -3372,7 +3368,6 @@ static void destruct_tty_driver(struct kref *kref)
 		if (driver->flags & TTY_DRIVER_DYNAMIC_ALLOC)
 			cdev_del(driver->cdevs[0]);
 	}
-	kfree(driver->cdevs);
 	kfree(driver->ports);
 	kfree(driver->termios);
 	kfree(driver->ttys);
