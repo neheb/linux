@@ -502,7 +502,6 @@ struct tty_operations {
  *
  * @kref: reference counting. Reaching zero frees all the internals and the
  *	  driver.
- * @cdevs: allocated/registered character /dev devices
  * @owner: modules owning this driver. Used drivers cannot be rmmod'ed.
  *	   Automatically set by tty_alloc_driver().
  * @driver_name: name of the driver used in /proc/tty
@@ -526,6 +525,7 @@ struct tty_operations {
  * @ops: driver hooks for TTYs. Set them using tty_set_operations(). Use &struct
  *	 tty_port helpers in them as much as possible.
  * @tty_drivers: used internally to link tty_drivers together
+ * @cdevs: allocated/registered character /dev devices
  *
  * The usual handling of &struct tty_driver is to allocate it by
  * tty_alloc_driver(), set up all the necessary members, and register it by
@@ -537,7 +537,6 @@ struct tty_operations {
  */
 struct tty_driver {
 	struct kref kref;
-	struct cdev **cdevs;
 	struct module	*owner;
 	const char	*driver_name;
 	const char	*name;
@@ -567,6 +566,7 @@ struct tty_driver {
 
 	const struct tty_operations *ops;
 	struct list_head tty_drivers;
+	struct cdev *cdevs[] __counted_by(num);
 } __randomize_layout;
 
 extern struct list_head tty_drivers;
