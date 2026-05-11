@@ -60,12 +60,11 @@ struct ceph_options {
 	 * ceph_compare_options() should be updated accordingly
 	 */
 
-	struct ceph_entity_addr *mon_addr; /* should be the first
-					      pointer type of args */
 	int num_mon;
 	char *name;
 	struct ceph_crypto_key *key;
 	struct rb_root crush_locs;
+	struct ceph_entity_addr mon_addr[];
 };
 
 /*
