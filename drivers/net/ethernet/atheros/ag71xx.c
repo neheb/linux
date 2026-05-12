@@ -38,6 +38,8 @@
 #include <linux/reset.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/mm.h>
+#include <net/page_pool/helpers.h>
 #include <net/selftests.h>
 
 #define AG71XX_OOM_REFILL	(1 + HZ / 10)
@@ -303,8 +305,7 @@ struct ag71xx_buf {
 			unsigned int len;
 		} tx;
 		struct {
-			dma_addr_t dma_addr;
-			void *rx_buf;
+			void *buf;
 		} rx;
 	};
 };
@@ -320,6 +321,7 @@ struct ag71xx_ring {
 	u16 desc_split;
 	dma_addr_t descs_dma;
 	u8 *descs_cpu;
+	struct page_pool *page_pool;
 };
 
 enum ag71xx_type {
@@ -1172,13 +1174,13 @@ static void ag71xx_ring_rx_clean(struct ag71xx *ag)
 	if (!ring->buf)
 		return;
 
-	for (i = 0; i < ring_size; i++)
-		if (ring->buf[i].rx.rx_buf) {
-			dma_unmap_single(&ag->pdev->dev,
-					 ring->buf[i].rx.dma_addr,
-					 ag->rx_buf_size, DMA_FROM_DEVICE);
-			skb_free_frag(ring->buf[i].rx.rx_buf);
+	for (i = 0; i < ring_size; i++) {
+		if (ring->buf[i].rx.buf) {
+			page_pool_free_va(ring->page_pool, ring->buf[i].rx.buf,
+					  false);
+			ring->buf[i].rx.buf = NULL;
 		}
+	}
 }
 
 static int ag71xx_buffer_size(struct ag71xx *ag)
@@ -1187,30 +1189,51 @@ static int ag71xx_buffer_size(struct ag71xx *ag)
 	       SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 }
 
-static bool ag71xx_fill_rx_buf(struct ag71xx *ag, struct ag71xx_buf *buf,
-			       int offset,
-			       void *(*alloc)(unsigned int size))
+static bool ag71xx_fill_rx_buf(struct ag71xx *ag, struct ag71xx_buf *buf)
 {
 	struct ag71xx_ring *ring = &ag->rx_ring;
 	struct ag71xx_desc *desc;
-	void *data;
+	unsigned int page_offset;
+	struct page *page;
 
 	desc = ag71xx_ring_desc(ring, buf - &ring->buf[0]);
 
-	data = alloc(ag71xx_buffer_size(ag));
-	if (!data)
+	page = page_pool_dev_alloc_frag(ring->page_pool, &page_offset,
+					ag71xx_buffer_size(ag));
+	if (!page)
 		return false;
 
-	buf->rx.rx_buf = data;
-	buf->rx.dma_addr = dma_map_single(&ag->pdev->dev, data, ag->rx_buf_size,
-					  DMA_FROM_DEVICE);
-	if (dma_mapping_error(&ag->pdev->dev, buf->rx.dma_addr)) {
-		skb_free_frag(data);
-		buf->rx.rx_buf = NULL;
-		return false;
-	}
-	desc->data = (u32)buf->rx.dma_addr + offset;
+	buf->rx.buf = page_address(page) + page_offset;
+	desc->data = (u32)(page_pool_get_dma_addr(page) + page_offset +
+			   ag->rx_buf_offset);
 	return true;
+}
+
+static int ag71xx_rx_page_pool_create(struct ag71xx *ag)
+{
+	struct ag71xx_ring *ring = &ag->rx_ring;
+	unsigned int order = get_order(ag71xx_buffer_size(ag));
+	struct page_pool_params pp_params = {
+		.order = order,
+		.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
+		.pool_size = BIT(ring->order),
+		.nid = dev_to_node(&ag->pdev->dev),
+		.dev = &ag->pdev->dev,
+		.napi = &ag->napi,
+		.dma_dir = DMA_FROM_DEVICE,
+		.max_len = PAGE_SIZE << order,
+		.offset = ag->rx_buf_offset,
+		.netdev = ag->ndev,
+	};
+	struct page_pool *page_pool;
+
+	page_pool = page_pool_create(&pp_params);
+	if (IS_ERR(page_pool))
+		return PTR_ERR(page_pool);
+
+	ring->page_pool = page_pool;
+
+	return 0;
 }
 
 static int ag71xx_ring_rx_init(struct ag71xx *ag)
@@ -1236,8 +1259,7 @@ static int ag71xx_ring_rx_init(struct ag71xx *ag)
 	for (i = 0; i < ring_size; i++) {
 		struct ag71xx_desc *desc = ag71xx_ring_desc(ring, i);
 
-		if (!ag71xx_fill_rx_buf(ag, &ring->buf[i], ag->rx_buf_offset,
-					netdev_alloc_frag)) {
+		if (!ag71xx_fill_rx_buf(ag, &ring->buf[i])) {
 			ret = -ENOMEM;
 			break;
 		}
@@ -1258,7 +1280,6 @@ static int ag71xx_ring_rx_refill(struct ag71xx *ag)
 {
 	struct ag71xx_ring *ring = &ag->rx_ring;
 	int ring_mask = BIT(ring->order) - 1;
-	int offset = ag->rx_buf_offset;
 	unsigned int count;
 
 	count = 0;
@@ -1269,9 +1290,8 @@ static int ag71xx_ring_rx_refill(struct ag71xx *ag)
 		i = ring->dirty & ring_mask;
 		desc = ag71xx_ring_desc(ring, i);
 
-		if (!ring->buf[i].rx.rx_buf &&
-		    !ag71xx_fill_rx_buf(ag, &ring->buf[i], offset,
-					napi_alloc_frag))
+		if (!ring->buf[i].rx.buf &&
+		    !ag71xx_fill_rx_buf(ag, &ring->buf[i]))
 			break;
 
 		desc->ctrl = DESC_EMPTY;
@@ -1292,6 +1312,7 @@ static int ag71xx_rings_init(struct ag71xx *ag)
 	struct ag71xx_ring *tx = &ag->tx_ring;
 	struct ag71xx_ring *rx = &ag->rx_ring;
 	int ring_size, tx_size;
+	int ret;
 
 	ring_size = BIT(tx->order) + BIT(rx->order);
 	tx_size = BIT(tx->order);
@@ -1313,8 +1334,23 @@ static int ag71xx_rings_init(struct ag71xx *ag)
 	rx->descs_cpu = ((void *)tx->descs_cpu) + tx_size * AG71XX_DESC_SIZE;
 	rx->descs_dma = tx->descs_dma + tx_size * AG71XX_DESC_SIZE;
 
+	ret = ag71xx_rx_page_pool_create(ag);
+	if (ret)
+		goto err_free_rings;
+
 	ag71xx_ring_tx_init(ag);
 	return ag71xx_ring_rx_init(ag);
+
+err_free_rings:
+	dma_free_coherent(&ag->pdev->dev, ring_size * AG71XX_DESC_SIZE,
+			  tx->descs_cpu, tx->descs_dma);
+	kfree(tx->buf);
+	tx->descs_cpu = NULL;
+	rx->descs_cpu = NULL;
+	tx->buf = NULL;
+	rx->buf = NULL;
+
+	return ret;
 }
 
 static void ag71xx_rings_free(struct ag71xx *ag)
@@ -1329,10 +1365,14 @@ static void ag71xx_rings_free(struct ag71xx *ag)
 		dma_free_coherent(&ag->pdev->dev, ring_size * AG71XX_DESC_SIZE,
 				  tx->descs_cpu, tx->descs_dma);
 
+	if (rx->page_pool)
+		page_pool_destroy(rx->page_pool);
+
 	kfree(tx->buf);
 
 	tx->descs_cpu = NULL;
 	rx->descs_cpu = NULL;
+	rx->page_pool = NULL;
 	tx->buf = NULL;
 	rx->buf = NULL;
 }
@@ -1628,19 +1668,23 @@ static int ag71xx_rx_packets(struct ag71xx *ag, int limit)
 		pktlen = desc->ctrl & pktlen_mask;
 		pktlen -= ETH_FCS_LEN;
 
-		dma_unmap_single(&ag->pdev->dev, ring->buf[i].rx.dma_addr,
-				 ag->rx_buf_size, DMA_FROM_DEVICE);
+		page_pool_dma_sync_for_cpu(
+			ring->page_pool, virt_to_head_page(ring->buf[i].rx.buf),
+			offset_in_page(ring->buf[i].rx.buf) + offset, pktlen);
 
 		ndev->stats.rx_packets++;
 		ndev->stats.rx_bytes += pktlen;
 
-		skb = napi_build_skb(ring->buf[i].rx.rx_buf, ag71xx_buffer_size(ag));
+		skb = napi_build_skb(ring->buf[i].rx.buf,
+				     ag71xx_buffer_size(ag));
 		if (!skb) {
 			ndev->stats.rx_errors++;
-			skb_free_frag(ring->buf[i].rx.rx_buf);
+			page_pool_free_va(ring->page_pool, ring->buf[i].rx.buf,
+					  true);
 			goto next;
 		}
 
+		skb_mark_for_recycle(skb);
 		skb_reserve(skb, offset);
 		skb_put(skb, pktlen);
 
@@ -1650,7 +1694,7 @@ static int ag71xx_rx_packets(struct ag71xx *ag, int limit)
 		list_add_tail(&skb->list, &rx_list);
 
 next:
-		ring->buf[i].rx.rx_buf = NULL;
+		ring->buf[i].rx.buf = NULL;
 		done++;
 
 		ring->curr++;
@@ -1680,7 +1724,7 @@ static int ag71xx_poll(struct napi_struct *napi, int limit)
 	netif_dbg(ag, rx_status, ndev, "processing RX ring\n");
 	rx_done = ag71xx_rx_packets(ag, limit);
 
-	if (!rx_ring->buf[rx_ring->dirty % rx_ring_size].rx.rx_buf)
+	if (!rx_ring->buf[rx_ring->dirty % rx_ring_size].rx.buf)
 		goto oom;
 
 	status = ag71xx_rr(ag, AG71XX_REG_RX_STATUS);
