@@ -689,7 +689,7 @@ static int ag71xx_mdio_probe(struct ag71xx *ag)
 	struct device *dev = &ag->pdev->dev;
 	struct net_device *ndev = ag->ndev;
 	struct reset_control *mdio_reset;
-	static struct mii_bus *mii_bus;
+	struct mii_bus *mii_bus;
 	struct device_node *np, *mnp;
 	int err;
 
@@ -1409,7 +1409,7 @@ static int ag71xx_open(struct net_device *ndev)
 
 	ret = phylink_of_phy_connect(ag->phylink, ag->pdev->dev.of_node, 0);
 	if (ret) {
-		netif_err(ag, link, ndev, "phylink_of_phy_connect filed with err: %i\n",
+		netif_err(ag, link, ndev, "phylink_of_phy_connect failed with err: %i\n",
 			  ret);
 		return ret;
 	}
