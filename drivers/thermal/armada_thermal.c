@@ -13,7 +13,6 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
-#include <linux/of_device.h>
 #include <linux/thermal.h>
 #include <linux/iopoll.h>
 #include <linux/mfd/syscon.h>
@@ -64,7 +63,7 @@ struct armada_thermal_priv {
 	char zone_name[THERMAL_NAME_LENGTH];
 	/* serialize temperature reads/updates */
 	struct mutex update_lock;
-	struct armada_thermal_data *data;
+	const struct armada_thermal_data *data;
 	struct thermal_zone_device *overheat_sensor;
 	int interrupt_source;
 	int current_channel;
@@ -131,7 +130,7 @@ struct armada_thermal_sensor {
 static void armadaxp_init(struct platform_device *pdev,
 			  struct armada_thermal_priv *priv)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	u32 reg;
 
 	regmap_read(priv->syscon, data->syscon_control1_off, &reg);
@@ -156,7 +155,7 @@ static void armadaxp_init(struct platform_device *pdev,
 static void armada370_init(struct platform_device *pdev,
 			   struct armada_thermal_priv *priv)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	u32 reg;
 
 	regmap_read(priv->syscon, data->syscon_control1_off, &reg);
@@ -176,7 +175,7 @@ static void armada370_init(struct platform_device *pdev,
 static void armada375_init(struct platform_device *pdev,
 			   struct armada_thermal_priv *priv)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	u32 reg;
 
 	regmap_read(priv->syscon, data->syscon_control1_off, &reg);
@@ -207,7 +206,7 @@ static int armada_wait_sensor_validity(struct armada_thermal_priv *priv)
 static void armada380_init(struct platform_device *pdev,
 			   struct armada_thermal_priv *priv)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	u32 reg;
 
 	/* Disable the HW/SW reset */
@@ -225,7 +224,7 @@ static void armada380_init(struct platform_device *pdev,
 static void armada_ap80x_init(struct platform_device *pdev,
 			      struct armada_thermal_priv *priv)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	u32 reg;
 
 	regmap_read(priv->syscon, data->syscon_control0_off, &reg);
@@ -245,7 +244,7 @@ static void armada_ap80x_init(struct platform_device *pdev,
 static void armada_cp110_init(struct platform_device *pdev,
 			      struct armada_thermal_priv *priv)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	u32 reg;
 
 	armada380_init(pdev, priv);
@@ -275,7 +274,7 @@ static bool armada_is_valid(struct armada_thermal_priv *priv)
 
 static void armada_enable_overheat_interrupt(struct armada_thermal_priv *priv)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	u32 reg;
 
 	/* Clear DFX temperature IRQ cause */
@@ -300,7 +299,7 @@ static void armada_enable_overheat_interrupt(struct armada_thermal_priv *priv)
 static void __maybe_unused
 armada_disable_overheat_interrupt(struct armada_thermal_priv *priv)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	u32 reg;
 
 	regmap_read(priv->syscon, data->syscon_control1_off, &reg);
@@ -311,7 +310,7 @@ armada_disable_overheat_interrupt(struct armada_thermal_priv *priv)
 /* There is currently no board with more than one sensor per channel */
 static int armada_select_channel(struct armada_thermal_priv *priv, int channel)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	u32 ctrl0;
 
 	if (channel < 0 || channel > priv->data->cpu_nr)
@@ -435,7 +434,7 @@ static const struct thermal_zone_device_ops of_ops = {
 	.get_temp = armada_get_temp,
 };
 
-static unsigned int armada_mc_to_reg_temp(struct armada_thermal_data *data,
+static unsigned int armada_mc_to_reg_temp(const struct armada_thermal_data *data,
 					  unsigned int temp_mc)
 {
 	s64 b = data->coef_b;
@@ -459,7 +458,7 @@ static unsigned int armada_mc_to_reg_temp(struct armada_thermal_data *data,
  */
 static unsigned int hyst_levels_mc[] = {1900, 3800, 7600, 15200};
 
-static unsigned int armada_mc_to_reg_hyst(struct armada_thermal_data *data,
+static unsigned int armada_mc_to_reg_hyst(const struct armada_thermal_data *data,
 					  unsigned int hyst_mc)
 {
 	int i;
@@ -479,7 +478,7 @@ static unsigned int armada_mc_to_reg_hyst(struct armada_thermal_data *data,
 static void armada_set_overheat_thresholds(struct armada_thermal_priv *priv,
 					   int thresh_mc, int hyst_mc)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	unsigned int threshold = armada_mc_to_reg_temp(data, thresh_mc);
 	unsigned int hysteresis = armada_mc_to_reg_hyst(data, hyst_mc);
 	u32 ctrl1;
@@ -716,7 +715,7 @@ static const struct regmap_config armada_thermal_regmap_config = {
 static int armada_thermal_probe_legacy(struct platform_device *pdev,
 				       struct armada_thermal_priv *priv)
 {
-	struct armada_thermal_data *data = priv->data;
+	const struct armada_thermal_data *data = priv->data;
 	void __iomem *base;
 
 	/* First memory region points towards the status register */
@@ -812,14 +811,9 @@ static int armada_thermal_probe(struct platform_device *pdev)
 	struct thermal_zone_device *tz;
 	struct armada_thermal_sensor *sensor;
 	struct armada_drvdata *drvdata;
-	const struct of_device_id *match;
 	struct armada_thermal_priv *priv;
 	int sensor_id, irq;
 	int ret;
-
-	match = of_match_device(armada_thermal_id_table, &pdev->dev);
-	if (!match)
-		return -ENODEV;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -830,7 +824,9 @@ static int armada_thermal_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv->dev = &pdev->dev;
-	priv->data = (struct armada_thermal_data *)match->data;
+	priv->data = of_device_get_match_data(&pdev->dev);
+	if (!priv->data)
+		return -ENODEV;
 
 	mutex_init(&priv->update_lock);
 

@@ -160,13 +160,7 @@ static int da9062_thermal_probe(struct platform_device *pdev)
 {
 	struct da9062 *chip = dev_get_drvdata(pdev->dev.parent);
 	struct da9062_thermal *thermal;
-	const struct of_device_id *match;
 	int ret = 0;
-
-	match = of_match_node(da9062_compatible_reg_id_table,
-			      pdev->dev.of_node);
-	if (!match)
-		return -ENXIO;
 
 	if (pdev->dev.of_node) {
 		if (!of_property_read_u32(pdev->dev.of_node,
@@ -189,7 +183,12 @@ static int da9062_thermal_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	thermal->config = match->data;
+	thermal->config = of_device_get_match_data(&pdev->dev);
+	if (!thermal->config) {
+		ret = -ENXIO;
+		goto err;
+	}
+
 	thermal->hw = chip;
 	thermal->dev = &pdev->dev;
 
