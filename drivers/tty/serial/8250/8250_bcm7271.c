@@ -952,7 +952,6 @@ static void brcmuart_init_debugfs(struct brcmuart_priv *priv,
 static int brcmuart_probe(struct platform_device *pdev)
 {
 	struct resource *regs;
-	const struct of_device_id *of_id = NULL;
 	struct uart_8250_port *new_port;
 	struct device *dev = &pdev->dev;
 	struct brcmuart_priv *priv;
@@ -972,11 +971,9 @@ static int brcmuart_probe(struct platform_device *pdev)
 	if (!priv)
 		return -ENOMEM;
 
-	of_id = of_match_node(brcmuart_dt_ids, dev->of_node);
-	if (!of_id || !of_id->data)
+	priv->rate_table = of_device_get_match_data(dev);
+	if (!priv->rate_table)
 		priv->rate_table = brcmstb_rate_table;
-	else
-		priv->rate_table = of_id->data;
 
 	for (x = 0; x < REGS_MAX; x++) {
 		regs = platform_get_resource_byname(pdev, IORESOURCE_MEM,

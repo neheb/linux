@@ -643,7 +643,6 @@ MODULE_DEVICE_TABLE(of, owl_uart_dt_matches);
 
 static int owl_uart_probe(struct platform_device *pdev)
 {
-	const struct of_device_id *match;
 	const struct owl_uart_info *info = NULL;
 	struct resource *res_mem;
 	struct owl_uart_port *owl_port;
@@ -651,9 +650,7 @@ static int owl_uart_probe(struct platform_device *pdev)
 
 	if (pdev->dev.of_node) {
 		pdev->id = of_alias_get_id(pdev->dev.of_node, "serial");
-		match = of_match_node(owl_uart_dt_matches, pdev->dev.of_node);
-		if (match)
-			info = match->data;
+		info = of_device_get_match_data(&pdev->dev);
 	}
 
 	if (pdev->id < 0 || pdev->id >= OWL_UART_PORT_NUM) {

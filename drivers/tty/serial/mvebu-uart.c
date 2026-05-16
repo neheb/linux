@@ -18,7 +18,6 @@
 #include <linux/math64.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/of_device.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
@@ -154,15 +153,15 @@ struct mvebu_uart {
 	struct uart_port *port;
 	struct clk *clk;
 	int irq[UART_IRQ_COUNT];
-	struct mvebu_uart_driver_data *data;
+	const struct mvebu_uart_driver_data *data;
 #if defined(CONFIG_PM)
 	struct mvebu_uart_pm_regs pm_regs;
 #endif /* CONFIG_PM */
 };
 
-static struct mvebu_uart *to_mvuart(struct uart_port *port)
+static const struct mvebu_uart *to_mvuart(struct uart_port *port)
 {
-	return (struct mvebu_uart *)port->private_data;
+	return (const struct mvebu_uart *)port->private_data;
 }
 
 #define IS_EXTENDED(port) (to_mvuart(port)->data->is_ext)
@@ -380,7 +379,7 @@ static irqreturn_t mvebu_uart_tx_isr(int irq, void *dev_id)
 
 static int mvebu_uart_startup(struct uart_port *port)
 {
-	struct mvebu_uart *mvuart = to_mvuart(port);
+	const struct mvebu_uart *mvuart = to_mvuart(port);
 	unsigned int ctl;
 	int ret;
 
@@ -430,7 +429,7 @@ static int mvebu_uart_startup(struct uart_port *port)
 
 static void mvebu_uart_shutdown(struct uart_port *port)
 {
-	struct mvebu_uart *mvuart = to_mvuart(port);
+	const struct mvebu_uart *mvuart = to_mvuart(port);
 
 	writel(0, port->membase + UART_INTR(port));
 
@@ -866,8 +865,6 @@ static int uart_num_counter;
 
 static int mvebu_uart_probe(struct platform_device *pdev)
 {
-	const struct of_device_id *match = of_match_device(mvebu_uart_of_match,
-							   &pdev->dev);
 	struct uart_port *port;
 	struct mvebu_uart *mvuart;
 	struct resource *reg;
@@ -919,7 +916,9 @@ static int mvebu_uart_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	/* Get controller data depending on the compatible string */
-	mvuart->data = (struct mvebu_uart_driver_data *)match->data;
+	mvuart->data = of_device_get_match_data(&pdev->dev);
+	if (!mvuart->data)
+		return -EINVAL;
 	mvuart->port = port;
 
 	port->private_data = mvuart;
