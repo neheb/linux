@@ -1293,7 +1293,6 @@ static int bcm2835_pinctrl_probe(struct platform_device *pdev)
 	struct gpio_irq_chip *girq;
 	struct resource iomem;
 	int err, i;
-	const struct of_device_id *match;
 	int is_7211 = 0;
 
 	BUILD_BUG_ON(ARRAY_SIZE(bcm2835_gpio_pins) != BCM2711_NUM_GPIOS);
@@ -1316,11 +1315,10 @@ static int bcm2835_pinctrl_probe(struct platform_device *pdev)
 	if (IS_ERR(pc->base))
 		return PTR_ERR(pc->base);
 
-	match = of_match_node(bcm2835_pinctrl_match, pdev->dev.of_node);
-	if (!match)
+	pdata = of_device_get_match_data(dev);
+	if (!pdata)
 		return -EINVAL;
 
-	pdata = match->data;
 	is_7211 = of_device_is_compatible(np, "brcm,bcm7211-gpio");
 
 	pc->gpio_chip = *pdata->gpio_chip;

@@ -694,15 +694,15 @@ static const struct pinconf_ops eq5p_pinconf_ops = {
 static int eq5p_probe(struct auxiliary_device *adev,
 		      const struct auxiliary_device_id *id)
 {
-	const struct of_device_id *match;
 	struct device *dev = &adev->dev;
+	const struct eq5p_match_data *data;
 	struct pinctrl_dev *pctldev;
 	struct eq5p_pinctrl *pctrl;
 	int ret;
 
 	/* Get match data based on parent OF node set in clk-eyeq */
-	match = of_match_node(dev->driver->of_match_table, dev->of_node);
-	if (!match || !match->data)
+	data = of_device_get_match_data(dev);
+	if (!data)
 		return -ENODEV;
 
 	pctrl = devm_kzalloc(dev, sizeof(*pctrl), GFP_KERNEL);
@@ -710,7 +710,7 @@ static int eq5p_probe(struct auxiliary_device *adev,
 		return -ENOMEM;
 
 	pctrl->base = (void __iomem *)dev_get_platdata(dev);
-	pctrl->data = match->data;
+	pctrl->data = data;
 	pctrl->desc.name = dev_name(dev);
 	pctrl->desc.pins = pctrl->data->pins;
 	pctrl->desc.npins = pctrl->data->npins;
