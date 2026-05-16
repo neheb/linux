@@ -19,7 +19,6 @@
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
-#include <linux/of_device.h>
 #include <linux/of_platform.h>
 #include <linux/phylink.h>
 #include <linux/phy/phy.h>
@@ -3526,7 +3525,7 @@ static void am65_cpsw_nuss_apply_socinfo(struct am65_cpsw_common *common)
 static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 {
 	struct cpsw_ale_params ale_params = { 0 };
-	const struct of_device_id *of_id;
+	const struct am65_cpsw_pdata *pdata;
 	struct device *dev = &pdev->dev;
 	struct am65_cpsw_common *common;
 	struct device_node *node;
@@ -3545,10 +3544,10 @@ static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	common->dev = dev;
 
-	of_id = of_match_device(am65_cpsw_nuss_of_mtable, dev);
-	if (!of_id)
+	pdata = of_device_get_match_data(dev);
+	if (!pdata)
 		return -EINVAL;
-	common->pdata = *(const struct am65_cpsw_pdata *)of_id->data;
+	common->pdata = *pdata;
 
 	am65_cpsw_nuss_apply_socinfo(common);
 
