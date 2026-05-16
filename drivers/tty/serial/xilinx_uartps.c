@@ -1644,7 +1644,7 @@ static int cdns_uart_probe(struct platform_device *pdev)
 	struct uart_port *port;
 	struct resource *res;
 	struct cdns_uart *cdns_uart_data;
-	const struct of_device_id *match;
+	const struct cdns_platform_data *data;
 
 	cdns_uart_data = devm_kzalloc(&pdev->dev, sizeof(*cdns_uart_data),
 			GFP_KERNEL);
@@ -1682,12 +1682,9 @@ static int cdns_uart_probe(struct platform_device *pdev)
 		}
 	}
 
-	match = of_match_node(cdns_uart_of_match, pdev->dev.of_node);
-	if (match && match->data) {
-		const struct cdns_platform_data *data = match->data;
-
+	data = of_device_get_match_data(&pdev->dev);
+	if (data)
 		cdns_uart_data->quirks = data->quirks;
-	}
 
 	cdns_uart_data->pclk = devm_clk_get(&pdev->dev, "pclk");
 	if (PTR_ERR(cdns_uart_data->pclk) == -EPROBE_DEFER) {
