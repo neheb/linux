@@ -9,7 +9,6 @@
 #include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 
 #include "st_thermal.h"
 #include "../thermal_hwmon.h"
@@ -142,7 +141,6 @@ int st_thermal_register(struct platform_device *pdev,
 	struct st_thermal_sensor *sensor;
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
-	const struct of_device_id *match;
 
 	int ret;
 
@@ -157,11 +155,10 @@ int st_thermal_register(struct platform_device *pdev,
 
 	sensor->dev = dev;
 
-	match = of_match_device(st_thermal_of_match, dev);
-	if (!(match && match->data))
+	sensor->cdata = of_device_get_match_data(dev);
+	if (!sensor->cdata)
 		return -EINVAL;
 
-	sensor->cdata = match->data;
 	if (!sensor->cdata->ops)
 		return -EINVAL;
 

@@ -340,7 +340,7 @@ struct tegra_soctherm {
 
 	u32 *calib;
 	struct thermal_zone_device **thermctl_tzs;
-	struct tegra_soctherm_soc *soc;
+	const struct tegra_soctherm_soc *soc;
 
 	struct soctherm_throt_cfg throt_cfgs[THROTTLE_SIZE];
 
@@ -2085,19 +2085,17 @@ MODULE_DEVICE_TABLE(of, tegra_soctherm_of_match);
 
 static int tegra_soctherm_probe(struct platform_device *pdev)
 {
-	const struct of_device_id *match;
 	struct tegra_soctherm *tegra;
 	struct thermal_zone_device *z;
 	struct tsensor_shared_calib shared_calib;
-	struct tegra_soctherm_soc *soc;
+	const struct tegra_soctherm_soc *soc;
 	unsigned int i;
 	int err;
 
-	match = of_match_node(tegra_soctherm_of_match, pdev->dev.of_node);
-	if (!match)
+	soc = of_device_get_match_data(&pdev->dev);
+	if (!soc)
 		return -ENODEV;
 
-	soc = (struct tegra_soctherm_soc *)match->data;
 	if (soc->num_ttgs > TEGRA124_SOCTHERM_SENSOR_NUM)
 		return -EINVAL;
 
@@ -2245,7 +2243,7 @@ static int __maybe_unused soctherm_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct tegra_soctherm *tegra = platform_get_drvdata(pdev);
-	struct tegra_soctherm_soc *soc = tegra->soc;
+	const struct tegra_soctherm_soc *soc = tegra->soc;
 	int err, i;
 
 	err = soctherm_clk_enable(pdev, true);
