@@ -19,7 +19,6 @@
 #include <linux/fsl/netc_global.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/of_net.h>
 #include <linux/of_platform.h>
 #include <linux/phy.h>
@@ -894,7 +893,6 @@ static int netc_blk_ctrl_probe(struct platform_device *pdev)
 	struct device_node *node = pdev->dev.of_node;
 	const struct netc_devinfo *devinfo;
 	struct device *dev = &pdev->dev;
-	const struct of_device_id *id;
 	struct netc_blk_ctrl *priv;
 	struct clk *ipg_clk;
 	void __iomem *regs;
@@ -910,11 +908,7 @@ static int netc_blk_ctrl_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(ipg_clk),
 				     "Set ipg clock failed\n");
 
-	id = of_match_device(netc_blk_ctrl_match, dev);
-	if (!id)
-		return dev_err_probe(dev, -EINVAL, "Cannot match device\n");
-
-	devinfo = (struct netc_devinfo *)id->data;
+	devinfo = of_device_get_match_data(dev);
 	if (!devinfo)
 		return dev_err_probe(dev, -EINVAL, "No device information\n");
 
