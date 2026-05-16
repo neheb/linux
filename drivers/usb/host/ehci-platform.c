@@ -27,7 +27,6 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
 #include <linux/sys_soc.h>
@@ -239,7 +238,6 @@ static int ehci_platform_probe(struct platform_device *dev)
 	struct usb_hcd *hcd;
 	struct resource *res_mem;
 	struct usb_ehci_pdata *pdata = dev_get_platdata(&dev->dev);
-	const struct of_device_id *match;
 	struct ehci_platform_priv *priv;
 	struct ehci_hcd *ehci;
 	int err, irq, clk = 0;
@@ -256,8 +254,7 @@ static int ehci_platform_probe(struct platform_device *dev)
 		pdata = &ehci_platform_defaults;
 
 	dma_mask_64 = pdata->dma_mask_64;
-	match = of_match_device(dev->dev.driver->of_match_table, &dev->dev);
-	if (match && match->data)
+	if (of_device_get_match_data(&dev->dev))
 		dma_mask_64 = true;
 
 	err = dma_coerce_mask_and_coherent(&dev->dev,

@@ -11,7 +11,6 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
@@ -181,7 +180,7 @@ static int fsl_usb2_mph_dr_of_probe(struct platform_device *ofdev)
 	struct platform_device *usb_dev;
 	struct fsl_usb2_platform_data data, *pdata;
 	struct fsl_usb2_dev_data *dev_data;
-	const struct of_device_id *match;
+	const struct fsl_usb2_platform_data *match_data;
 	const unsigned char *prop;
 	static unsigned int idx;
 	int i, err;
@@ -189,15 +188,12 @@ static int fsl_usb2_mph_dr_of_probe(struct platform_device *ofdev)
 	if (!of_device_is_available(np))
 		return -ENODEV;
 
-	match = of_match_device(fsl_usb2_mph_dr_of_match, &ofdev->dev);
-	if (!match)
+	match_data = of_device_get_match_data(&ofdev->dev);
+	if (!match_data)
 		return -ENODEV;
 
 	pdata = &data;
-	if (match->data)
-		memcpy(pdata, match->data, sizeof(data));
-	else
-		memset(pdata, 0, sizeof(data));
+	memcpy(pdata, match_data, sizeof(data));
 
 	dev_data = get_dr_mode_data(np);
 
