@@ -1743,35 +1743,70 @@ static void ucc_geth_free_rx(struct ucc_geth_private *ugeth)
 
 }
 
+static u8 __iomem *ucc_geth_next_tx_bd(struct ucc_geth_private *ugeth,
+				       u8 txQ, u8 __iomem *bd, u32 bd_status)
+{
+	if (bd_status & T_W)
+		return ugeth->p_tx_bd_ring[txQ];
+
+	return bd + sizeof(struct qe_bd);
+}
+
+static unsigned int ucc_geth_tx_desc_unused(struct ucc_geth_private *ugeth,
+					    u8 txQ)
+{
+	u16 cur = ugeth->skb_curtx[txQ];
+	u16 dirty = ugeth->skb_dirtytx[txQ];
+	u16 ring = ugeth->ug_info->bdRingLenTx[txQ];
+
+	if (dirty > cur)
+		return dirty - cur - 1;
+
+	return ring + dirty - cur - 1;
+}
+
+static void ucc_geth_tx_unmap_desc(struct ucc_geth_private *ugeth, u8 txQ,
+				   u16 index)
+{
+	struct ucc_geth_tx_skbuff *tx_skbuff = &ugeth->tx_skbuff[txQ][index];
+
+	if (!tx_skbuff->len)
+		return;
+
+	if (tx_skbuff->map_as_page)
+		dma_unmap_page(ugeth->dev, tx_skbuff->dma, tx_skbuff->len,
+			       DMA_TO_DEVICE);
+	else
+		dma_unmap_single(ugeth->dev, tx_skbuff->dma, tx_skbuff->len,
+				 DMA_TO_DEVICE);
+
+	tx_skbuff->len = 0;
+	tx_skbuff->map_as_page = false;
+}
+
 static void ucc_geth_free_tx(struct ucc_geth_private *ugeth)
 {
-	struct ucc_geth_info *ug_info;
-	struct ucc_fast_info *uf_info;
 	u16 i, j;
 	u8 __iomem *bd;
 
 	netdev_reset_queue(ugeth->ndev);
 
-	ug_info = ugeth->ug_info;
-	uf_info = &ug_info->uf_info;
-
 	for (i = 0; i < ucc_geth_tx_queues(ugeth->ug_info); i++) {
 		bd = ugeth->p_tx_bd_ring[i];
 		if (!bd)
 			continue;
-		for (j = 0; j < ugeth->ug_info->bdRingLenTx[i]; j++) {
-			if (ugeth->tx_skbuff[i][j]) {
-				dma_unmap_single(ugeth->dev,
-						 in_be32(&((struct qe_bd __iomem *)bd)->buf),
-						 (in_be32((u32 __iomem *)bd) &
-						  BD_LENGTH_MASK),
-						 DMA_TO_DEVICE);
-				dev_kfree_skb_any(ugeth->tx_skbuff[i][j]);
-				ugeth->tx_skbuff[i][j] = NULL;
-			}
-		}
 
-		kfree(ugeth->tx_skbuff[i]);
+		if (ugeth->tx_skbuff[i]) {
+			for (j = 0; j < ugeth->ug_info->bdRingLenTx[i]; j++) {
+				ucc_geth_tx_unmap_desc(ugeth, i, j);
+				if (ugeth->tx_skbuff[i][j].skb)
+					dev_kfree_skb_any(ugeth->tx_skbuff[i][j].skb);
+				ugeth->tx_skbuff[i][j].skb = NULL;
+				bd += sizeof(struct qe_bd);
+			}
+			kfree(ugeth->tx_skbuff[i]);
+			ugeth->tx_skbuff[i] = NULL;
+		}
 
 		kfree(ugeth->p_tx_bd_ring[i]);
 		ugeth->p_tx_bd_ring[i] = NULL;
@@ -2071,7 +2106,7 @@ static int ucc_geth_alloc_tx(struct ucc_geth_private *ugeth)
 	for (j = 0; j < ucc_geth_tx_queues(ug_info); j++) {
 		/* Setup the skbuff rings */
 		ugeth->tx_skbuff[j] =
-			kzalloc_objs(struct sk_buff *,
+			kzalloc_objs(struct ucc_geth_tx_skbuff,
 				     ugeth->ug_info->bdRingLenTx[j]);
 
 		if (ugeth->tx_skbuff[j] == NULL) {
@@ -2816,57 +2851,131 @@ ucc_geth_start_xmit(struct sk_buff *skb, struct net_device *dev)
 #ifdef CONFIG_UGETH_TX_ON_DEMAND
 	struct ucc_fast_private *uccf;
 #endif
-	u8 __iomem *bd;			/* BD pointer */
-	u32 bd_status;
+	u8 __iomem *tx_bds[MAX_SKB_FRAGS + 1];
+	u32 tx_status[MAX_SKB_FRAGS + 1];
+	u16 tx_indices[MAX_SKB_FRAGS + 1];
+	unsigned int nr_frags = skb_shinfo(skb)->nr_frags;
+	unsigned int headlen = skb_headlen(skb);
+	unsigned int entries = nr_frags + !!headlen;
+	unsigned int skb_len = skb->len;
+	unsigned int i, mapped = 0;
+	u8 __iomem *bd;
+	u16 tx_index;
 	u8 txQ = 0;
 	unsigned long flags;
 
 	ugeth_vdbg("%s: IN", __func__);
 
-	netdev_sent_queue(dev, skb->len);
+	if (!entries)
+		goto drop;
+
+	if (entries > ugeth->ug_info->bdRingLenTx[txQ] - 1) {
+		if (skb_linearize(skb))
+			goto drop;
+		nr_frags = 0;
+		headlen = skb_headlen(skb);
+		skb_len = skb->len;
+		entries = 1;
+	}
+
 	spin_lock_irqsave(&ugeth->lock, flags);
 
-	dev->stats.tx_bytes += skb->len;
+	if (ucc_geth_tx_desc_unused(ugeth, txQ) < entries) {
+		netif_stop_queue(dev);
+		spin_unlock_irqrestore(&ugeth->lock, flags);
+		return NETDEV_TX_BUSY;
+	}
 
 	/* Start from the next BD that should be filled */
 	bd = ugeth->txBd[txQ];
-	bd_status = in_be32((u32 __iomem *)bd);
-	/* Save the skb pointer so we can free it later */
-	ugeth->tx_skbuff[txQ][ugeth->skb_curtx[txQ]] = skb;
+	tx_index = ugeth->skb_curtx[txQ];
 
-	/* Update the current skb pointer (wrapping if this was the last) */
-	ugeth->skb_curtx[txQ] =
-	    (ugeth->skb_curtx[txQ] +
-	     1) & TX_RING_MOD_MASK(ugeth->ug_info->bdRingLenTx[txQ]);
+	if (headlen) {
+		struct ucc_geth_tx_skbuff *tx_skbuff;
+		dma_addr_t dma;
+		u32 bd_status;
 
-	/* set up the buffer descriptor */
-	out_be32(&((struct qe_bd __iomem *)bd)->buf,
-		      dma_map_single(ugeth->dev, skb->data,
-			      skb->len, DMA_TO_DEVICE));
+		dma = dma_map_single(ugeth->dev, skb->data, headlen,
+				     DMA_TO_DEVICE);
+		if (dma_mapping_error(ugeth->dev, dma))
+			goto dma_mapping_error;
 
-	/* printk(KERN_DEBUG"skb->data is 0x%x\n",skb->data); */
+		tx_skbuff = &ugeth->tx_skbuff[txQ][tx_index];
+		tx_skbuff->dma = dma;
+		tx_skbuff->len = headlen;
+		tx_skbuff->map_as_page = false;
 
-	bd_status = (bd_status & T_W) | T_R | T_I | T_L | skb->len;
+		bd_status = (in_be32((u32 __iomem *)bd) & T_W) | headlen;
+		if (mapped == entries - 1)
+			bd_status |= T_I | T_L;
 
-	/* set bd status and length */
-	out_be32((u32 __iomem *)bd, bd_status);
+		out_be32(&((struct qe_bd __iomem *)bd)->buf, dma);
+		if (entries == 1)
+			out_be32((u32 __iomem *)bd, bd_status | T_R);
+		else
+			out_be32((u32 __iomem *)bd, bd_status);
+		tx_bds[mapped] = bd;
+		tx_status[mapped] = bd_status;
+		tx_indices[mapped] = tx_index;
+		mapped++;
 
-	/* Move to next BD in the ring */
-	if (!(bd_status & T_W))
-		bd += sizeof(struct qe_bd);
-	else
-		bd = ugeth->p_tx_bd_ring[txQ];
-
-	/* If the next BD still needs to be cleaned up, then the bds
-	   are full.  We need to tell the kernel to stop sending us stuff. */
-	if (bd == ugeth->confBd[txQ]) {
-		if (!netif_queue_stopped(dev))
-			netif_stop_queue(dev);
+		bd = ucc_geth_next_tx_bd(ugeth, txQ, bd, bd_status);
+		tx_index = (tx_index + 1) &
+			   TX_RING_MOD_MASK(ugeth->ug_info->bdRingLenTx[txQ]);
 	}
 
+	for (i = 0; i < nr_frags; i++) {
+		skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
+		struct ucc_geth_tx_skbuff *tx_skbuff;
+		unsigned int len = skb_frag_size(frag);
+		dma_addr_t dma;
+		u32 bd_status;
+
+		dma = skb_frag_dma_map(ugeth->dev, frag, 0, len,
+				       DMA_TO_DEVICE);
+		if (dma_mapping_error(ugeth->dev, dma))
+			goto dma_mapping_error;
+
+		tx_skbuff = &ugeth->tx_skbuff[txQ][tx_index];
+		tx_skbuff->dma = dma;
+		tx_skbuff->len = len;
+		tx_skbuff->map_as_page = true;
+
+		bd_status = (in_be32((u32 __iomem *)bd) & T_W) | len;
+		if (mapped == entries - 1)
+			bd_status |= T_I | T_L;
+
+		out_be32(&((struct qe_bd __iomem *)bd)->buf, dma);
+		if (mapped == 0)
+			out_be32((u32 __iomem *)bd, bd_status);
+		else
+			out_be32((u32 __iomem *)bd, bd_status | T_R);
+		tx_bds[mapped] = bd;
+		tx_status[mapped] = bd_status;
+		tx_indices[mapped] = tx_index;
+		mapped++;
+
+		bd = ucc_geth_next_tx_bd(ugeth, txQ, bd, bd_status);
+		tx_index = (tx_index + 1) &
+			   TX_RING_MOD_MASK(ugeth->ug_info->bdRingLenTx[txQ]);
+	}
+
+	ugeth->tx_skbuff[txQ][tx_indices[mapped - 1]].skb = skb;
+	netdev_sent_queue(dev, skb_len);
+	skb_tx_timestamp(skb);
+
+	/*
+	 * BD[0]'s T_R was deferred so HW only starts after BD[1..N-1] are
+	 * fully written. Commit it last.
+	 */
+	if (entries > 1)
+		out_be32((u32 __iomem *)tx_bds[0], tx_status[0] | T_R);
+
+	ugeth->skb_curtx[txQ] = tx_index;
 	ugeth->txBd[txQ] = bd;
 
-	skb_tx_timestamp(skb);
+	if (ucc_geth_tx_desc_unused(ugeth, txQ) < MAX_SKB_FRAGS + 1)
+		netif_stop_queue(dev);
 
 	if (ugeth->p_scheduler) {
 		ugeth->cpucount[txQ]++;
@@ -2883,6 +2992,21 @@ ucc_geth_start_xmit(struct sk_buff *skb, struct net_device *dev)
 #endif
 	spin_unlock_irqrestore(&ugeth->lock, flags);
 
+	dev->stats.tx_bytes += skb_len;
+
+	return NETDEV_TX_OK;
+
+dma_mapping_error:
+	while (mapped--) {
+		ucc_geth_tx_unmap_desc(ugeth, txQ, tx_indices[mapped]);
+		out_be32(&((struct qe_bd __iomem *)tx_bds[mapped])->buf, 0);
+		out_be32((u32 __iomem *)tx_bds[mapped],
+			 tx_status[mapped] & T_W);
+	}
+	spin_unlock_irqrestore(&ugeth->lock, flags);
+drop:
+	dev->stats.tx_dropped++;
+	dev_kfree_skb(skb);
 	return NETDEV_TX_OK;
 }
 
@@ -2981,35 +3105,39 @@ static int ucc_geth_tx(struct net_device *dev, u8 txQ)
 
 	/* Normal processing. */
 	while ((bd_status & T_R) == 0) {
+		struct ucc_geth_tx_skbuff *tx_skbuff;
 		struct sk_buff *skb;
 
 		/* BD contains already transmitted buffer.   */
 		/* Handle the transmitted buffer and release */
 		/* the BD to be used with the current frame  */
 
-		skb = ugeth->tx_skbuff[txQ][ugeth->skb_dirtytx[txQ]];
-		if (!skb)
+		tx_skbuff = &ugeth->tx_skbuff[txQ][ugeth->skb_dirtytx[txQ]];
+		if (!tx_skbuff->len)
 			break;
-		howmany++;
-		bytes_sent += skb->len;
-		dev->stats.tx_packets++;
 
-		dev_consume_skb_any(skb);
+		ucc_geth_tx_unmap_desc(ugeth, txQ, ugeth->skb_dirtytx[txQ]);
 
-		ugeth->tx_skbuff[txQ][ugeth->skb_dirtytx[txQ]] = NULL;
+		skb = tx_skbuff->skb;
+		if (skb) {
+			howmany++;
+			bytes_sent += skb->len;
+			dev->stats.tx_packets++;
+			dev_consume_skb_any(skb);
+			tx_skbuff->skb = NULL;
+		}
+
 		ugeth->skb_dirtytx[txQ] =
 		    (ugeth->skb_dirtytx[txQ] +
 		     1) & TX_RING_MOD_MASK(ugeth->ug_info->bdRingLenTx[txQ]);
 
 		/* We freed a buffer, so now we can restart transmission */
-		if (netif_queue_stopped(dev))
+		if (netif_queue_stopped(dev) &&
+		    ucc_geth_tx_desc_unused(ugeth, txQ) >= MAX_SKB_FRAGS + 1)
 			netif_wake_queue(dev);
 
 		/* Advance the confirmation BD pointer */
-		if (!(bd_status & T_W))
-			bd += sizeof(struct qe_bd);
-		else
-			bd = ugeth->p_tx_bd_ring[txQ];
+		bd = ucc_geth_next_tx_bd(ugeth, txQ, bd, bd_status);
 		bd_status = in_be32((u32 __iomem *)bd);
 	}
 	ugeth->confBd[txQ] = bd;
@@ -3543,6 +3671,8 @@ static int ucc_geth_probe(struct platform_device* ofdev)
 	/* Fill in the dev structure */
 	uec_set_ethtool_ops(dev);
 	dev->netdev_ops = &ucc_geth_netdev_ops;
+	dev->hw_features |= NETIF_F_SG;
+	dev->features |= NETIF_F_SG;
 	dev->watchdog_timeo = TX_TIMEOUT;
 	INIT_WORK(&ugeth->timeout_work, ucc_geth_timeout_work);
 	netif_napi_add(dev, &ugeth->napi, ucc_geth_poll);
