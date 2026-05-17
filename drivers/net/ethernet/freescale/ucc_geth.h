@@ -16,6 +16,7 @@
 
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/dma-mapping.h>
 #include <linux/phylink.h>
 #include <linux/if_ether.h>
 
@@ -879,7 +880,7 @@ struct ucc_geth_hardware_statistics {
 #define UCC_GETH_SIZE_OF_BD                     QE_SIZEOF_BD
 
 /* Driver definitions */
-#define TX_BD_RING_LEN                          0x10
+#define TX_BD_RING_LEN                          0x40
 #define RX_BD_RING_LEN                          0x20
 
 #define TX_RING_MOD_MASK(size)                  (size-1)
@@ -1150,6 +1151,13 @@ struct ucc_geth_info {
 	unsigned int riscRx;
 };
 
+struct ucc_geth_tx_skbuff {
+	struct sk_buff *skb;
+	dma_addr_t dma;
+	unsigned int len;
+	bool map_as_page;
+};
+
 /* structure representing UCC GETH */
 struct ucc_geth_private {
 	struct ucc_geth_info *ug_info;
@@ -1200,8 +1208,8 @@ struct ucc_geth_private {
 	struct list_head ind_hash_q;
 	u32 saved_uccm;
 	spinlock_t lock;
-	/* pointers to arrays of skbuffs for tx and rx */
-	struct sk_buff **tx_skbuff[NUM_TX_QUEUES];
+	/* Tx DMA state, indexed by Tx buffer descriptor */
+	struct ucc_geth_tx_skbuff *tx_skbuff[NUM_TX_QUEUES];
 	struct sk_buff **rx_skbuff[NUM_RX_QUEUES];
 	/* indices pointing to the next free sbk in skb arrays */
 	u16 skb_curtx[NUM_TX_QUEUES];
