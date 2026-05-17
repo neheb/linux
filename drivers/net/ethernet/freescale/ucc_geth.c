@@ -35,6 +35,7 @@
 #include <linux/of_net.h>
 #include <linux/platform_device.h>
 #include <linux/rtnetlink.h>
+#include <net/page_pool/helpers.h>
 
 #include <linux/uaccess.h>
 #include <asm/irq.h>
@@ -48,6 +49,8 @@
 #include "ucc_geth.h"
 
 #undef DEBUG
+
+#define UCC_GETH_RX_PAGE_OFFSET	UCC_GETH_RX_DATA_BUF_ALIGNMENT
 
 #define ugeth_printk(level, format, arg...)  \
         printk(level format "\n", ## arg)
@@ -222,43 +225,46 @@ static struct list_head *dequeue(struct list_head *lh)
 	}
 }
 
-static struct sk_buff *get_new_skb(struct ucc_geth_private *ugeth,
-		u8 __iomem *bd)
+static void ucc_geth_rx_sync_for_device(struct ucc_geth_private *ugeth,
+					struct page *page)
 {
-	struct sk_buff *skb;
+	dma_sync_single_range_for_device(ugeth->dev, page_pool_get_dma_addr(page),
+					 UCC_GETH_RX_PAGE_OFFSET,
+					 ugeth->ug_info->uf_info.max_rx_buf_length,
+					 DMA_FROM_DEVICE);
+}
 
-	skb = netdev_alloc_skb(ugeth->ndev,
-			       ugeth->ug_info->uf_info.max_rx_buf_length +
-			       UCC_GETH_RX_DATA_BUF_ALIGNMENT);
-	if (!skb)
-		return NULL;
+static void ucc_geth_rx_bd_fill(struct ucc_geth_private *ugeth,
+				u8 __iomem *bd, struct page *page)
+{
+	dma_addr_t dma = page_pool_get_dma_addr(page) +
+			 UCC_GETH_RX_PAGE_OFFSET;
 
-	/* We need the data buffer to be aligned properly.  We will reserve
-	 * as many bytes as needed to align the data properly
-	 */
-	skb_reserve(skb,
-		    UCC_GETH_RX_DATA_BUF_ALIGNMENT -
-		    (((unsigned)skb->data) & (UCC_GETH_RX_DATA_BUF_ALIGNMENT -
-					      1)));
-
-	out_be32(&((struct qe_bd __iomem *)bd)->buf,
-		      dma_map_single(ugeth->dev,
-				     skb->data,
-				     ugeth->ug_info->uf_info.max_rx_buf_length +
-				     UCC_GETH_RX_DATA_BUF_ALIGNMENT,
-				     DMA_FROM_DEVICE));
+	out_be32(&((struct qe_bd __iomem *)bd)->buf, dma);
 
 	out_be32((u32 __iomem *)bd,
 			(R_E | R_I | (in_be32((u32 __iomem*)bd) & R_W)));
+}
 
-	return skb;
+static struct page *get_new_page(struct ucc_geth_private *ugeth, u8 rxq,
+				 u8 __iomem *bd)
+{
+	struct page *page;
+
+	page = page_pool_dev_alloc_pages(ugeth->rx_page_pool[rxq]);
+	if (!page)
+		return NULL;
+
+	ucc_geth_rx_bd_fill(ugeth, bd, page);
+
+	return page;
 }
 
 static int rx_bd_buffer_set(struct ucc_geth_private *ugeth, u8 rxQ)
 {
 	u8 __iomem *bd;
 	u32 bd_status;
-	struct sk_buff *skb;
+	struct page *page;
 	int i;
 
 	bd = ugeth->p_rx_bd_ring[rxQ];
@@ -266,13 +272,13 @@ static int rx_bd_buffer_set(struct ucc_geth_private *ugeth, u8 rxQ)
 
 	do {
 		bd_status = in_be32((u32 __iomem *)bd);
-		skb = get_new_skb(ugeth, bd);
+		page = get_new_page(ugeth, rxQ, bd);
 
-		if (!skb)	/* If can not allocate data buffer,
+		if (!page)	/* If can not allocate data buffer,
 				abort. Cleanup will be elsewhere */
 			return -ENOMEM;
 
-		ugeth->rx_skbuff[rxQ][i] = skb;
+		ugeth->rx_pages[rxQ][i] = page;
 
 		/* advance the BD pointer */
 		bd += sizeof(struct qe_bd);
@@ -1706,41 +1712,33 @@ static int ugeth_82xx_filtering_clear_addr_in_paddr(struct ucc_geth_private *uge
 
 static void ucc_geth_free_rx(struct ucc_geth_private *ugeth)
 {
-	struct ucc_geth_info *ug_info;
-	struct ucc_fast_info *uf_info;
 	u16 i, j;
-	u8 __iomem *bd;
-
-
-	ug_info = ugeth->ug_info;
-	uf_info = &ug_info->uf_info;
 
 	for (i = 0; i < ucc_geth_rx_queues(ugeth->ug_info); i++) {
-		if (ugeth->p_rx_bd_ring[i]) {
-			/* Return existing data buffers in ring */
-			bd = ugeth->p_rx_bd_ring[i];
+		if (ugeth->rx_pages[i]) {
 			for (j = 0; j < ugeth->ug_info->bdRingLenRx[i]; j++) {
-				if (ugeth->rx_skbuff[i][j]) {
-					dma_unmap_single(ugeth->dev,
-						in_be32(&((struct qe_bd __iomem *)bd)->buf),
-						ugeth->ug_info->
-						uf_info.max_rx_buf_length +
-						UCC_GETH_RX_DATA_BUF_ALIGNMENT,
-						DMA_FROM_DEVICE);
-					dev_kfree_skb_any(
-						ugeth->rx_skbuff[i][j]);
-					ugeth->rx_skbuff[i][j] = NULL;
+				if (ugeth->rx_pages[i][j]) {
+					page_pool_put_full_page(ugeth->rx_page_pool[i],
+								ugeth->rx_pages[i][j],
+								false);
+					ugeth->rx_pages[i][j] = NULL;
 				}
-				bd += sizeof(struct qe_bd);
 			}
 
-			kfree(ugeth->rx_skbuff[i]);
+			kfree(ugeth->rx_pages[i]);
+			ugeth->rx_pages[i] = NULL;
+		}
 
+		if (ugeth->p_rx_bd_ring[i]) {
 			kfree(ugeth->p_rx_bd_ring[i]);
 			ugeth->p_rx_bd_ring[i] = NULL;
 		}
-	}
 
+		if (ugeth->rx_page_pool[i]) {
+			page_pool_destroy(ugeth->rx_page_pool[i]);
+			ugeth->rx_page_pool[i] = NULL;
+		}
+	}
 }
 
 static u8 __iomem *ucc_geth_next_tx_bd(struct ucc_geth_private *ugeth,
@@ -2162,14 +2160,36 @@ static int ucc_geth_alloc_rx(struct ucc_geth_private *ugeth)
 
 	/* Init Rx bds */
 	for (j = 0; j < ucc_geth_rx_queues(ug_info); j++) {
-		/* Setup the skbuff rings */
-		ugeth->rx_skbuff[j] =
-			kzalloc_objs(struct sk_buff *,
+		struct page_pool_params pp_params = {
+			.order = 0,
+			.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
+			.pool_size = ug_info->bdRingLenRx[j],
+			.nid = dev_to_node(ugeth->dev),
+			.dev = ugeth->dev,
+			.napi = &ugeth->napi,
+			.dma_dir = DMA_FROM_DEVICE,
+			.max_len = uf_info->max_rx_buf_length,
+			.offset = UCC_GETH_RX_PAGE_OFFSET,
+			.netdev = ugeth->ndev,
+			.queue_idx = j,
+		};
+
+		ugeth->rx_page_pool[j] = page_pool_create(&pp_params);
+		if (IS_ERR(ugeth->rx_page_pool[j])) {
+			int err = PTR_ERR(ugeth->rx_page_pool[j]);
+
+			ugeth->rx_page_pool[j] = NULL;
+			return err;
+		}
+
+		/* Setup the page rings */
+		ugeth->rx_pages[j] =
+			kzalloc_objs(struct page *,
 				     ugeth->ug_info->bdRingLenRx[j]);
 
-		if (ugeth->rx_skbuff[j] == NULL) {
+		if (!ugeth->rx_pages[j]) {
 			if (netif_msg_ifup(ugeth))
-				pr_err("Could not allocate rx_skbuff\n");
+				pr_err("Could not allocate rx_pages\n");
 			return -ENOMEM;
 		}
 
@@ -3012,11 +3032,12 @@ drop:
 
 static int ucc_geth_rx(struct ucc_geth_private *ugeth, u8 rxQ, int rx_work_limit)
 {
+	struct page_pool *pool = ugeth->rx_page_pool[rxQ];
 	struct sk_buff *skb;
+	struct page *page, *new_page;
 	u8 __iomem *bd;
-	u16 length, howmany = 0;
+	u16 length, pkt_len, howmany = 0;
 	u32 bd_status;
-	u8 *bdBuffer;
 	struct net_device *dev;
 	LIST_HEAD(rx_list);
 
@@ -3031,46 +3052,72 @@ static int ucc_geth_rx(struct ucc_geth_private *ugeth, u8 rxQ, int rx_work_limit
 
 	/* while there are received buffers and BD is full (~R_E) */
 	while (!((bd_status & (R_E)) || (--rx_work_limit < 0))) {
-		bdBuffer = (u8 *) in_be32(&((struct qe_bd __iomem *)bd)->buf);
-		length = (u16) ((bd_status & BD_LENGTH_MASK) - 4);
-		skb = ugeth->rx_skbuff[rxQ][ugeth->skb_currx[rxQ]];
+		bool packet_ok;
+		bool refill_failed = false;
 
-		/* determine whether buffer is first, last, first and last
-		(single buffer frame) or middle (not first and not last) */
-		if (!skb ||
-		    (!(bd_status & (R_F | R_L))) ||
-		    (bd_status & R_ERRORS_FATAL)) {
-			if (netif_msg_rx_err(ugeth))
-				pr_err("%d: ERROR!!! skb - 0x%08x\n",
-				       __LINE__, (u32)skb);
-			dev_kfree_skb(skb);
+		pkt_len = bd_status & BD_LENGTH_MASK;
+		page = ugeth->rx_pages[rxQ][ugeth->skb_currx[rxQ]];
+		new_page = NULL;
+		skb = NULL;
+		packet_ok = page && pkt_len >= ETH_FCS_LEN &&
+			    (bd_status & (R_F | R_L)) &&
+			    !(bd_status & R_ERRORS_FATAL);
 
-			ugeth->rx_skbuff[rxQ][ugeth->skb_currx[rxQ]] = NULL;
-			dev->stats.rx_dropped++;
-		} else {
-			dev->stats.rx_packets++;
-			howmany++;
-
-			/* Prep the skb for the packet */
-			skb_put(skb, length);
-
-			/* Tell the skb what kind of packet this is */
-			skb->protocol = eth_type_trans(skb, ugeth->ndev);
-
-			dev->stats.rx_bytes += length;
-			/* Send the packet up the stack */
-			list_add_tail(&skb->list, &rx_list);
+		if (packet_ok) {
+			length = pkt_len - ETH_FCS_LEN;
+			page_pool_dma_sync_for_cpu(pool, page, 0, length);
 		}
 
-		skb = get_new_skb(ugeth, bd);
-		if (!skb) {
+		new_page = get_new_page(ugeth, rxQ, bd);
+		if (!new_page) {
 			if (netif_msg_rx_err(ugeth))
 				pr_warn("No Rx Data Buffer\n");
 			dev->stats.rx_dropped++;
-			break;
+
+			if (!page)
+				break;
+
+			ucc_geth_rx_sync_for_device(ugeth, page);
+			ucc_geth_rx_bd_fill(ugeth, bd, page);
+			new_page = page;
+			packet_ok = false;
+			refill_failed = true;
 		}
 
-		ugeth->rx_skbuff[rxQ][ugeth->skb_currx[rxQ]] = skb;
+		/* Determine whether the buffer is first, last, or middle. */
+		if (!packet_ok) {
+			if (!refill_failed && netif_msg_rx_err(ugeth))
+				pr_err("%d: ERROR!!! page - %p\n", __LINE__,
+				       page);
+			if (!refill_failed)
+				dev->stats.rx_dropped++;
+		} else {
+			skb = napi_build_skb(page_address(page), PAGE_SIZE);
+			if (skb) {
+				skb_mark_for_recycle(skb);
+				skb_reserve(skb, UCC_GETH_RX_PAGE_OFFSET);
+
+				dev->stats.rx_packets++;
+				howmany++;
+
+				/* Prep the skb for the packet */
+				skb_put(skb, length);
+
+				/* Tell the skb what kind of packet this is */
+				skb->protocol = eth_type_trans(skb, ugeth->ndev);
+
+				dev->stats.rx_bytes += length;
+				/* Send the packet up the stack */
+				list_add_tail(&skb->list, &rx_list);
+			} else {
+				dev->stats.rx_dropped++;
+			}
+		}
+
+		if (page && new_page != page && !skb)
+			page_pool_recycle_direct(pool, page);
+
+		ugeth->rx_pages[rxQ][ugeth->skb_currx[rxQ]] = new_page;
 
 		/* update to point at the next skb */
 		ugeth->skb_currx[rxQ] =

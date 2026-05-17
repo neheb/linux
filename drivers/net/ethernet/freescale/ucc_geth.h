@@ -1210,7 +1210,8 @@ struct ucc_geth_private {
 	spinlock_t lock;
 	/* Tx DMA state, indexed by Tx buffer descriptor */
 	struct ucc_geth_tx_skbuff *tx_skbuff[NUM_TX_QUEUES];
-	struct sk_buff **rx_skbuff[NUM_RX_QUEUES];
+	struct page **rx_pages[NUM_RX_QUEUES];
+	struct page_pool *rx_page_pool[NUM_RX_QUEUES];
 	/* indices pointing to the next free sbk in skb arrays */
 	u16 skb_curtx[NUM_TX_QUEUES];
 	u16 skb_currx[NUM_RX_QUEUES];
