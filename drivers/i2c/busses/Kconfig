@@ -731,7 +731,7 @@ config I2C_HISI
 
 config I2C_IBM_IIC
 	tristate "IBM PPC 4xx on-chip I2C interface"
-	depends on 4xx
+	depends on 44x || COMPILE_TEST
 	help
 	  Say Y here if you want to use IIC peripheral found on
 	  embedded IBM PPC 4xx based systems.
