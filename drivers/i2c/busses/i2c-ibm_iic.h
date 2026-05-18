@@ -39,7 +39,7 @@ struct iic_regs {
 
 struct ibm_iic_private {
 	struct i2c_adapter adap;
-	volatile struct iic_regs __iomem *vaddr;
+	struct iic_regs __iomem *vaddr;
 	wait_queue_head_t wq;
 	int idx;
 	int irq;
