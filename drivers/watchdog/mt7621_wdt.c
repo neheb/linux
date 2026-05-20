@@ -141,7 +141,6 @@ static int mt7621_wdt_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct watchdog_device *mt7621_wdt;
 	struct mt7621_wdt_data *drvdata;
-	int err;
 
 	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
 	if (!drvdata)
@@ -174,6 +173,7 @@ static int mt7621_wdt_probe(struct platform_device *pdev)
 	watchdog_init_timeout(mt7621_wdt, mt7621_wdt->max_timeout, dev);
 	watchdog_set_nowayout(mt7621_wdt, nowayout);
 	watchdog_set_drvdata(mt7621_wdt, drvdata);
+	watchdog_stop_on_reboot(mt7621_wdt);
 
 	if (mt7621_wdt_is_running(mt7621_wdt)) {
 		/*
@@ -190,20 +190,7 @@ static int mt7621_wdt_probe(struct platform_device *pdev)
 		set_bit(WDOG_HW_RUNNING, &mt7621_wdt->status);
 	}
 
-	err = devm_watchdog_register_device(dev, &drvdata->wdt);
-	if (err)
-		return err;
-
-	platform_set_drvdata(pdev, drvdata);
-
-	return 0;
-}
-
-static void mt7621_wdt_shutdown(struct platform_device *pdev)
-{
-	struct mt7621_wdt_data *drvdata = platform_get_drvdata(pdev);
-
-	mt7621_wdt_stop(&drvdata->wdt);
+	return devm_watchdog_register_device(dev, &drvdata->wdt);
 }
 
 static const struct of_device_id mt7621_wdt_match[] = {
@@ -214,7 +201,6 @@ MODULE_DEVICE_TABLE(of, mt7621_wdt_match);
 
 static struct platform_driver mt7621_wdt_driver = {
 	.probe		= mt7621_wdt_probe,
-	.shutdown	= mt7621_wdt_shutdown,
 	.driver		= {
 		.name		= KBUILD_MODNAME,
 		.of_match_table	= mt7621_wdt_match,
