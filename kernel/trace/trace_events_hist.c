@@ -672,10 +672,11 @@ struct track_data {
 
 	unsigned int			key_len;
 	void				*key;
-	struct tracing_map_elt		elt;
 
 	struct action_data		*action_data;
 	struct hist_trigger_data	*hist_data;
+
+	struct tracing_map_elt		elt;
 };
 
 struct hist_elt_data {
