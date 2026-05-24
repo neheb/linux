@@ -142,7 +142,7 @@ struct mtk_cqdma_device {
 	u32 dma_requests;
 	u32 dma_channels;
 	struct mtk_cqdma_vchan *vc;
-	struct mtk_cqdma_pchan **pc;
+	struct mtk_cqdma_pchan *pc[];
 };
 
 static struct mtk_cqdma_device *to_cqdma_dev(struct dma_chan *chan)
@@ -745,15 +745,25 @@ MODULE_DEVICE_TABLE(of, mtk_cqdma_match);
 
 static int mtk_cqdma_probe(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
 	struct mtk_cqdma_device *cqdma;
 	struct mtk_cqdma_vchan *vc;
 	struct dma_device *dd;
+	u32 dma_channels;
 	int err;
 	u32 i;
 
-	cqdma = devm_kzalloc(&pdev->dev, sizeof(*cqdma), GFP_KERNEL);
+	if (device_property_read_u32(dev, "dma-channels", &dma_channels)) {
+		dev_info(dev, "Using %u as missing dma-channels property\n",
+			 MTK_CQDMA_NR_PCHANS);
+		dma_channels = MTK_CQDMA_NR_PCHANS;
+	}
+
+	cqdma = devm_kzalloc(dev, struct_size(cqdma, pc, dma_channels), GFP_KERNEL);
 	if (!cqdma)
 		return -ENOMEM;
+
+	cqdma->dma_channels = dma_channels;
 
 	dd = &cqdma->ddev;
 
@@ -789,21 +799,6 @@ static int mtk_cqdma_probe(struct platform_device *pdev)
 
 		cqdma->dma_requests = MTK_CQDMA_NR_VCHANS;
 	}
-
-	if (pdev->dev.of_node && of_property_read_u32(pdev->dev.of_node,
-						      "dma-channels",
-						      &cqdma->dma_channels)) {
-		dev_info(&pdev->dev,
-			 "Using %u as missing dma-channels property\n",
-			 MTK_CQDMA_NR_PCHANS);
-
-		cqdma->dma_channels = MTK_CQDMA_NR_PCHANS;
-	}
-
-	cqdma->pc = devm_kcalloc(&pdev->dev, cqdma->dma_channels,
-				 sizeof(*cqdma->pc), GFP_KERNEL);
-	if (!cqdma->pc)
-		return -ENOMEM;
 
 	/* initialization for PCs */
 	for (i = 0; i < cqdma->dma_channels; ++i) {
