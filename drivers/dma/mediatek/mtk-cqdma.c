@@ -133,7 +133,7 @@ struct mtk_cqdma_vchan {
  * @dma_requests:           The number of VCs the device supports to
  * @dma_channels:           The number of PCs the device supports to
  * @vc:                     The pointer to all available VCs
- * @pc:                     The pointer to all the underlying PCs
+ * @pc:                     Array of all the underlying PCs
  */
 struct mtk_cqdma_device {
 	struct dma_device ddev;
@@ -142,7 +142,7 @@ struct mtk_cqdma_device {
 	u32 dma_requests;
 	u32 dma_channels;
 	struct mtk_cqdma_vchan *vc;
-	struct mtk_cqdma_pchan *pc[];
+	struct mtk_cqdma_pchan pc[];
 };
 
 static struct mtk_cqdma_device *to_cqdma_dev(struct dma_chan *chan)
@@ -391,24 +391,24 @@ static irqreturn_t mtk_cqdma_irq(int irq, void *devid)
 
 	/* clear interrupt flags for each PC */
 	for (i = 0; i < cqdma->dma_channels; ++i, schedule_tasklet = false) {
-		spin_lock(&cqdma->pc[i]->lock);
-		if (mtk_dma_read(cqdma->pc[i],
+		spin_lock(&cqdma->pc[i].lock);
+		if (mtk_dma_read(&cqdma->pc[i],
 				 MTK_CQDMA_INT_FLAG) & MTK_CQDMA_INT_FLAG_BIT) {
 			/* clear interrupt */
-			mtk_dma_clr(cqdma->pc[i], MTK_CQDMA_INT_FLAG,
+			mtk_dma_clr(&cqdma->pc[i], MTK_CQDMA_INT_FLAG,
 				    MTK_CQDMA_INT_FLAG_BIT);
 
 			schedule_tasklet = true;
 			ret = IRQ_HANDLED;
 		}
-		spin_unlock(&cqdma->pc[i]->lock);
+		spin_unlock(&cqdma->pc[i].lock);
 
 		if (schedule_tasklet) {
 			/* disable interrupt */
-			disable_irq_nosync(cqdma->pc[i]->irq);
+			disable_irq_nosync(cqdma->pc[i].irq);
 
 			/* schedule the tasklet to handle the transactions */
-			tasklet_schedule(&cqdma->pc[i]->tasklet);
+			tasklet_schedule(&cqdma->pc[i].tasklet);
 		}
 	}
 
@@ -617,9 +617,9 @@ static int mtk_cqdma_alloc_chan_resources(struct dma_chan *c)
 
 	/* allocate PC with the minimum refcount */
 	for (i = 0; i < cqdma->dma_channels; ++i) {
-		refcnt = refcount_read(&cqdma->pc[i]->refcnt);
+		refcnt = refcount_read(&cqdma->pc[i].refcnt);
 		if (refcnt < min_refcnt) {
-			pc = cqdma->pc[i];
+			pc = &cqdma->pc[i];
 			min_refcnt = refcnt;
 		}
 	}
@@ -702,17 +702,17 @@ static int mtk_cqdma_hw_init(struct mtk_cqdma_device *cqdma)
 
 	/* reset all PCs */
 	for (i = 0; i < cqdma->dma_channels; ++i) {
-		spin_lock_irqsave(&cqdma->pc[i]->lock, flags);
-		if (mtk_cqdma_hard_reset(cqdma->pc[i]) < 0) {
+		spin_lock_irqsave(&cqdma->pc[i].lock, flags);
+		if (mtk_cqdma_hard_reset(&cqdma->pc[i]) < 0) {
 			dev_err(cqdma2dev(cqdma), "cqdma hard reset timeout\n");
-			spin_unlock_irqrestore(&cqdma->pc[i]->lock, flags);
+			spin_unlock_irqrestore(&cqdma->pc[i].lock, flags);
 
 			clk_disable_unprepare(cqdma->clk);
 			pm_runtime_put_sync(cqdma2dev(cqdma));
 			pm_runtime_disable(cqdma2dev(cqdma));
 			return -EINVAL;
 		}
-		spin_unlock_irqrestore(&cqdma->pc[i]->lock, flags);
+		spin_unlock_irqrestore(&cqdma->pc[i].lock, flags);
 	}
 
 	return 0;
@@ -725,10 +725,10 @@ static void mtk_cqdma_hw_deinit(struct mtk_cqdma_device *cqdma)
 
 	/* reset all PCs */
 	for (i = 0; i < cqdma->dma_channels; ++i) {
-		spin_lock_irqsave(&cqdma->pc[i]->lock, flags);
-		if (mtk_cqdma_hard_reset(cqdma->pc[i]) < 0)
+		spin_lock_irqsave(&cqdma->pc[i].lock, flags);
+		if (mtk_cqdma_hard_reset(&cqdma->pc[i]) < 0)
 			dev_err(cqdma2dev(cqdma), "cqdma hard reset timeout\n");
-		spin_unlock_irqrestore(&cqdma->pc[i]->lock, flags);
+		spin_unlock_irqrestore(&cqdma->pc[i].lock, flags);
 	}
 
 	clk_disable_unprepare(cqdma->clk);
@@ -802,25 +802,20 @@ static int mtk_cqdma_probe(struct platform_device *pdev)
 
 	/* initialization for PCs */
 	for (i = 0; i < cqdma->dma_channels; ++i) {
-		cqdma->pc[i] = devm_kcalloc(&pdev->dev, 1,
-					    sizeof(**cqdma->pc), GFP_KERNEL);
-		if (!cqdma->pc[i])
-			return -ENOMEM;
-
-		INIT_LIST_HEAD(&cqdma->pc[i]->queue);
-		spin_lock_init(&cqdma->pc[i]->lock);
-		refcount_set(&cqdma->pc[i]->refcnt, 0);
-		cqdma->pc[i]->base = devm_platform_ioremap_resource(pdev, i);
-		if (IS_ERR(cqdma->pc[i]->base))
-			return PTR_ERR(cqdma->pc[i]->base);
+		INIT_LIST_HEAD(&cqdma->pc[i].queue);
+		spin_lock_init(&cqdma->pc[i].lock);
+		refcount_set(&cqdma->pc[i].refcnt, 0);
+		cqdma->pc[i].base = devm_platform_ioremap_resource(pdev, i);
+		if (IS_ERR(cqdma->pc[i].base))
+			return PTR_ERR(cqdma->pc[i].base);
 
 		/* allocate IRQ resource */
 		err = platform_get_irq(pdev, i);
 		if (err < 0)
 			return err;
-		cqdma->pc[i]->irq = err;
+		cqdma->pc[i].irq = err;
 
-		err = devm_request_irq(&pdev->dev, cqdma->pc[i]->irq,
+		err = devm_request_irq(&pdev->dev, cqdma->pc[i].irq,
 				       mtk_cqdma_irq, 0, dev_name(&pdev->dev),
 				       cqdma);
 		if (err) {
@@ -866,7 +861,7 @@ static int mtk_cqdma_probe(struct platform_device *pdev)
 
 	/* initialize tasklet for each PC */
 	for (i = 0; i < cqdma->dma_channels; ++i)
-		tasklet_setup(&cqdma->pc[i]->tasklet, mtk_cqdma_tasklet_cb);
+		tasklet_setup(&cqdma->pc[i].tasklet, mtk_cqdma_tasklet_cb);
 
 	dev_info(&pdev->dev, "MediaTek CQDMA driver registered\n");
 
@@ -895,15 +890,15 @@ static void mtk_cqdma_remove(struct platform_device *pdev)
 
 	/* disable interrupt */
 	for (i = 0; i < cqdma->dma_channels; i++) {
-		spin_lock_irqsave(&cqdma->pc[i]->lock, flags);
-		mtk_dma_clr(cqdma->pc[i], MTK_CQDMA_INT_EN,
+		spin_lock_irqsave(&cqdma->pc[i].lock, flags);
+		mtk_dma_clr(&cqdma->pc[i], MTK_CQDMA_INT_EN,
 			    MTK_CQDMA_INT_EN_BIT);
-		spin_unlock_irqrestore(&cqdma->pc[i]->lock, flags);
+		spin_unlock_irqrestore(&cqdma->pc[i].lock, flags);
 
 		/* Waits for any pending IRQ handlers to complete */
-		synchronize_irq(cqdma->pc[i]->irq);
+		synchronize_irq(cqdma->pc[i].irq);
 
-		tasklet_kill(&cqdma->pc[i]->tasklet);
+		tasklet_kill(&cqdma->pc[i].tasklet);
 	}
 
 	/* disable hardware */
