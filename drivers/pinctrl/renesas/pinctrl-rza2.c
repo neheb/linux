@@ -48,6 +48,7 @@ struct rza2_pinctrl_priv {
 	struct pinctrl_dev *pctl;
 	struct pinctrl_gpio_range gpio_range;
 	unsigned int npins;
+	struct gpio_chip chip;
 	struct mutex mutex; /* serialize adding groups and functions */
 	struct pinctrl_pin_desc pins[] __counted_by(npins);
 };
@@ -228,30 +229,28 @@ static const char * const rza2_gpio_names[] = {
 	"PM_0", "PM_1", "PM_2", "PM_3", "PM_4", "PM_5", "PM_6", "PM_7",
 };
 
-static struct gpio_chip chip = {
-	.names = rza2_gpio_names,
-	.base = -1,
-	.request = pinctrl_gpio_request,
-	.free = pinctrl_gpio_free,
-	.get_direction = rza2_chip_get_direction,
-	.direction_input = rza2_chip_direction_input,
-	.direction_output = rza2_chip_direction_output,
-	.get = rza2_chip_get,
-	.set = rza2_chip_set,
-};
-
 static int rza2_gpio_register(struct rza2_pinctrl_priv *priv)
 {
 	struct device_node *np = priv->dev->of_node;
 	struct of_phandle_args of_args;
+	struct pinctrl_gpio_range *gr;
+	struct gpio_chip *gc;
 	int ret;
 
-	chip.label = devm_kasprintf(priv->dev, GFP_KERNEL, "%pOFn", np);
-	if (!chip.label)
+	gc = &priv->chip;
+	gc->names = rza2_gpio_names;
+	gc->base = -1;
+	gc->request = pinctrl_gpio_request;
+	gc->free = pinctrl_gpio_free;
+	gc->get_direction = rza2_chip_get_direction;
+	gc->direction_input = rza2_chip_direction_input;
+	gc->direction_output = rza2_chip_direction_output;
+	gc->get = rza2_chip_get;
+	gc->set = rza2_chip_set;
+	gc->ngpio = priv->npins;
+	gc->label = devm_kasprintf(priv->dev, GFP_KERNEL, "%pOFn", np);
+	if (!gc->label)
 		return -ENOMEM;
-
-	chip.parent = priv->dev;
-	chip.ngpio = priv->npins;
 
 	ret = of_parse_phandle_with_fixed_args(np, "gpio-ranges", 3, 0,
 					       &of_args);
@@ -268,19 +267,21 @@ static int rza2_gpio_register(struct rza2_pinctrl_priv *priv)
 		dev_err(priv->dev, "gpio-ranges does not match selected SOC\n");
 		return -EINVAL;
 	}
-	priv->gpio_range.id = 0;
-	priv->gpio_range.pin_base = priv->gpio_range.base = 0;
-	priv->gpio_range.npins = priv->npins;
-	priv->gpio_range.name = chip.label;
-	priv->gpio_range.gc = &chip;
+
+	gr = &priv->gpio_range;
+	gr->id = 0;
+	gr->pin_base = gr->base = 0;
+	gr->npins = priv->npins;
+	gr->name = gc->label;
+	gr->gc = gc;
 
 	/* Register our gpio chip with gpiolib */
-	ret = devm_gpiochip_add_data(priv->dev, &chip, priv);
+	ret = devm_gpiochip_add_data(priv->dev, gc, priv);
 	if (ret)
 		return ret;
 
 	/* Register pin range with pinctrl core */
-	pinctrl_add_gpio_range(priv->pctl, &priv->gpio_range);
+	pinctrl_add_gpio_range(priv->pctl, gr);
 
 	dev_dbg(priv->dev, "Registered gpio controller\n");
 
