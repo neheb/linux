@@ -1049,7 +1049,6 @@ endchoice
 
 source "arch/mips/alchemy/Kconfig"
 source "arch/mips/ath25/Kconfig"
-source "arch/mips/ath79/Kconfig"
 source "arch/mips/bcm47xx/Kconfig"
 source "arch/mips/bcm63xx/Kconfig"
 source "arch/mips/bmips/Kconfig"
