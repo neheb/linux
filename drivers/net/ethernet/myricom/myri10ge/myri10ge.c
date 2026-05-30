@@ -1767,20 +1767,17 @@ static void
 myri10ge_get_strings(struct net_device *netdev, u32 stringset, u8 * data)
 {
 	struct myri10ge_priv *mgp = netdev_priv(netdev);
-	int i;
+	int i, slice;
 
-	switch (stringset) {
-	case ETH_SS_STATS:
-		memcpy(data, *myri10ge_gstrings_main_stats,
-		       sizeof(myri10ge_gstrings_main_stats));
-		data += sizeof(myri10ge_gstrings_main_stats);
-		for (i = 0; i < mgp->num_slices; i++) {
-			memcpy(data, *myri10ge_gstrings_slice_stats,
-			       sizeof(myri10ge_gstrings_slice_stats));
-			data += sizeof(myri10ge_gstrings_slice_stats);
-		}
-		break;
-	}
+	if (stringset != ETH_SS_STATS)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(myri10ge_gstrings_main_stats); i++)
+		ethtool_puts(&data, myri10ge_gstrings_main_stats[i]);
+
+	for (slice = 0; slice < mgp->num_slices; slice++)
+		for (i = 0; i < ARRAY_SIZE(myri10ge_gstrings_slice_stats); i++)
+			ethtool_puts(&data, myri10ge_gstrings_slice_stats[i]);
 }
 
 static int myri10ge_get_sset_count(struct net_device *netdev, int sset)
