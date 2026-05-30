@@ -18,7 +18,7 @@
 
 #include "vuart.h"
 
-/**
+/*
  * ps3_sys_manager - PS3 system manager driver.
  *
  * The system manager provides an asynchronous system event notification
@@ -36,8 +36,10 @@
  * struct ps3_sys_manager_header - System manager message header.
  * @version: Header version, currently 1.
  * @size: Header size in bytes, currently 16.
+ * @reserved_1: Reserved.
  * @payload_size: Message payload size in bytes.
  * @service_id: Message type, one of enum ps3_sys_manager_service_id.
+ * @reserved_2: Reserved.
  * @request_tag: Unique number to identify reply.
  */
 
@@ -63,7 +65,7 @@ static void __maybe_unused _dump_sm_header(
 	pr_debug("%s:%d: request_tag:  %xh\n", func, line, h->request_tag);
 }
 
-/**
+/*
  * @PS3_SM_RX_MSG_LEN_MIN - Shortest received message length.
  * @PS3_SM_RX_MSG_LEN_MAX - Longest received message length.
  *
@@ -162,6 +164,9 @@ enum ps3_sys_manager_button_event {
 
 /**
  * enum ps3_sys_manager_next_op - Operation to perform after lpar is destroyed.
+ * @PS3_SM_NEXT_OP_SYS_SHUTDOWN: Shutdown the system.
+ * @PS3_SM_NEXT_OP_SYS_REBOOT: Reboot the system.
+ * @PS3_SM_NEXT_OP_LPAR_REBOOT: Reboot the LPAR.
  */
 
 enum ps3_sys_manager_next_op {
@@ -190,7 +195,7 @@ enum ps3_sys_manager_wake_source {
 	PS3_SM_WAKE_P_O_R     = 0x80000000,
 };
 
-/**
+/*
  * user_wake_sources - User specified wakeup sources.
  *
  * Logical OR of enum ps3_sys_manager_wake_source types.
@@ -200,6 +205,7 @@ static u32 user_wake_sources = PS3_SM_WAKE_DEFAULT;
 
 /**
  * enum ps3_sys_manager_cmd - Command from system manager to guest.
+ * @PS3_SM_CMD_SHUTDOWN: Shutdown guest OS.
  *
  * The guest completes the actions needed, then acks or naks the command via
  * ps3_sys_manager_send_response().  In the case of @PS3_SM_CMD_SHUTDOWN,
@@ -212,7 +218,7 @@ enum ps3_sys_manager_cmd {
 	PS3_SM_CMD_SHUTDOWN = 1, /* shutdown guest OS */
 };
 
-/**
+/*
  * ps3_sm_force_power_off - Poweroff helper.
  *
  * A global variable used to force a poweroff when the power button has
@@ -224,7 +230,9 @@ static unsigned int ps3_sm_force_power_off;
 
 /**
  * ps3_sys_manager_write - Helper to write a two part message to the vuart.
- *
+ * @dev: The struct ps3_system_bus_device instance.
+ * @header: Message header to write.
+ * @payload: Message payload data to write.
  */
 
 static int ps3_sys_manager_write(struct ps3_system_bus_device *dev,
@@ -248,7 +256,8 @@ static int ps3_sys_manager_write(struct ps3_system_bus_device *dev,
 
 /**
  * ps3_sys_manager_send_attr - Send a 'set attribute' to the system manager.
- *
+ * @dev: The struct ps3_system_bus_device instance.
+ * @attr: Attribute value to send.
  */
 
 static int ps3_sys_manager_send_attr(struct ps3_system_bus_device *dev,
@@ -280,6 +289,9 @@ static int ps3_sys_manager_send_attr(struct ps3_system_bus_device *dev,
 
 /**
  * ps3_sys_manager_send_next_op - Send a 'set next op' to the system manager.
+ * @dev: The struct ps3_system_bus_device instance.
+ * @op: The next operation to perform.
+ * @wake_source: Wakeup source mask.
  *
  * Tell the system manager what to do after this lpar is destroyed.
  */
@@ -319,6 +331,7 @@ static int ps3_sys_manager_send_next_op(struct ps3_system_bus_device *dev,
 
 /**
  * ps3_sys_manager_send_request_shutdown - Send 'request' to the system manager.
+ * @dev: The struct ps3_system_bus_device instance.
  *
  * The guest sends this message to request an operation or action of the system
  * manager.  The reply is a command message from the system manager.  In the
@@ -360,6 +373,7 @@ static int ps3_sys_manager_send_request_shutdown(
 
 /**
  * ps3_sys_manager_send_response - Send a 'response' to the system manager.
+ * @dev: The struct ps3_system_bus_device instance.
  * @status: zero = success, others fail.
  *
  * The guest sends this message to the system manager to acknowledge success or
@@ -397,7 +411,7 @@ static int ps3_sys_manager_send_response(struct ps3_system_bus_device *dev,
 
 /**
  * ps3_sys_manager_handle_event - Second stage event msg handler.
- *
+ * @dev: The struct ps3_system_bus_device instance.
  */
 
 static int ps3_sys_manager_handle_event(struct ps3_system_bus_device *dev)
@@ -478,6 +492,7 @@ static int ps3_sys_manager_handle_event(struct ps3_system_bus_device *dev)
 }
 /**
  * ps3_sys_manager_handle_cmd - Second stage command msg handler.
+ * @dev: The struct ps3_system_bus_device instance.
  *
  * The system manager sends this in reply to a 'request' message from the guest.
  */
@@ -519,6 +534,7 @@ static int ps3_sys_manager_handle_cmd(struct ps3_system_bus_device *dev)
 
 /**
  * ps3_sys_manager_handle_msg - First stage msg handler.
+ * @dev: The struct ps3_system_bus_device instance.
  *
  * Can be called directly to manually poll vuart and pump message handler.
  */
@@ -595,6 +611,7 @@ static void ps3_sys_manager_fin(struct ps3_system_bus_device *dev)
 
 /**
  * ps3_sys_manager_final_power_off - The final platform machine_power_off routine.
+ * @dev: The struct ps3_system_bus_device instance.
  *
  * This routine never returns.  The routine disables asynchronous vuart reads
  * then spins calling ps3_sys_manager_handle_msg() to receive and acknowledge
@@ -620,6 +637,7 @@ static void ps3_sys_manager_final_power_off(struct ps3_system_bus_device *dev)
 
 /**
  * ps3_sys_manager_final_restart - The final platform machine_restart routine.
+ * @dev: The struct ps3_system_bus_device instance.
  *
  * This routine never returns.  The routine disables asynchronous vuart reads
  * then spins calling ps3_sys_manager_handle_msg() to receive and acknowledge
@@ -665,6 +683,7 @@ EXPORT_SYMBOL_GPL(ps3_sys_manager_get_wol);
 
 /**
  * ps3_sys_manager_set_wol - Set wake-on-lan setting.
+ * @state: The requested WoL state.
  */
 
 void ps3_sys_manager_set_wol(int state)
@@ -685,6 +704,7 @@ EXPORT_SYMBOL_GPL(ps3_sys_manager_set_wol);
 
 /**
  * ps3_sys_manager_work - Asynchronous read handler.
+ * @dev: The struct ps3_system_bus_device instance.
  *
  * Signaled when PS3_SM_RX_MSG_LEN_MIN bytes arrive at the vuart port.
  */
