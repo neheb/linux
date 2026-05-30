@@ -572,7 +572,7 @@ static int qlcnic_83xx_dcb_query_cee_param(struct qlcnic_dcb *dcb,
 	u32 val;
 	char *p;
 
-	size = 0;
+	size = sizeof(struct qlcnic_dcb_param);
 	memset(&mbx_out, 0, sizeof(struct qlcnic_dcb_mbx_params));
 	memset(buf, 0, sizeof(struct qlcnic_dcb_mbx_params));
 
@@ -610,8 +610,7 @@ static int qlcnic_83xx_dcb_query_cee_param(struct qlcnic_dcb *dcb,
 		for (i = 0; i < max_app; i++)
 			each->app[i] = cmd.rsp.arg[i + k];
 
-		size = 16 * sizeof(u32);
-		memcpy(p, &each->hdr_prio_pfc_map[0], size);
+		memcpy(p, each, size);
 		p += size;
 		if (j == 0)
 			k = 18;
