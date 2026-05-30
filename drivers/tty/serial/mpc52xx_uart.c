@@ -77,7 +77,9 @@ static void mpc52xx_uart_of_enumerate(void);
 
 /* Forward declaration of the interruption handling routine */
 static irqreturn_t mpc52xx_uart_int(int irq, void *dev_id);
+#if defined(CONFIG_PPC_MPC52xx) || defined(CONFIG_PPC_MPC512x)
 static irqreturn_t mpc5xxx_uart_process_int(struct uart_port *port);
+#endif
 
 /* ======================================================================== */
 /* PSC fifo operations for isolating differences between 52xx and 512x      */
@@ -130,6 +132,7 @@ static inline void mpc52xx_set_divisor(struct mpc52xx_psc __iomem *psc,
 	out_8(&psc->ctlr, divisor & 0xff);
 }
 
+#if defined(CONFIG_PPC_MPC52xx) || defined(CONFIG_PPC_MPC512x)
 static u16 mpc52xx_psc_get_status(struct uart_port *port)
 {
 	return in_be16(&PSC(port)->mpc52xx_psc_status);
@@ -188,6 +191,7 @@ static u8 mpc52xx_psc_get_mr1(struct uart_port *port)
 	out_8(&PSC(port)->command, MPC52xx_PSC_SEL_MODE_REG_1);
 	return in_8(&PSC(port)->mode);
 }
+#endif /* CONFIG_PPC_MPC52xx || CONFIG_PPC_MPC512x */
 
 #ifdef CONFIG_PPC_MPC52xx
 #define FIFO_52xx(port) ((struct mpc52xx_psc_fifo __iomem *)(PSC(port)+1))
@@ -1442,6 +1446,7 @@ mpc52xx_uart_int_tx_chars(struct uart_port *port)
 		psc_ops->write_char(port, ch));
 }
 
+#if defined(CONFIG_PPC_MPC52xx) || defined(CONFIG_PPC_MPC512x)
 static irqreturn_t
 mpc5xxx_uart_process_int(struct uart_port *port)
 {
@@ -1477,6 +1482,7 @@ mpc5xxx_uart_process_int(struct uart_port *port)
 
 	return IRQ_HANDLED;
 }
+#endif /* CONFIG_PPC_MPC52xx || CONFIG_PPC_MPC512x */
 
 static irqreturn_t
 mpc52xx_uart_int(int irq, void *dev_id)
