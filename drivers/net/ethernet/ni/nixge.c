@@ -1257,18 +1257,14 @@ MODULE_DEVICE_TABLE(of, nixge_dt_ids);
 
 static int nixge_of_get_resources(struct platform_device *pdev)
 {
-	const struct of_device_id *of_id;
 	enum nixge_version version;
 	struct net_device *ndev;
 	struct nixge_priv *priv;
 
 	ndev = platform_get_drvdata(pdev);
 	priv = netdev_priv(ndev);
-	of_id = of_match_node(nixge_dt_ids, pdev->dev.of_node);
-	if (!of_id)
-		return -ENODEV;
 
-	version = (enum nixge_version)of_id->data;
+	version = (unsigned long)of_device_get_match_data(&pdev->dev);
 	if (version <= NIXGE_V2)
 		priv->dma_regs = devm_platform_get_and_ioremap_resource(pdev, 0, NULL);
 	else
