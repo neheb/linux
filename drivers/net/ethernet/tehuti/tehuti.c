@@ -2313,7 +2313,8 @@ static void bdx_get_strings(struct net_device *netdev, u32 stringset, u8 *data)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, *bdx_stat_names, sizeof(bdx_stat_names));
+		for (int i = 0; i < ARRAY_SIZE(bdx_stat_names); i++)
+			ethtool_puts(&data, bdx_stat_names[i]);
 		break;
 	}
 }
