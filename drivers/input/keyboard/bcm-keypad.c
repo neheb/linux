@@ -167,7 +167,7 @@ static void bcm_kp_stop(const struct bcm_kp *kp)
 
 	val = readl(kp->base + KPCR_OFFSET);
 	val &= ~KPCR_ENABLE;
-	writel(0, kp->base + KPCR_OFFSET);
+	writel(val, kp->base + KPCR_OFFSET);
 	writel(0, kp->base + KPIMR0_OFFSET);
 	writel(0, kp->base + KPIMR1_OFFSET);
 	writel(0xFFFFFFFF, kp->base + KPICR0_OFFSET);
