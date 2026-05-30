@@ -133,7 +133,7 @@ enum {
 	PS3_LPM_DEFAULT_TB_CACHE_SIZE = 0x4000,
 };
 
-/**
+/*
  * lpm_priv - Static instance of the lpm data.
  *
  * Since the exported routines don't support the notion of a device
@@ -149,7 +149,7 @@ static struct device *sbd_core(void)
 	return &lpm_priv->sbd->core;
 }
 
-/**
+/*
  * use_start_stop_bookmark - Enable the PPU bookmark trace.
  *
  * And it enables PPU bookmark triggers ONLY if the other triggers are not set.
@@ -190,6 +190,8 @@ EXPORT_SYMBOL_GPL(ps3_set_pm_bookmark);
 
 /**
  * ps3_read_phys_ctr - Read physical counter registers.
+ * @cpu: The processor ID.
+ * @phys_ctr: Physical counter number (0-3).
  *
  * Each physical counter can act as one 32 bit counter or as two 16 bit
  * counters.
@@ -234,6 +236,9 @@ EXPORT_SYMBOL_GPL(ps3_read_phys_ctr);
 
 /**
  * ps3_write_phys_ctr - Write physical counter registers.
+ * @cpu: The processor ID.
+ * @phys_ctr: Physical counter number (0-3).
+ * @val: Value to write to the counter.
  *
  * Each physical counter can act as one 32 bit counter or as two 16 bit
  * counters.
@@ -295,6 +300,8 @@ EXPORT_SYMBOL_GPL(ps3_write_phys_ctr);
 
 /**
  * ps3_read_ctr - Read counter.
+ * @cpu: The processor ID.
+ * @ctr: Logical counter number (0-7).
  *
  * Read 16 or 32 bits depending on the current size of the counter.
  * Counters 4, 5, 6 & 7 are always 16 bit.
@@ -316,6 +323,9 @@ EXPORT_SYMBOL_GPL(ps3_read_ctr);
 
 /**
  * ps3_write_ctr - Write counter.
+ * @cpu: The processor ID.
+ * @ctr: Logical counter number (0-7).
+ * @val: Value to write to the counter.
  *
  * Write 16 or 32 bits depending on the current size of the counter.
  * Counters 4, 5, 6 & 7 are always 16 bit.
@@ -343,6 +353,8 @@ EXPORT_SYMBOL_GPL(ps3_write_ctr);
 
 /**
  * ps3_read_pm07_control - Read counter control registers.
+ * @cpu: The processor ID.
+ * @ctr: Logical counter number.
  *
  * Each logical counter has a corresponding control register.
  */
@@ -355,6 +367,9 @@ EXPORT_SYMBOL_GPL(ps3_read_pm07_control);
 
 /**
  * ps3_write_pm07_control - Write counter control registers.
+ * @cpu: The processor ID.
+ * @ctr: Logical counter number.
+ * @val: Value to write to the control register.
  *
  * Each logical counter has a corresponding control register.
  */
@@ -382,6 +397,8 @@ EXPORT_SYMBOL_GPL(ps3_write_pm07_control);
 
 /**
  * ps3_read_pm - Read Other LPM control registers.
+ * @cpu: The processor ID.
+ * @reg: The register to read (enum pm_reg_name).
  */
 
 u32 ps3_read_pm(u32 cpu, enum pm_reg_name reg)
@@ -434,6 +451,9 @@ EXPORT_SYMBOL_GPL(ps3_read_pm);
 
 /**
  * ps3_write_pm - Write Other LPM control registers.
+ * @cpu: The processor ID.
+ * @reg: The register to write (enum pm_reg_name).
+ * @val: Value to write to the register.
  */
 
 void ps3_write_pm(u32 cpu, enum pm_reg_name reg, u32 val)
@@ -502,6 +522,8 @@ EXPORT_SYMBOL_GPL(ps3_write_pm);
 
 /**
  * ps3_get_ctr_size - Get the size of a physical counter.
+ * @cpu: The processor ID.
+ * @phys_ctr: Physical counter number (0-3).
  *
  * Returns either 16 or 32.
  */
@@ -523,6 +545,9 @@ EXPORT_SYMBOL_GPL(ps3_get_ctr_size);
 
 /**
  * ps3_set_ctr_size - Set the size of a physical counter to 16 or 32 bits.
+ * @cpu: The processor ID.
+ * @phys_ctr: Physical counter number (0-3).
+ * @ctr_size: The size to set (16 or 32).
  */
 
 void ps3_set_ctr_size(u32 cpu, u32 phys_ctr, u32 ctr_size)
@@ -831,6 +856,7 @@ EXPORT_SYMBOL_GPL(ps3_get_hw_thread_id);
 
 /**
  * ps3_enable_pm - Enable the entire performance monitoring unit.
+ * @cpu: The processor ID.
  *
  * When we enable the LPM, all pending writes to counters get committed.
  */
@@ -877,6 +903,7 @@ EXPORT_SYMBOL_GPL(ps3_enable_pm);
 
 /**
  * ps3_disable_pm - Disable the entire performance monitoring unit.
+ * @cpu: The processor ID.
  */
 
 void ps3_disable_pm(u32 cpu)
@@ -1021,7 +1048,8 @@ int ps3_lpm_copy_tb_to_user(unsigned long offset, void __user *buf,
 EXPORT_SYMBOL_GPL(ps3_lpm_copy_tb_to_user);
 
 /**
- * ps3_get_and_clear_pm_interrupts -
+ * ps3_get_and_clear_pm_interrupts - Get and clear PM interrupts.
+ * @cpu: The processor ID.
  *
  * Clearing interrupts for the entire performance monitoring unit.
  * Reading pm_status clears the interrupt bits.
@@ -1034,7 +1062,10 @@ u32 ps3_get_and_clear_pm_interrupts(u32 cpu)
 EXPORT_SYMBOL_GPL(ps3_get_and_clear_pm_interrupts);
 
 /**
- * ps3_enable_pm_interrupts -
+ * ps3_enable_pm_interrupts - Enable PM interrupts.
+ * @cpu: The processor ID.
+ * @thread: Thread ID.
+ * @mask: Interrupt mask.
  *
  * Enabling interrupts for the entire performance monitoring unit.
  * Enables the interrupt bits in the pm_status register.
@@ -1048,7 +1079,8 @@ void ps3_enable_pm_interrupts(u32 cpu, u32 thread, u32 mask)
 EXPORT_SYMBOL_GPL(ps3_enable_pm_interrupts);
 
 /**
- * ps3_enable_pm_interrupts -
+ * ps3_disable_pm_interrupts - Disable PM interrupts.
+ * @cpu: The processor ID.
  *
  * Disabling interrupts for the entire performance monitoring unit.
  */
