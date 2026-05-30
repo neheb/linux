@@ -448,7 +448,7 @@ static int wdrtas_temp_close(struct inode *inode, struct file *file)
 
 /**
  * wdrtas_reboot - reboot notifier function
- * @nb: notifier block structure
+ * @this: notifier block structure
  * @code: reboot code
  * @ptr: unused
  *
