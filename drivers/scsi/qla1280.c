@@ -1711,7 +1711,7 @@ qla1280_load_firmware_dma(struct scsi_qla_host *ha)
 	const __le16 *fw_data;
 	uint16_t risc_address, risc_code_size;
 	uint16_t mb[MAILBOX_REGISTER_COUNT], cnt;
-	int err = 0, num, i;
+	int err = 0, i;
 #if DUMP_IT_BACK
 	uint8_t *sp, *tbuf;
 	dma_addr_t p_tbuf;
@@ -1736,7 +1736,6 @@ qla1280_load_firmware_dma(struct scsi_qla_host *ha)
 	dprintk(1, "%s: DMA RISC code (%i) words\n",
 			__func__, risc_code_size);
 
-	num = 0;
 	while (risc_code_size > 0) {
 		int warn __attribute__((unused)) = 0;
 
@@ -1800,7 +1799,6 @@ qla1280_load_firmware_dma(struct scsi_qla_host *ha)
 		risc_address += cnt;
 		risc_code_size = risc_code_size - cnt;
 		fw_data = fw_data + cnt;
-		num++;
 	}
 
  out:
