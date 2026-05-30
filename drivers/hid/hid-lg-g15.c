@@ -34,7 +34,7 @@
 #define LG_G13_FEATURE_BACKLIGHT_RGB	0x07
 #define LG_G13_BACKLIGHT_HW_ON_BIT	23
 
-/**
+/*
  * g13_input_report.keybits[] is not 32-bit aligned, so we can't use the bitops macros.
  *
  * @ary: Pointer to array of u8s
