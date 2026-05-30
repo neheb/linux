@@ -190,19 +190,16 @@ static int usbhs_status_get_each_irq(struct usbhs_priv *priv,
 				     struct usbhs_irq_state *state)
 {
 	struct usbhs_mod *mod = usbhs_mod_get_current(priv);
-	u16 intenb0, intenb1;
 	unsigned long flags;
 
 	/********************  spin lock ********************/
 	usbhs_lock(priv, flags);
 	state->intsts0 = usbhs_read(priv, INTSTS0);
-	intenb0 = usbhs_read(priv, INTENB0);
 
 	if (usbhs_mod_is_host(priv)) {
 		state->intsts1 = usbhs_read(priv, INTSTS1);
-		intenb1 = usbhs_read(priv, INTENB1);
 	} else {
-		state->intsts1 = intenb1 = 0;
+		state->intsts1 = 0;
 	}
 
 	/* mask */
