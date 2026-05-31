@@ -2814,7 +2814,7 @@ diag_cmd_data_alloc(struct lpfc_hba *phba,
 {
 	struct lpfc_dmabufext *mlist = NULL;
 	struct lpfc_dmabufext *dmp;
-	int cnt, offset = 0, i = 0;
+	int cnt, i = 0;
 	struct pci_dev *pcidev;
 
 	pcidev = phba->pcidev;
