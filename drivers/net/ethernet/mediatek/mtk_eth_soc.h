@@ -963,7 +963,7 @@ struct mtk_rx_ring {
 	void *dma;
 	u8 **data;
 	dma_addr_t phys;
-	u16 frag_size;
+	u32 frag_size;
 	u16 buf_size;
 	u16 dma_size;
 	bool calc_idx_update;
