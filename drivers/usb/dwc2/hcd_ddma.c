@@ -552,7 +552,7 @@ static void dwc2_init_isoc_dma_desc(struct dwc2_hsotg *hsotg,
 {
 	struct dwc2_qtd *qtd;
 	u32 max_xfer_size;
-	u16 idx, inc, n_desc = 0, ntd_max = 0;
+	u16 idx, inc, ntd_max = 0;
 	u16 cur_idx;
 	u16 next_idx;
 
@@ -601,7 +601,6 @@ static void dwc2_init_isoc_dma_desc(struct dwc2_hsotg *hsotg,
 			dwc2_fill_host_isoc_dma_desc(hsotg, qtd, qh,
 						     max_xfer_size, idx);
 			idx = dwc2_desclist_idx_inc(idx, inc, qh->dev_speed);
-			n_desc++;
 		}
 		qtd->isoc_td_last = idx;
 		qtd->in_process = 1;
