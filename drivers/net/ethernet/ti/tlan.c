@@ -2056,7 +2056,7 @@ static void tlan_read_and_clear_stats(struct net_device *dev, int record)
 {
 	u32		tx_good, tx_under;
 	u32		rx_good, rx_over;
-	u32		def_tx, crc, code;
+	u32		crc, code;
 	u32		multi_col, single_col;
 	u32		excess_col, late_col, loss;
 
@@ -2073,10 +2073,10 @@ static void tlan_read_and_clear_stats(struct net_device *dev, int record)
 	rx_over  = inb(dev->base_addr + TLAN_DIO_DATA + 3);
 
 	outw(TLAN_DEFERRED_TX, dev->base_addr + TLAN_DIO_ADR);
-	def_tx  = inb(dev->base_addr + TLAN_DIO_DATA);
-	def_tx += inb(dev->base_addr + TLAN_DIO_DATA + 1) << 8;
-	crc     = inb(dev->base_addr + TLAN_DIO_DATA + 2);
-	code    = inb(dev->base_addr + TLAN_DIO_DATA + 3);
+	inb(dev->base_addr + TLAN_DIO_DATA);
+	inb(dev->base_addr + TLAN_DIO_DATA + 1);
+	crc  = inb(dev->base_addr + TLAN_DIO_DATA + 2);
+	code = inb(dev->base_addr + TLAN_DIO_DATA + 3);
 
 	outw(TLAN_MULTICOL_FRMS, dev->base_addr + TLAN_DIO_ADR);
 	multi_col   = inb(dev->base_addr + TLAN_DIO_DATA);
