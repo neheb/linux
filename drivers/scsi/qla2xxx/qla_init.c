@@ -10138,7 +10138,8 @@ out_29xx:
 	}
 
 	/* Use extended-initialization control block. */
-	memcpy(ha->ex_init_cb, &nv->ex_version, sizeof(*ha->ex_init_cb));
+	memcpy(ha->ex_init_cb, (u8 *)nv + struct_offset(nv, ex_version),
+	       sizeof(*ha->ex_init_cb));
 	ha->frame_payload_size = le16_to_cpu(icb->frame_payload_size);
 	/*
 	 * Setup driver NVRAM options.
