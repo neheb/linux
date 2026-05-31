@@ -1700,7 +1700,6 @@ static void ns83820_run_bist(struct net_device *ndev, const char *name, u32 enab
 	int timed_out = 0;
 	unsigned long start;
 	u32 status;
-	int loops = 0;
 
 	dprintk("%s: start %s\n", ndev->name, name);
 
@@ -1708,7 +1707,6 @@ static void ns83820_run_bist(struct net_device *ndev, const char *name, u32 enab
 
 	writel(enable, dev->base + PTSCR);
 	for (;;) {
-		loops++;
 		status = readl(dev->base + PTSCR);
 		if (!(status & enable))
 			break;
