@@ -2865,7 +2865,6 @@ diag_cmd_data_alloc(struct lpfc_hba *phba,
 		bpl++;
 
 		i++;
-		offset += cnt;
 		size -= cnt;
 	}
 
