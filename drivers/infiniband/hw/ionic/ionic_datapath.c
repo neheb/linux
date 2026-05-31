@@ -10,7 +10,7 @@
 #include "ionic_ibdev.h"
 
 #define IONIC_OP(version, opname) \
-	((version) < 2 ? IONIC_V1_OP_##opname : IONIC_V2_OP_##opname)
+	((version) < 2 ? (u8)IONIC_V1_OP_##opname : (u8)IONIC_V2_OP_##opname)
 
 static bool ionic_next_cqe(struct ionic_ibdev *dev, struct ionic_cq *cq,
 			   struct ionic_v1_cqe **cqe)
