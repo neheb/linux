@@ -1457,7 +1457,7 @@ static int bnx2i_process_login_resp(struct iscsi_session *session,
 	resp_hdr->hlength = 0;
 
 	hton24(resp_hdr->dlength, login->data_length);
-	memcpy(resp_hdr->isid, &login->isid_lo, 6);
+	memcpy(resp_hdr->isid, login + struct_offset(login, isid_lo), 6);
 	resp_hdr->tsih = cpu_to_be16(login->tsih);
 	resp_hdr->itt = task->hdr->itt;
 	resp_hdr->statsn = cpu_to_be32(login->stat_sn);
