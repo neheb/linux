@@ -1616,7 +1616,8 @@ static int ibmvscsis_cap_mad(struct scsi_info *vscsi, struct iu_entry *iue)
 	struct capabilities *cap;
 	struct mad_capability_common *common;
 	dma_addr_t token;
-	u16 olen, len, status, min_len, cap_len;
+	u32 olen;
+	u16 len, status, min_len, cap_len;
 	u32 flag;
 	uint flag_bits = 0;
 	long rc = 0;
