@@ -242,7 +242,7 @@ static void nvGetClocks(struct nvidia_par *par, unsigned int *MClk,
 static void nv4CalcArbitration(nv4_fifo_info * fifo, nv4_sim_state * arb)
 {
 	int data, pagemiss, cas, width, video_enable, bpp;
-	int nvclks, mclks, pclks, vpagemiss, crtpagemiss, vbs;
+	int nvclks, mclks, vpagemiss, crtpagemiss, vbs;
 	int found, mclk_extra, mclk_loop, cbs, m1, p1;
 	int mclk_freq, pclk_freq, nvclk_freq, mp_enable;
 	int us_m, us_n, us_p, video_drain_rate, crtc_drain_rate;
@@ -261,7 +261,6 @@ static void nv4CalcArbitration(nv4_fifo_info * fifo, nv4_sim_state * arb)
 	clwm = 0;
 	vlwm = 0;
 	cbs = 128;
-	pclks = 2;
 	nvclks = 2;
 	nvclks += 2;
 	nvclks += 1;
@@ -281,7 +280,6 @@ static void nv4CalcArbitration(nv4_fifo_info * fifo, nv4_sim_state * arb)
 	if (mp_enable)
 		mclks += 4;
 	nvclks += 0;
-	pclks += 0;
 	found = 0;
 	vbs = 0;
 	while (found != 1) {
