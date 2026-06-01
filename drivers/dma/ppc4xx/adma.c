@@ -4041,7 +4041,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 	}
 
 	/* create a device */
-	adev = kzalloc_obj(*adev);
+	adev = devm_kzalloc(&ofdev->dev, sizeof(*adev), GFP_KERNEL);
 	if (!adev) {
 		initcode = PPC_ADMA_INIT_ALLOC;
 		ret = -ENOMEM;
@@ -4060,7 +4060,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 			adev->pool_size);
 		initcode = PPC_ADMA_INIT_COHERENT;
 		ret = -ENOMEM;
-		goto err_dma_alloc;
+		goto out;
 	}
 	dev_dbg(&ofdev->dev, "allocated descriptor pool virt 0x%p phys 0x%llx\n",
 		adev->dma_desc_pool_virt, (u64)adev->dma_desc_pool);
@@ -4202,8 +4202,6 @@ err_regs_alloc:
 	dma_free_coherent(adev->dev, adev->pool_size,
 			  adev->dma_desc_pool_virt,
 			  adev->dma_desc_pool);
-err_dma_alloc:
-	kfree(adev);
 out:
 	if (id < PPC440SPE_ADMA_ENGINES_NUM)
 		ppc440spe_adma_devices[id] = initcode;
@@ -4253,7 +4251,6 @@ static void ppc440spe_adma_remove(struct platform_device *ofdev)
 
 	dma_free_coherent(adev->dev, adev->pool_size,
 			  adev->dma_desc_pool_virt, adev->dma_desc_pool);
-	kfree(adev);
 }
 
 /*
