@@ -4051,7 +4051,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 	adev->id = id;
 	adev->pool_size = pool_size;
 	/* allocate coherent memory for hardware descriptors */
-	adev->dma_desc_pool_virt = dma_alloc_coherent(&ofdev->dev,
+	adev->dma_desc_pool_virt = dmam_alloc_coherent(&ofdev->dev,
 					adev->pool_size, &adev->dma_desc_pool,
 					GFP_KERNEL);
 	if (adev->dma_desc_pool_virt == NULL) {
@@ -4069,7 +4069,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 	if (IS_ERR(regs)) {
 		ret = PTR_ERR(regs);
 		initcode = PPC_ADMA_INIT_MEMRES;
-		goto err_regs_alloc;
+		goto out;
 	}
 
 	if (adev->id == PPC440SPE_XOR_ID) {
@@ -4105,7 +4105,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 	if (!chan) {
 		initcode = PPC_ADMA_INIT_CHANNEL;
 		ret = -ENOMEM;
-		goto err_regs_alloc;
+		goto out;
 	}
 
 	spin_lock_init(&chan->lock);
@@ -4198,10 +4198,6 @@ err_ref_alloc:
 	}
 err_page_alloc:
 	kfree(chan);
-err_regs_alloc:
-	dma_free_coherent(adev->dev, adev->pool_size,
-			  adev->dma_desc_pool_virt,
-			  adev->dma_desc_pool);
 out:
 	if (id < PPC440SPE_ADMA_ENGINES_NUM)
 		ppc440spe_adma_devices[id] = initcode;
@@ -4249,8 +4245,6 @@ static void ppc440spe_adma_remove(struct platform_device *ofdev)
 		kfree(ppc440spe_chan);
 	}
 
-	dma_free_coherent(adev->dev, adev->pool_size,
-			  adev->dma_desc_pool_virt, adev->dma_desc_pool);
 }
 
 /*
