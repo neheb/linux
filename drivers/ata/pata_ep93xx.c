@@ -501,15 +501,13 @@ static unsigned int ep93xx_pata_data_xfer(struct ata_queued_cmd *qc,
 	if (unlikely(buflen & 0x01)) {
 		buf += buflen - 1;
 
-		if (rw == READ) {
+		if (rw == READ)
 			*buf = ep93xx_pata_read_data(drv_data, IDECTRL_ADDR_DATA);
-		} else {
+		else
 			ep93xx_pata_write_data(drv_data, *buf, IDECTRL_ADDR_DATA);
-		}
-		words++;
 	}
 
-	return words << 1;
+	return ALIGN(buflen, 2);
 }
 
 /* Note: original code is ata_devchk */
