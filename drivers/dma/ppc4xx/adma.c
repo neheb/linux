@@ -89,7 +89,6 @@ static struct ppc440spe_adma_desc_slot *xor_last_submit;
 /* This array is used in data-check operations for storing a pattern */
 static char ppc440spe_qword[16];
 
-static atomic_t ppc440spe_adma_err_irq_ref;
 static dcr_host_t ppc440spe_mq_dcr_host;
 static unsigned int ppc440spe_mq_dcr_len;
 
@@ -3875,8 +3874,7 @@ static int ppc440spe_adma_setup_irqs(struct ppc440spe_adma_device *adev,
 		if (adev->err_irq <= 0) {
 			dev_warn(adev->dev, "no err irq resource?\n");
 			*initcode = PPC_ADMA_INIT_IRQ2;
-		} else
-			atomic_inc(&ppc440spe_adma_err_irq_ref);
+		}
 	} else {
 		adev->err_irq = -ENXIO;
 	}
@@ -3884,8 +3882,7 @@ static int ppc440spe_adma_setup_irqs(struct ppc440spe_adma_device *adev,
 	adev->irq = platform_get_irq(ofdev, 0);
 	if (adev->irq < 0) {
 		*initcode = PPC_ADMA_INIT_IRQ1;
-		ret = adev->irq;
-		goto err_irq_map;
+		return adev->irq;
 	}
 	dev_dbg(adev->dev, "irq %d, err irq %d\n",
 		adev->irq, adev->err_irq);
@@ -3896,8 +3893,7 @@ static int ppc440spe_adma_setup_irqs(struct ppc440spe_adma_device *adev,
 		dev_err(adev->dev, "can't request irq %d\n",
 			adev->irq);
 		*initcode = PPC_ADMA_INIT_IRQ1;
-		ret = -EIO;
-		goto err_irq_map;
+		return ret;
 	}
 
 	/* only DMA engines have a separate error IRQ
@@ -3935,14 +3931,13 @@ static int ppc440spe_adma_setup_irqs(struct ppc440spe_adma_device *adev,
 			ret = -ENODEV;
 			goto err_req2;
 		}
-		adev->i2o_reg = of_iomap(np, 0);
-		if (!adev->i2o_reg) {
+		adev->i2o_reg = devm_of_iomap(&ofdev->dev, np, 0, NULL);
+		of_node_put(np);
+		if (IS_ERR(adev->i2o_reg)) {
 			pr_err("%s: failed to map I2O registers\n", __func__);
-			of_node_put(np);
-			ret = -EINVAL;
+			ret = PTR_ERR(adev->i2o_reg);
 			goto err_req2;
 		}
-		of_node_put(np);
 		/* Unmask 'CS FIFO Attention' interrupts and
 		 * enable generating interrupts on errors
 		 */
@@ -3959,9 +3954,6 @@ err_req2:
 		free_irq(adev->err_irq, chan);
 err_req1:
 	free_irq(adev->irq, chan);
-err_irq_map:
-	if (adev->err_irq > 0)
-		atomic_dec(&ppc440spe_adma_err_irq_ref);
 	return ret;
 }
 
@@ -3985,11 +3977,8 @@ static void ppc440spe_adma_release_irqs(struct ppc440spe_adma_device *adev,
 		iowrite32(mask, &adev->i2o_reg->iopim);
 	}
 	free_irq(adev->irq, chan);
-	if (adev->err_irq > 0) {
+	if (adev->err_irq > 0)
 		free_irq(adev->err_irq, chan);
-		if (atomic_dec_and_test(&ppc440spe_adma_err_irq_ref))
-			iounmap(adev->i2o_reg);
-	}
 }
 
 /**
@@ -4489,7 +4478,6 @@ static int ppc440spe_configure_raid_devices(void)
 		  (1 << MQ0_CFBHL_TPLM) | (1 << MQ0_CFBHL_HBCL) |
 		  (PPC440SPE_DEFAULT_POLY << MQ0_CFBHL_POLY));
 
-	atomic_set(&ppc440spe_adma_err_irq_ref, 0);
 	for (i = 0; i < PPC440SPE_ADMA_ENGINES_NUM; i++)
 		ppc440spe_adma_devices[i] = -1;
 
