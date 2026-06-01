@@ -4101,7 +4101,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 	platform_set_drvdata(ofdev, adev);
 
 	/* create a channel */
-	chan = kzalloc_obj(*chan);
+	chan = devm_kzalloc(&ofdev->dev, sizeof(*chan), GFP_KERNEL);
 	if (!chan) {
 		initcode = PPC_ADMA_INIT_CHANNEL;
 		ret = -ENOMEM;
@@ -4130,7 +4130,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 			if (chan->qdest_page)
 				__free_page(chan->qdest_page);
 			ret = -ENOMEM;
-			goto err_page_alloc;
+			goto out;
 		}
 		chan->pdest = dma_map_page(&ofdev->dev, chan->pdest_page, 0,
 					   PAGE_SIZE, DMA_BIDIRECTIONAL);
@@ -4152,7 +4152,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 		}
 	}
 
-	ref = kmalloc_obj(*ref);
+	ref = devm_kzalloc(&ofdev->dev, sizeof(*ref), GFP_KERNEL);
 	if (ref) {
 		ref->chan = &chan->common;
 		INIT_LIST_HEAD(&ref->node);
@@ -4184,7 +4184,6 @@ err_irq:
 	list_for_each_entry_safe(ref, _ref, &ppc440spe_adma_chan_list, node) {
 		if (chan == to_ppc440spe_adma_chan(ref->chan)) {
 			list_del(&ref->node);
-			kfree(ref);
 		}
 	}
 err_ref_alloc:
@@ -4196,8 +4195,6 @@ err_ref_alloc:
 		__free_page(chan->pdest_page);
 		__free_page(chan->qdest_page);
 	}
-err_page_alloc:
-	kfree(chan);
 out:
 	if (id < PPC440SPE_ADMA_ENGINES_NUM)
 		ppc440spe_adma_devices[id] = initcode;
@@ -4238,11 +4235,9 @@ static void ppc440spe_adma_remove(struct platform_device *ofdev)
 			if (ppc440spe_chan ==
 			    to_ppc440spe_adma_chan(ref->chan)) {
 				list_del(&ref->node);
-				kfree(ref);
 			}
 		}
 		list_del(&chan->device_node);
-		kfree(ppc440spe_chan);
 	}
 
 }
