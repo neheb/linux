@@ -171,14 +171,6 @@ static u32 crypto4xx_build_pdr(struct crypto4xx_device *dev)
 	if (!dev->pdr)
 		return -ENOMEM;
 
-	dev->pdr_uinfo = kzalloc_objs(struct pd_uinfo, PPC4XX_NUM_PD);
-	if (!dev->pdr_uinfo) {
-		dma_free_coherent(dev->core_dev->device,
-				  sizeof(struct ce_pd) * PPC4XX_NUM_PD,
-				  dev->pdr,
-				  dev->pdr_pa);
-		return -ENOMEM;
-	}
 	dev->shadow_sa_pool = dma_alloc_coherent(dev->core_dev->device,
 				   sizeof(union shadow_sa_buf) * PPC4XX_NUM_PD,
 				   &dev->shadow_sa_pool_pa,
@@ -226,8 +218,6 @@ static void crypto4xx_destroy_pdr(struct crypto4xx_device *dev)
 		dma_free_coherent(dev->core_dev->device,
 			sizeof(struct sa_state_record) * PPC4XX_NUM_PD,
 			dev->shadow_sr_pool, dev->shadow_sr_pool_pa);
-
-	kfree(dev->pdr_uinfo);
 }
 
 static u32 crypto4xx_get_pd_from_pdr_nolock(struct crypto4xx_device *dev)
@@ -615,9 +605,9 @@ static void crypto4xx_pd_done(struct crypto4xx_device *dev, u32 idx)
 
 static void crypto4xx_stop_all(struct crypto4xx_core_device *core_dev)
 {
-	crypto4xx_destroy_pdr(core_dev->dev);
-	crypto4xx_destroy_gdr(core_dev->dev);
-	crypto4xx_destroy_sdr(core_dev->dev);
+	crypto4xx_destroy_pdr(&core_dev->dev);
+	crypto4xx_destroy_gdr(&core_dev->dev);
+	crypto4xx_destroy_sdr(&core_dev->dev);
 }
 
 static u32 get_next_gd(u32 current)
@@ -1061,12 +1051,12 @@ static void crypto4xx_bh_tasklet_cb(unsigned long data)
 	struct crypto4xx_core_device *core_dev = dev_get_drvdata(dev);
 	struct pd_uinfo *pd_uinfo;
 	struct ce_pd *pd;
-	u32 tail = core_dev->dev->pdr_tail;
-	u32 head = core_dev->dev->pdr_head;
+	u32 tail = core_dev->dev.pdr_tail;
+	u32 head = core_dev->dev.pdr_head;
 
 	do {
-		pd_uinfo = &core_dev->dev->pdr_uinfo[tail];
-		pd = &core_dev->dev->pdr[tail];
+		pd_uinfo = &core_dev->dev.pdr_uinfo[tail];
+		pd = &core_dev->dev.pdr[tail];
 		if ((pd_uinfo->state & PD_ENTRY_INUSE) &&
 		     ((READ_ONCE(pd->pd_ctl.w) &
 		       (PD_CTL_PE_DONE | PD_CTL_HOST_READY)) ==
@@ -1078,8 +1068,8 @@ static void crypto4xx_bh_tasklet_cb(unsigned long data)
 			 * flag read before the data reads.
 			 */
 			dma_rmb();
-			crypto4xx_pd_done(core_dev->dev, tail);
-			tail = crypto4xx_put_pd_to_pdr(core_dev->dev, tail);
+			crypto4xx_pd_done(&core_dev->dev, tail);
+			tail = crypto4xx_put_pd_to_pdr(&core_dev->dev, tail);
 		} else {
 			/* if tail not done, break */
 			break;
@@ -1095,7 +1085,7 @@ static inline irqreturn_t crypto4xx_interrupt_handler(int irq, void *data,
 {
 	struct crypto4xx_core_device *core_dev = data;
 
-	writel(clr_val, core_dev->dev->ce_base + CRYPTO4XX_INT_CLR);
+	writel(clr_val, core_dev->dev.ce_base + CRYPTO4XX_INT_CLR);
 	tasklet_schedule(&core_dev->tasklet);
 
 	return IRQ_HANDLED;
@@ -1295,19 +1285,13 @@ static int crypto4xx_probe(struct platform_device *ofdev)
 
 	of_node_put(np);
 
-	core_dev = devm_kzalloc(
-		&ofdev->dev, sizeof(struct crypto4xx_core_device), GFP_KERNEL);
+	core_dev = devm_kzalloc(&ofdev->dev, sizeof(*core_dev), GFP_KERNEL);
 	if (!core_dev)
 		return -ENOMEM;
 
 	dev_set_drvdata(dev, core_dev);
 	core_dev->ofdev = ofdev;
-	core_dev->dev = devm_kzalloc(
-		&ofdev->dev, sizeof(struct crypto4xx_device), GFP_KERNEL);
-	if (!core_dev->dev)
-		return -ENOMEM;
-
-	core_dev->dev->ce_base = ce_base;
+	core_dev->dev.ce_base = ce_base;
 
 	/*
 	 * Older version of 460EX/GT have a hardware bug.
@@ -1323,20 +1307,20 @@ static int crypto4xx_probe(struct platform_device *ofdev)
 		}
 	}
 
-	core_dev->dev->core_dev = core_dev;
-	core_dev->dev->is_revb = is_revb;
+	core_dev->dev.core_dev = core_dev;
+	core_dev->dev.is_revb = is_revb;
 	core_dev->device = dev;
 	spin_lock_init(&core_dev->lock);
-	INIT_LIST_HEAD(&core_dev->dev->alg_list);
-	ratelimit_default_init(&core_dev->dev->aead_ratelimit);
-	rc = crypto4xx_build_sdr(core_dev->dev);
+	INIT_LIST_HEAD(&core_dev->dev.alg_list);
+	ratelimit_default_init(&core_dev->dev.aead_ratelimit);
+	rc = crypto4xx_build_sdr(&core_dev->dev);
 	if (rc)
 		goto err_build_sdr;
-	rc = crypto4xx_build_pdr(core_dev->dev);
+	rc = crypto4xx_build_pdr(&core_dev->dev);
 	if (rc)
 		goto err_build_sdr;
 
-	rc = crypto4xx_build_gdr(core_dev->dev);
+	rc = crypto4xx_build_gdr(&core_dev->dev);
 	if (rc)
 		goto err_build_sdr;
 
@@ -1354,10 +1338,10 @@ static int crypto4xx_probe(struct platform_device *ofdev)
 		goto err_tasklet;
 
 	/* need to setup pdr, rdr, gdr and sdr before this */
-	crypto4xx_hw_init(core_dev->dev);
+	crypto4xx_hw_init(&core_dev->dev);
 
 	/* Register security algorithms with Linux CryptoAPI */
-	rc = crypto4xx_register_alg(core_dev->dev, crypto4xx_alg,
+	rc = crypto4xx_register_alg(&core_dev->dev, crypto4xx_alg,
 			       ARRAY_SIZE(crypto4xx_alg));
 	if (rc)
 		goto err_irq;
@@ -1374,9 +1358,9 @@ err_irq:
 err_tasklet:
 	tasklet_kill(&core_dev->tasklet);
 err_build_sdr:
-	crypto4xx_destroy_sdr(core_dev->dev);
-	crypto4xx_destroy_gdr(core_dev->dev);
-	crypto4xx_destroy_pdr(core_dev->dev);
+	crypto4xx_destroy_sdr(&core_dev->dev);
+	crypto4xx_destroy_gdr(&core_dev->dev);
+	crypto4xx_destroy_pdr(&core_dev->dev);
 	return rc;
 }
 
@@ -1394,7 +1378,7 @@ static void crypto4xx_remove(struct platform_device *ofdev)
 	free_irq(core_dev->irq, core_dev);
 	tasklet_kill(&core_dev->tasklet);
 	/* Un-register with Linux CryptoAPI */
-	crypto4xx_unregister_alg(core_dev->dev);
+	crypto4xx_unregister_alg(&core_dev->dev);
 	/* Free all allocated memory */
 	crypto4xx_stop_all(core_dev);
 }
