@@ -9,18 +9,13 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/netdevice.h>
 #include <linux/can/dev.h>
 #include <linux/of.h>
-#include <linux/of_platform.h>
-#include <sysdev/fsl_soc.h>
 #include <linux/clk.h>
 #include <linux/io.h>
-#include <asm/mpc52xx.h>
 
 #include "mscan.h"
 
@@ -363,7 +358,7 @@ static int mpc5xxx_can_suspend(struct platform_device *ofdev, pm_message_t state
 	struct mscan_priv *priv = netdev_priv(dev);
 	struct mscan_regs *regs = (struct mscan_regs *)priv->reg_base;
 
-	_memcpy_fromio(&saved_regs, regs, sizeof(*regs));
+	memcpy_fromio(&saved_regs, regs, sizeof(*regs));
 
 	return 0;
 }
@@ -384,8 +379,8 @@ static int mpc5xxx_can_resume(struct platform_device *ofdev)
 	regs->canidac = saved_regs.canidac;
 
 	/* restore masks, buffers etc. */
-	_memcpy_toio(&regs->canidar1_0, (void *)&saved_regs.canidar1_0,
-		     sizeof(*regs) - offsetof(struct mscan_regs, canidar1_0));
+	memcpy_toio(&regs->canidar1_0, (void *)&saved_regs.canidar1_0,
+		    sizeof(*regs) - offsetof(struct mscan_regs, canidar1_0));
 
 	regs->canctl0 &= ~MSCAN_INITRQ;
 	regs->cantbsel = saved_regs.cantbsel;
