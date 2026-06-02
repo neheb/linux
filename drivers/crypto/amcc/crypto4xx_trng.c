@@ -82,18 +82,14 @@ int ppc4xx_trng_probe(struct crypto4xx_core_device *core_dev)
 		return 0;
 	}
 
-	dev->trng_base = of_iomap(trng, 0);
+	dev->trng_base = devm_of_iomap(core_dev->device, trng, 0, NULL);
 	of_node_put(trng);
-	if (!dev->trng_base) {
-		err = -EINVAL;
-		goto err_out;
-	}
+	if (IS_ERR(dev->trng_base))
+		return PTR_ERR(dev->trng_base);
 
 	rng = kzalloc_obj(*rng);
-	if (!rng) {
-		err = -ENOMEM;
-		goto err_out;
-	}
+	if (!rng)
+		return -ENOMEM;
 
 	rng->name = KBUILD_MODNAME;
 	rng->data_present = ppc4xx_trng_data_present;
@@ -112,9 +108,7 @@ int ppc4xx_trng_probe(struct crypto4xx_core_device *core_dev)
 	return 0;
 
 err_out:
-	iounmap(dev->trng_base);
 	kfree(rng);
-	dev->trng_base = NULL;
 	core_dev->trng = NULL;
 	return err;
 }
@@ -126,7 +120,6 @@ void ppc4xx_trng_remove(struct crypto4xx_core_device *core_dev)
 
 		devm_hwrng_unregister(core_dev->device, core_dev->trng);
 		ppc4xx_trng_enable(dev, false);
-		iounmap(dev->trng_base);
 		kfree(core_dev->trng);
 	}
 }
