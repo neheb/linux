@@ -857,11 +857,9 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 	if (!data || !pdev->dev.of_node)
 		return -ENODEV;
 
-	data->irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
-	if (data->irq <= 0) {
-		dev_err(&pdev->dev, "failed to get IRQ\n");
-		return -ENODEV;
-	}
+	data->irq = platform_get_irq(pdev, 0);
+	if (data->irq < 0)
+		return data->irq;
 
 	if (of_address_to_resource(pdev->dev.of_node, 0, &res)) {
 		dev_err(&pdev->dev, "failed to get Resource 0\n");
