@@ -114,7 +114,7 @@ static void fsl_re_issue_pending(struct dma_chan *chan)
 
 	spin_lock_irqsave(&re_chan->desc_lock, flags);
 	avail = FSL_RE_SLOT_AVAIL(
-		in_be32(&re_chan->jrregs->inbring_slot_avail));
+		ioread32be(&re_chan->jrregs->inbring_slot_avail));
 
 	list_for_each_entry_safe(desc, _desc, &re_chan->submit_q, node) {
 		if (!avail)
@@ -127,7 +127,7 @@ static void fsl_re_issue_pending(struct dma_chan *chan)
 
 		re_chan->inb_count = (re_chan->inb_count + 1) &
 						FSL_RE_RING_SIZE_MASK;
-		out_be32(&re_chan->jrregs->inbring_add_job, FSL_RE_ADD_JOB(1));
+		iowrite32be(FSL_RE_ADD_JOB(1), &re_chan->jrregs->inbring_add_job);
 		avail--;
 	}
 	spin_unlock_irqrestore(&re_chan->desc_lock, flags);
@@ -175,7 +175,7 @@ static void fsl_re_dequeue(struct tasklet_struct *t)
 	fsl_re_cleanup_descs(re_chan);
 
 	spin_lock_irqsave(&re_chan->desc_lock, flags);
-	count =	FSL_RE_SLOT_FULL(in_be32(&re_chan->jrregs->oubring_slot_full));
+	count = FSL_RE_SLOT_FULL(ioread32be(&re_chan->jrregs->oubring_slot_full));
 	while (count--) {
 		found = 0;
 		hwdesc = &re_chan->oub_ring_virt_addr[re_chan->oub_count];
@@ -199,8 +199,7 @@ static void fsl_re_dequeue(struct tasklet_struct *t)
 		oub_count = (re_chan->oub_count + 1) & FSL_RE_RING_SIZE_MASK;
 		re_chan->oub_count = oub_count;
 
-		out_be32(&re_chan->jrregs->oubring_job_rmvd,
-			 FSL_RE_RMVD_JOB(1));
+		iowrite32be(FSL_RE_RMVD_JOB(1), &re_chan->jrregs->oubring_job_rmvd);
 	}
 	spin_unlock_irqrestore(&re_chan->desc_lock, flags);
 
@@ -222,7 +221,7 @@ static irqreturn_t fsl_re_isr(int irq, void *data)
 	struct fsl_re_chan *re_chan = data;
 	u32 irqstate, status;
 
-	irqstate = in_be32(&re_chan->jrregs->jr_interrupt_status);
+	irqstate = ioread32be(&re_chan->jrregs->jr_interrupt_status);
 	if (!irqstate)
 		return IRQ_NONE;
 
@@ -232,13 +231,13 @@ static irqreturn_t fsl_re_isr(int irq, void *data)
 	 * need to do something more than just crashing
 	 */
 	if (irqstate & FSL_RE_ERROR) {
-		status = in_be32(&re_chan->jrregs->jr_status);
+		status = ioread32be(&re_chan->jrregs->jr_status);
 		dev_err(re_chan->dev, "chan error irqstate: %x, status: %x\n",
 			irqstate, status);
 	}
 
 	/* Clear interrupt */
-	out_be32(&re_chan->jrregs->jr_interrupt_status, FSL_RE_CLR_INTR);
+	iowrite32be(FSL_RE_CLR_INTR, &re_chan->jrregs->jr_interrupt_status);
 
 	tasklet_schedule(&re_chan->irqtask);
 
@@ -724,30 +723,23 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	 * The driver supports a 40-bit DMA mask, so the low register holds
 	 * bits [31:0] and the high register holds bits [39:32].
 	 */
-	out_be32(&chan->jrregs->inbring_base_h,
-		 upper_32_bits(chan->inb_phys_addr) & FSL_RE_ADDR_HIGH_MASK);
-	out_be32(&chan->jrregs->oubring_base_h,
-		 upper_32_bits(chan->oub_phys_addr) & FSL_RE_ADDR_HIGH_MASK);
-	out_be32(&chan->jrregs->inbring_base_l,
-		 lower_32_bits(chan->inb_phys_addr));
-	out_be32(&chan->jrregs->oubring_base_l,
-		 lower_32_bits(chan->oub_phys_addr));
-	out_be32(&chan->jrregs->inbring_size,
-		 FSL_RE_RING_SIZE << FSL_RE_RING_SIZE_SHIFT);
-	out_be32(&chan->jrregs->oubring_size,
-		 FSL_RE_RING_SIZE << FSL_RE_RING_SIZE_SHIFT);
+	iowrite32be(upper_32_bits(chan->inb_phys_addr) & FSL_RE_ADDR_HIGH_MASK, &chan->jrregs->inbring_base_h);
+	iowrite32be(upper_32_bits(chan->oub_phys_addr) & FSL_RE_ADDR_HIGH_MASK, &chan->jrregs->oubring_base_h);
+	iowrite32be(lower_32_bits(chan->inb_phys_addr), &chan->jrregs->inbring_base_l);
+	iowrite32be(lower_32_bits(chan->oub_phys_addr), &chan->jrregs->oubring_base_l);
+	iowrite32be(FSL_RE_RING_SIZE << FSL_RE_RING_SIZE_SHIFT, &chan->jrregs->inbring_size);
+	iowrite32be(FSL_RE_RING_SIZE << FSL_RE_RING_SIZE_SHIFT, &chan->jrregs->oubring_size);
 
 	/* Read LIODN value from u-boot */
-	status = in_be32(&chan->jrregs->jr_config_1) & FSL_RE_REG_LIODN_MASK;
+	status = ioread32be(&chan->jrregs->jr_config_1) & FSL_RE_REG_LIODN_MASK;
 
 	/* Program the CFG reg */
-	out_be32(&chan->jrregs->jr_config_1,
-		 FSL_RE_CFG1_CBSI | FSL_RE_CFG1_CBS0 | status);
+	iowrite32be(FSL_RE_CFG1_CBSI | FSL_RE_CFG1_CBS0 | status, &chan->jrregs->jr_config_1);
 
 	dev_set_drvdata(chandev, chan);
 
 	/* Enable RE/CHAN */
-	out_be32(&chan->jrregs->jr_command, FSL_RE_ENABLE);
+	iowrite32be(FSL_RE_ENABLE, &chan->jrregs->jr_command);
 
 	/* Only record the channel once it is fully initialized, so the
 	 * cleanup paths never touch a partially-probed ring.
@@ -794,15 +786,15 @@ static int fsl_re_probe(struct platform_device *ofdev)
 	re_priv->base = re_regs;
 
 	/* Program the RE mode */
-	out_be32(&re_regs->global_config, FSL_RE_NON_DPAA_MODE);
+	iowrite32be(FSL_RE_NON_DPAA_MODE, &re_regs->global_config);
 
 	/* Program Galois Field polynomial */
-	out_be32(&re_regs->galois_field_config, FSL_RE_GFM_POLY);
+	iowrite32be(FSL_RE_GFM_POLY, &re_regs->galois_field_config);
 
 	dev_info(dev, "version %x, mode %x, gfp %x\n",
-		 in_be32(&re_regs->re_version_id),
-		 in_be32(&re_regs->global_config),
-		 in_be32(&re_regs->galois_field_config));
+		 ioread32be(&re_regs->re_version_id),
+		 ioread32be(&re_regs->global_config),
+		 ioread32be(&re_regs->galois_field_config));
 
 	dma_dev = &re_priv->dma_dev;
 	dma_dev->dev = dev;
