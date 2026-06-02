@@ -11,7 +11,6 @@
 #include <linux/module.h>
 #include <linux/rtc.h>
 #include <linux/of.h>
-#include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/slab.h>
@@ -72,8 +71,6 @@ struct mpc5121_rtc_regs {
 };
 
 struct mpc5121_rtc_data {
-	unsigned irq;
-	unsigned irq_periodic;
 	struct mpc5121_rtc_regs __iomem *regs;
 	struct rtc_device *rtc;
 	struct rtc_wkalrm wkalarm;
@@ -292,6 +289,16 @@ static int mpc5121_rtc_probe(struct platform_device *op)
 {
 	struct mpc5121_rtc_data *rtc;
 	int err = 0;
+	int irq_periodic;
+	int irq;
+
+	irq = platform_get_irq(op, 1);
+	if (irq < 0)
+		return irq;
+
+	irq_periodic = platform_get_irq(op, 0);
+	if (irq_periodic < 0)
+		return irq_periodic;
 
 	rtc = devm_kzalloc(&op->dev, sizeof(*rtc), GFP_KERNEL);
 	if (!rtc)
@@ -339,37 +346,18 @@ static int mpc5121_rtc_probe(struct platform_device *op)
 	 * Request the IRQs after allocating the RTC device, so devres frees
 	 * them, and waits for running handlers, before releasing it.
 	 */
-	rtc->irq = irq_of_parse_and_map(op->dev.of_node, 1);
-	err = devm_request_irq(&op->dev, rtc->irq, mpc5121_rtc_handler, 0,
+	err = devm_request_irq(&op->dev, irq, mpc5121_rtc_handler, 0,
 			       "mpc5121-rtc", &op->dev);
-	if (err) {
-		dev_err(&op->dev, "%s: could not request irq: %i\n",
-							__func__, rtc->irq);
-		goto out_dispose;
-	}
-
-	rtc->irq_periodic = irq_of_parse_and_map(op->dev.of_node, 0);
-	err = devm_request_irq(&op->dev, rtc->irq_periodic,
-			       mpc5121_rtc_handler_upd, 0, "mpc5121-rtc_upd",
-			       &op->dev);
-	if (err) {
-		dev_err(&op->dev, "%s: could not request irq: %i\n",
-						__func__, rtc->irq_periodic);
-		goto out_dispose2;
-	}
-
-	err = devm_rtc_register_device(rtc->rtc);
 	if (err)
-		goto out_dispose2;
+		return err;
 
-	return 0;
+	err = devm_request_irq(&op->dev, irq_periodic,
+			       mpc5121_rtc_handler_upd, 0,
+			       "mpc5121-rtc_upd", &op->dev);
+	if (err)
+		return err;
 
-out_dispose2:
-	irq_dispose_mapping(rtc->irq_periodic);
-out_dispose:
-	irq_dispose_mapping(rtc->irq);
-
-	return err;
+	return devm_rtc_register_device(rtc->rtc);
 }
 
 static void mpc5121_rtc_remove(struct platform_device *op)
