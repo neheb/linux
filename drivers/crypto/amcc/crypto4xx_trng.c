@@ -70,7 +70,7 @@ static const struct of_device_id ppc4xx_trng_match[] = {
 
 int ppc4xx_trng_probe(struct crypto4xx_core_device *core_dev)
 {
-	struct crypto4xx_device *dev = core_dev->dev;
+	struct crypto4xx_device *dev = &core_dev->dev;
 	struct device_node *trng = NULL;
 	struct hwrng *rng = NULL;
 	int err;
@@ -111,7 +111,7 @@ int ppc4xx_trng_probe(struct crypto4xx_core_device *core_dev)
 void ppc4xx_trng_remove(struct crypto4xx_core_device *core_dev)
 {
 	if (core_dev && core_dev->trng) {
-		struct crypto4xx_device *dev = core_dev->dev;
+		struct crypto4xx_device *dev = &core_dev->dev;
 
 		devm_hwrng_unregister(core_dev->device, core_dev->trng);
 		ppc4xx_trng_enable(dev, false);
