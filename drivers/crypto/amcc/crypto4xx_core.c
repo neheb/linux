@@ -165,20 +165,20 @@ void crypto4xx_free_sa(struct crypto4xx_ctx *ctx)
 static u32 crypto4xx_build_pdr(struct crypto4xx_device *dev)
 {
 	int i;
-	dev->pdr = dma_alloc_coherent(dev->core_dev->device,
-				      sizeof(struct ce_pd) * PPC4XX_NUM_PD,
-				      &dev->pdr_pa, GFP_KERNEL);
+	dev->pdr = dmam_alloc_coherent(dev->core_dev->device,
+				       sizeof(struct ce_pd) * PPC4XX_NUM_PD,
+				       &dev->pdr_pa, GFP_KERNEL);
 	if (!dev->pdr)
 		return -ENOMEM;
 
-	dev->shadow_sa_pool = dma_alloc_coherent(dev->core_dev->device,
+	dev->shadow_sa_pool = dmam_alloc_coherent(dev->core_dev->device,
 				   sizeof(union shadow_sa_buf) * PPC4XX_NUM_PD,
 				   &dev->shadow_sa_pool_pa,
 				   GFP_KERNEL);
 	if (!dev->shadow_sa_pool)
 		return -ENOMEM;
 
-	dev->shadow_sr_pool = dma_alloc_coherent(dev->core_dev->device,
+	dev->shadow_sr_pool = dmam_alloc_coherent(dev->core_dev->device,
 			 sizeof(struct sa_state_record) * PPC4XX_NUM_PD,
 			 &dev->shadow_sr_pool_pa, GFP_KERNEL);
 	if (!dev->shadow_sr_pool)
@@ -200,24 +200,6 @@ static u32 crypto4xx_build_pdr(struct crypto4xx_device *dev)
 	}
 
 	return 0;
-}
-
-static void crypto4xx_destroy_pdr(struct crypto4xx_device *dev)
-{
-	if (dev->pdr)
-		dma_free_coherent(dev->core_dev->device,
-				  sizeof(struct ce_pd) * PPC4XX_NUM_PD,
-				  dev->pdr, dev->pdr_pa);
-
-	if (dev->shadow_sa_pool)
-		dma_free_coherent(dev->core_dev->device,
-			sizeof(union shadow_sa_buf) * PPC4XX_NUM_PD,
-			dev->shadow_sa_pool, dev->shadow_sa_pool_pa);
-
-	if (dev->shadow_sr_pool)
-		dma_free_coherent(dev->core_dev->device,
-			sizeof(struct sa_state_record) * PPC4XX_NUM_PD,
-			dev->shadow_sr_pool, dev->shadow_sr_pool_pa);
 }
 
 static u32 crypto4xx_get_pd_from_pdr_nolock(struct crypto4xx_device *dev)
@@ -262,21 +244,13 @@ static u32 crypto4xx_put_pd_to_pdr(struct crypto4xx_device *dev, u32 idx)
  */
 static u32 crypto4xx_build_gdr(struct crypto4xx_device *dev)
 {
-	dev->gdr = dma_alloc_coherent(dev->core_dev->device,
-				      sizeof(struct ce_gd) * PPC4XX_NUM_GD,
-				      &dev->gdr_pa, GFP_KERNEL);
+	dev->gdr = dmam_alloc_coherent(dev->core_dev->device,
+				       sizeof(struct ce_gd) * PPC4XX_NUM_GD,
+				       &dev->gdr_pa, GFP_KERNEL);
 	if (!dev->gdr)
 		return -ENOMEM;
 
 	return 0;
-}
-
-static inline void crypto4xx_destroy_gdr(struct crypto4xx_device *dev)
-{
-	if (dev->gdr)
-		dma_free_coherent(dev->core_dev->device,
-			  sizeof(struct ce_gd) * PPC4XX_NUM_GD,
-			  dev->gdr, dev->gdr_pa);
 }
 
 /*
@@ -343,16 +317,16 @@ static u32 crypto4xx_build_sdr(struct crypto4xx_device *dev)
 	int i;
 
 	dev->scatter_buffer_va =
-		dma_alloc_coherent(dev->core_dev->device,
+		dmam_alloc_coherent(dev->core_dev->device,
 			PPC4XX_SD_BUFFER_SIZE * PPC4XX_NUM_SD,
 			&dev->scatter_buffer_pa, GFP_KERNEL);
 	if (!dev->scatter_buffer_va)
 		return -ENOMEM;
 
 	/* alloc memory for scatter descriptor ring */
-	dev->sdr = dma_alloc_coherent(dev->core_dev->device,
-				      sizeof(struct ce_sd) * PPC4XX_NUM_SD,
-				      &dev->sdr_pa, GFP_KERNEL);
+	dev->sdr = dmam_alloc_coherent(dev->core_dev->device,
+				       sizeof(struct ce_sd) * PPC4XX_NUM_SD,
+				       &dev->sdr_pa, GFP_KERNEL);
 	if (!dev->sdr)
 		return -ENOMEM;
 
@@ -362,20 +336,6 @@ static u32 crypto4xx_build_sdr(struct crypto4xx_device *dev)
 	}
 
 	return 0;
-}
-
-static void crypto4xx_destroy_sdr(struct crypto4xx_device *dev)
-{
-	if (dev->sdr)
-		dma_free_coherent(dev->core_dev->device,
-				  sizeof(struct ce_sd) * PPC4XX_NUM_SD,
-				  dev->sdr, dev->sdr_pa);
-
-	if (dev->scatter_buffer_va)
-		dma_free_coherent(dev->core_dev->device,
-				  PPC4XX_SD_BUFFER_SIZE * PPC4XX_NUM_SD,
-				  dev->scatter_buffer_va,
-				  dev->scatter_buffer_pa);
 }
 
 /*
@@ -601,13 +561,6 @@ static void crypto4xx_pd_done(struct crypto4xx_device *dev, u32 idx)
 		crypto4xx_aead_done(dev, pd_uinfo, pd);
 		break;
 	}
-}
-
-static void crypto4xx_stop_all(struct crypto4xx_core_device *core_dev)
-{
-	crypto4xx_destroy_pdr(&core_dev->dev);
-	crypto4xx_destroy_gdr(&core_dev->dev);
-	crypto4xx_destroy_sdr(&core_dev->dev);
 }
 
 static u32 get_next_gd(u32 current)
@@ -1315,14 +1268,14 @@ static int crypto4xx_probe(struct platform_device *ofdev)
 	ratelimit_default_init(&core_dev->dev.aead_ratelimit);
 	rc = crypto4xx_build_sdr(&core_dev->dev);
 	if (rc)
-		goto err_build_sdr;
+		return rc;
 	rc = crypto4xx_build_pdr(&core_dev->dev);
 	if (rc)
-		goto err_build_sdr;
+		return rc;
 
 	rc = crypto4xx_build_gdr(&core_dev->dev);
 	if (rc)
-		goto err_build_sdr;
+		return rc;
 
 	/* Init tasklet for bottom half processing */
 	tasklet_init(&core_dev->tasklet, crypto4xx_bh_tasklet_cb,
@@ -1357,10 +1310,6 @@ err_irq:
 	free_irq(core_dev->irq, core_dev);
 err_tasklet:
 	tasklet_kill(&core_dev->tasklet);
-err_build_sdr:
-	crypto4xx_destroy_sdr(&core_dev->dev);
-	crypto4xx_destroy_gdr(&core_dev->dev);
-	crypto4xx_destroy_pdr(&core_dev->dev);
 	return rc;
 }
 
@@ -1379,8 +1328,6 @@ static void crypto4xx_remove(struct platform_device *ofdev)
 	tasklet_kill(&core_dev->tasklet);
 	/* Un-register with Linux CryptoAPI */
 	crypto4xx_unregister_alg(&core_dev->dev);
-	/* Free all allocated memory */
-	crypto4xx_stop_all(core_dev);
 }
 
 static const struct of_device_id crypto4xx_match[] = {
