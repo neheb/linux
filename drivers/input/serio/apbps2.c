@@ -19,7 +19,6 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/of.h>
-#include <linux/of_irq.h>
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/err.h>
