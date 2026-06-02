@@ -87,7 +87,7 @@ int ppc4xx_trng_probe(struct crypto4xx_core_device *core_dev)
 	if (IS_ERR(dev->trng_base))
 		return PTR_ERR(dev->trng_base);
 
-	rng = kzalloc_obj(*rng);
+	rng = devm_kzalloc(core_dev->device, sizeof(*rng), GFP_KERNEL);
 	if (!rng)
 		return -ENOMEM;
 
@@ -103,14 +103,9 @@ int ppc4xx_trng_probe(struct crypto4xx_core_device *core_dev)
 		ppc4xx_trng_enable(dev, false);
 		dev_err(core_dev->device, "failed to register hwrng (%d).\n",
 			err);
-		goto err_out;
+		return err;
 	}
 	return 0;
-
-err_out:
-	kfree(rng);
-	core_dev->trng = NULL;
-	return err;
 }
 
 void ppc4xx_trng_remove(struct crypto4xx_core_device *core_dev)
@@ -120,7 +115,6 @@ void ppc4xx_trng_remove(struct crypto4xx_core_device *core_dev)
 
 		devm_hwrng_unregister(core_dev->device, core_dev->trng);
 		ppc4xx_trng_enable(dev, false);
-		kfree(core_dev->trng);
 	}
 }
 
