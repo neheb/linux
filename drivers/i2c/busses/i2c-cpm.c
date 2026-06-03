@@ -633,7 +633,7 @@ static int cpm_i2c_probe(struct platform_device *ofdev)
 	struct cpm_i2c *cpm;
 	const u32 *data;
 
-	cpm = kzalloc_obj(struct cpm_i2c);
+	cpm = devm_kzalloc(&ofdev->dev, sizeof(*cpm), GFP_KERNEL);
 	if (!cpm)
 		return -ENOMEM;
 
@@ -649,7 +649,7 @@ static int cpm_i2c_probe(struct platform_device *ofdev)
 	result = cpm_i2c_setup(cpm);
 	if (result) {
 		dev_err_probe(&ofdev->dev, result, "Unable to init hardware\n");
-		goto out_free;
+		return result;
 	}
 
 	/* register new adapter to i2c module... */
@@ -667,8 +667,6 @@ static int cpm_i2c_probe(struct platform_device *ofdev)
 	return 0;
 out_shut:
 	cpm_i2c_shutdown(cpm);
-out_free:
-	kfree(cpm);
 
 	return result;
 }
@@ -680,8 +678,6 @@ static void cpm_i2c_remove(struct platform_device *ofdev)
 	i2c_del_adapter(&cpm->adap);
 
 	cpm_i2c_shutdown(cpm);
-
-	kfree(cpm);
 }
 
 static const struct of_device_id cpm_i2c_match[] = {
