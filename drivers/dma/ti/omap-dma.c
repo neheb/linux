@@ -1774,9 +1774,11 @@ static int omap_dma_probe(struct platform_device *pdev)
 	}
 
 	irq = platform_get_irq(pdev, 1);
-	if (irq <= 0) {
-		dev_info(&pdev->dev, "failed to get L1 IRQ: %d\n", irq);
+	if (irq == -ENXIO && dma_omap1()) {
 		od->legacy = true;
+	} else if (irq < 0) {
+		omap_dma_free(od);
+		return irq;
 	} else {
 		/* Disable all interrupts */
 		od->irq_enable_mask = 0;
