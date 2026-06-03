@@ -410,9 +410,9 @@ static int mscan_rx_poll(struct napi_struct *napi, int quota)
 
 	if (work_done < quota) {
 		if (likely(napi_complete_done(&priv->napi, work_done))) {
-			clear_bit(F_RX_PROGRESS, &priv->flags);
 			if (priv->can.state < CAN_STATE_BUS_OFF)
 				out_8(&regs->canrier, priv->shadow_canrier);
+			clear_bit(F_RX_PROGRESS, &priv->flags);
 		}
 	}
 	return work_done;
