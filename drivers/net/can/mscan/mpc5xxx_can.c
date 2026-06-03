@@ -16,8 +16,6 @@
 #include <linux/netdevice.h>
 #include <linux/can/dev.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
-#include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <sysdev/fsl_soc.h>
 #include <linux/clk.h>
@@ -296,20 +294,17 @@ static int mpc5xxx_can_probe(struct platform_device *ofdev)
 	if (!data)
 		return -EINVAL;
 
-	base = of_iomap(np, 0);
-	if (!base)
-		return dev_err_probe(&ofdev->dev, err, "couldn't ioremap\n");
+	base = devm_platform_ioremap_resource(ofdev, 0);
+	if (IS_ERR(base))
+		return dev_err_probe(&ofdev->dev, PTR_ERR(base), "couldn't ioremap\n");
 
-	irq = irq_of_parse_and_map(np, 0);
-	if (!irq) {
-		dev_err(&ofdev->dev, "no irq found\n");
-		err = -ENODEV;
-		goto exit_unmap_mem;
-	}
+	irq = platform_get_irq(ofdev, 0);
+	if (irq < 0)
+		return irq;
 
 	dev = alloc_mscandev();
 	if (!dev)
-		goto exit_dispose_irq;
+		return -ENOMEM;
 	platform_set_drvdata(ofdev, dev);
 	SET_NETDEV_DEV(dev, &ofdev->dev);
 
@@ -324,14 +319,14 @@ static int mpc5xxx_can_probe(struct platform_device *ofdev)
 					       &mscan_clksrc);
 	if (!priv->can.clock.freq) {
 		dev_err(&ofdev->dev, "couldn't get MSCAN clock properties\n");
-		goto exit_put_clock;
+		goto exit_free;
 	}
 
 	err = register_mscandev(dev, mscan_clksrc);
 	if (err) {
 		dev_err(&ofdev->dev, "registering %s failed (err=%d)\n",
 			DRV_NAME, err);
-		goto exit_put_clock;
+		goto exit_free;
 	}
 
 	dev_info(&ofdev->dev, "MSCAN at 0x%p, irq %d, clock %d Hz\n",
@@ -339,14 +334,10 @@ static int mpc5xxx_can_probe(struct platform_device *ofdev)
 
 	return 0;
 
-exit_put_clock:
+exit_free:
 	if (data->put_clock)
 		data->put_clock(ofdev);
 	free_candev(dev);
-exit_dispose_irq:
-	irq_dispose_mapping(irq);
-exit_unmap_mem:
-	iounmap(base);
 
 	return err;
 }
@@ -355,15 +346,12 @@ static void mpc5xxx_can_remove(struct platform_device *ofdev)
 {
 	const struct mpc5xxx_can_data *data;
 	struct net_device *dev = platform_get_drvdata(ofdev);
-	struct mscan_priv *priv = netdev_priv(dev);
 
 	data = device_get_match_data(&ofdev->dev);
 
 	unregister_mscandev(dev);
 	if (data && data->put_clock)
 		data->put_clock(ofdev);
-	iounmap(priv->reg_base);
-	irq_dispose_mapping(dev->irq);
 	free_candev(dev);
 }
 
