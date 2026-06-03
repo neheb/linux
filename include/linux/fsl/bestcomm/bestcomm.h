@@ -51,13 +51,13 @@ struct bcom_task {
 
 	struct bcom_bd	*bd;
 	phys_addr_t	bd_pa;
-	void		**cookie;
 	unsigned short	index;
 	unsigned short	outdex;
 	unsigned int	num_bd;
 	unsigned int	bd_size;
 
-	void*		priv;
+	void		*priv;
+	void		*cookie[];
 };
 
 #define BCOM_FLAGS_NONE         0x00000000ul
@@ -153,7 +153,7 @@ static inline struct bcom_bd
 }
 
 /**
- * bcom_buffer_done - Checks if a BestComm 
+ * bcom_buffer_done - Checks if a BestComm
  * @tsk: The BestComm task structure
  */
 static inline int

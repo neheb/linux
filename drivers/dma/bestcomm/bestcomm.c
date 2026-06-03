@@ -47,6 +47,7 @@ bcom_task_alloc(int bd_count, int bd_size, int priv_size)
 {
 	int i, tasknum = -1;
 	struct bcom_task *tsk;
+	size_t alloc_size;
 	int irq;
 
 	/* Don't try to do anything if bestcomm init failed */
@@ -72,28 +73,24 @@ bcom_task_alloc(int bd_count, int bd_size, int priv_size)
 	if (irq < 0)
 		goto err1;
 
+	alloc_size = struct_size(tsk, cookie, bd_count);
 	/* Allocate our structure */
-	tsk = kzalloc(sizeof(struct bcom_task) + priv_size, GFP_KERNEL);
+	tsk = kzalloc(alloc_size + priv_size, GFP_KERNEL);
 	if (!tsk)
 		goto err1;
 
 	tsk->tasknum = tasknum;
 	if (priv_size)
-		tsk->priv = (void*)tsk + sizeof(struct bcom_task);
+		tsk->priv = (void *)tsk + alloc_size;
 
 	/* Get IRQ of that task */
 	tsk->irq = irq;
 
 	/* Init the BDs, if needed */
 	if (bd_count) {
-		tsk->cookie = kmalloc_array(bd_count, sizeof(void *),
-					    GFP_KERNEL);
-		if (!tsk->cookie)
-			goto err2;
-
 		tsk->bd = bcom_sram_alloc(bd_count * bd_size, 4, &tsk->bd_pa);
 		if (!tsk->bd)
-			goto err3;
+			goto err2;
 		memset_io(tsk->bd, 0x00, bd_count * bd_size);
 
 		tsk->num_bd = bd_count;
@@ -102,8 +99,6 @@ bcom_task_alloc(int bd_count, int bd_size, int priv_size)
 
 	return tsk;
 
-err3:
-	kfree(tsk->cookie);
 err2:
 	kfree(tsk);
 err1:
@@ -125,7 +120,6 @@ bcom_task_free(struct bcom_task *tsk)
 
 	/* Free everything */
 	bcom_sram_free(tsk->bd);
-	kfree(tsk->cookie);
 	kfree(tsk);
 }
 EXPORT_SYMBOL_GPL(bcom_task_free);
