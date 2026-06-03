@@ -986,6 +986,11 @@ static struct dma_async_tx_descriptor *omap_dma_prep_slave_sg(
 		return NULL;
 	}
 
+	if (!burst) {
+		dev_err(chan->device->dev, "%s: maxburst cannot be 0\n", __func__);
+		return NULL;
+	}
+
 	/* Bus width translates to the element size (ES) */
 	switch (dev_width) {
 	case DMA_SLAVE_BUSWIDTH_1_BYTE:
