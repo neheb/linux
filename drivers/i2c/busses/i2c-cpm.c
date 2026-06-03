@@ -475,22 +475,22 @@ static int cpm_i2c_setup(struct cpm_i2c *cpm)
 	}
 
 	/* I2C control/status registers */
-	cpm->i2c_reg = of_iomap(ofdev->dev.of_node, 0);
-	if (!cpm->i2c_reg) {
-		ret = -EINVAL;
+	cpm->i2c_reg = devm_platform_ioremap_resource(ofdev, 0);
+	if (IS_ERR(cpm->i2c_reg)) {
+		ret = PTR_ERR(cpm->i2c_reg);
 		goto out_ram;
 	}
 
 	/* Install interrupt handler. */
-	ret = request_irq(cpm->irq, cpm_i2c_interrupt, 0, "cpm_i2c",
-			  &cpm->adap);
+	ret = devm_request_irq(&ofdev->dev, cpm->irq, cpm_i2c_interrupt, 0,
+			       "cpm_i2c", &cpm->adap);
 	if (ret)
 		goto out_ram;
 
 	data = of_get_property(ofdev->dev.of_node, "fsl,cpm-command", &len);
 	if (!data || len != 4) {
 		ret = -EINVAL;
-		goto out_reg;
+		goto out_ram;
 	}
 	cpm->cp_command = *data;
 
@@ -511,7 +511,7 @@ static int cpm_i2c_setup(struct cpm_i2c *cpm)
 	cpm->dp_addr = cpm_muram_alloc(sizeof(cbd_t) * 2 * CPM_MAXBD, 8);
 	if (!cpm->dp_addr) {
 		ret = -ENOMEM;
-		goto out_reg;
+		goto out_ram;
 	}
 
 	cpm->tbase = cpm_muram_addr(cpm->dp_addr);
@@ -586,9 +586,6 @@ out_muram:
 				cpm->txbuf[i], cpm->txdma[i]);
 	}
 	cpm_muram_free(cpm->dp_addr);
-out_reg:
-	free_irq(cpm->irq, &cpm->adap);
-	iounmap(cpm->i2c_reg);
 out_ram:
 	if ((cpm->version == 1) && (!cpm->i2c_addr))
 		iounmap(cpm->i2c_ram);
@@ -608,8 +605,6 @@ static void cpm_i2c_shutdown(struct cpm_i2c *cpm)
 	out_8(&cpm->i2c_reg->i2cmr, 0);
 	out_8(&cpm->i2c_reg->i2cer, 0xff);
 
-	free_irq(cpm->irq, &cpm->adap);
-
 	/* Free all memory */
 	for (i = 0; i < CPM_MAXBD; i++) {
 		dma_free_coherent(&cpm->ofdev->dev, CPM_MAX_READ + 1,
@@ -619,7 +614,6 @@ static void cpm_i2c_shutdown(struct cpm_i2c *cpm)
 	}
 
 	cpm_muram_free(cpm->dp_addr);
-	iounmap(cpm->i2c_reg);
 
 	if ((cpm->version == 1) && (!cpm->i2c_addr))
 		iounmap(cpm->i2c_ram);
