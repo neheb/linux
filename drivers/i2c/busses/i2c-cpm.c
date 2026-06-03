@@ -438,18 +438,10 @@ static int cpm_i2c_setup(struct cpm_i2c *cpm)
 	if (cpm->irq < 0)
 		return cpm->irq;
 
-	/* Install interrupt handler. */
-	ret = request_irq(cpm->irq, cpm_i2c_interrupt, 0, "cpm_i2c",
-			  &cpm->adap);
-	if (ret)
-		return ret;
-
 	/* I2C parameter RAM */
 	i2c_base = of_iomap(ofdev->dev.of_node, 1);
-	if (i2c_base == NULL) {
-		ret = -EINVAL;
-		goto out_irq;
-	}
+	if (!i2c_base)
+		return -EINVAL;
 
 	if (of_device_is_compatible(ofdev->dev.of_node, "fsl,cpm1-i2c")) {
 
@@ -479,15 +471,21 @@ static int cpm_i2c_setup(struct cpm_i2c *cpm)
 	} else {
 		iounmap(i2c_base);
 		ret = -EINVAL;
-		goto out_irq;
+		goto out_ram;
 	}
 
 	/* I2C control/status registers */
 	cpm->i2c_reg = of_iomap(ofdev->dev.of_node, 0);
-	if (cpm->i2c_reg == NULL) {
+	if (!cpm->i2c_reg) {
 		ret = -EINVAL;
 		goto out_ram;
 	}
+
+	/* Install interrupt handler. */
+	ret = request_irq(cpm->irq, cpm_i2c_interrupt, 0, "cpm_i2c",
+			  &cpm->adap);
+	if (ret)
+		goto out_ram;
 
 	data = of_get_property(ofdev->dev.of_node, "fsl,cpm-command", &len);
 	if (!data || len != 4) {
@@ -589,14 +587,13 @@ out_muram:
 	}
 	cpm_muram_free(cpm->dp_addr);
 out_reg:
+	free_irq(cpm->irq, &cpm->adap);
 	iounmap(cpm->i2c_reg);
 out_ram:
 	if ((cpm->version == 1) && (!cpm->i2c_addr))
 		iounmap(cpm->i2c_ram);
 	if (cpm->version == 2)
 		cpm_muram_free(cpm->i2c_addr);
-out_irq:
-	free_irq(cpm->irq, &cpm->adap);
 	return ret;
 }
 
@@ -651,7 +648,7 @@ static int cpm_i2c_probe(struct platform_device *ofdev)
 
 	result = cpm_i2c_setup(cpm);
 	if (result) {
-		dev_err(&ofdev->dev, "Unable to init hardware\n");
+		dev_err_probe(&ofdev->dev, result, "Unable to init hardware\n");
 		goto out_free;
 	}
 
