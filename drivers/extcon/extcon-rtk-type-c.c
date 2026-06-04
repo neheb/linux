@@ -63,7 +63,6 @@ struct type_c_data {
 	struct gpio_desc *rd_ctrl_gpio_desc;
 
 	/* Parameters */
-	struct type_c_cfg *type_c_cfg;
 	u32 dfp_mode_rp_en;
 	u32 ufp_mode_rd_en;
 	u32 cc1_code;
@@ -99,6 +98,8 @@ struct type_c_data {
 	struct dentry *debug_dir;
 
 	struct typec_port *port;
+
+	struct type_c_cfg type_c_cfg[];
 };
 
 /* Type C register offset */
@@ -1321,9 +1322,17 @@ static int extcon_rtk_type_c_probe(struct platform_device *pdev)
 	const struct type_c_cfg *type_c_cfg;
 	int ret = 0;
 
-	type_c = devm_kzalloc(dev, sizeof(*type_c), GFP_KERNEL);
+	type_c_cfg = of_device_get_match_data(dev);
+	if (!type_c_cfg) {
+		dev_err(dev, "type_c config are not assigned!\n");
+		return -EINVAL;
+	}
+
+	type_c = devm_kzalloc(dev, struct_size(type_c, type_c_cfg, 1), GFP_KERNEL);
 	if (!type_c)
 		return -ENOMEM;
+
+	memcpy(type_c->type_c_cfg, type_c_cfg, sizeof(*type_c_cfg));
 
 	type_c->reg_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(type_c->reg_base))
@@ -1360,19 +1369,6 @@ static int extcon_rtk_type_c_probe(struct platform_device *pdev)
 				__func__, desc_to_gpio(gpio));
 		}
 	}
-
-	type_c_cfg = of_device_get_match_data(dev);
-	if (!type_c_cfg) {
-		dev_err(dev, "type_c config are not assigned!\n");
-		ret = -EINVAL;
-		goto err;
-	}
-
-	type_c->type_c_cfg = devm_kzalloc(dev, sizeof(*type_c_cfg), GFP_KERNEL);
-	if (!type_c->type_c_cfg)
-		return -ENOMEM;
-
-	memcpy(type_c->type_c_cfg, type_c_cfg, sizeof(*type_c_cfg));
 
 	if (setup_type_c_parameter(type_c)) {
 		dev_err(dev, "ERROR: %s to setup type c parameter!!", __func__);
