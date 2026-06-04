@@ -1340,11 +1340,9 @@ static int extcon_rtk_type_c_probe(struct platform_device *pdev)
 
 	type_c->dev = dev;
 
-	type_c->irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
-	if (type_c->irq <= 0) {
-		dev_err(&pdev->dev, "Type C driver with no IRQ. Check %s setup!\n",
-			dev_name(&pdev->dev));
-		ret = -ENODEV;
+	type_c->irq = platform_get_irq(pdev, 0);
+	if (type_c->irq < 0) {
+		ret = type_c->irq;
 		goto err;
 	}
 
