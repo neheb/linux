@@ -49,8 +49,8 @@ struct apbps2_regs {
 #define APBPS2_CTRL_TI		(1<<3)
 
 struct apbps2_priv {
-	struct serio		*io;
 	struct apbps2_regs	__iomem *regs;
+	struct serio		io;
 };
 
 static int apbps2_idx;
@@ -70,7 +70,7 @@ static irqreturn_t apbps2_isr(int irq, void *dev_id)
 		if (rxflags)
 			iowrite32be(0, &priv->regs->status);
 
-		serio_interrupt(priv->io, data, rxflags);
+		serio_interrupt(&priv->io, data, rxflags);
 
 		ret = IRQ_HANDLED;
 	}
@@ -129,6 +129,7 @@ static void apbps2_close(struct serio *io)
 static int apbps2_of_probe(struct platform_device *ofdev)
 {
 	struct apbps2_priv *priv;
+	struct serio *io;
 	int irq, err;
 	u32 freq_hz;
 
@@ -152,23 +153,20 @@ static int apbps2_of_probe(struct platform_device *ofdev)
 		return -EINVAL;
 	}
 
-	priv->io = kzalloc_obj(*priv->io);
-	if (!priv->io)
-		return -ENOMEM;
-
-	priv->io->id.type = SERIO_8042;
-	priv->io->open = apbps2_open;
-	priv->io->close = apbps2_close;
-	priv->io->write = apbps2_write;
-	priv->io->port_data = priv;
-	strscpy(priv->io->name, "APBPS2 PS/2", sizeof(priv->io->name));
-	snprintf(priv->io->phys, sizeof(priv->io->phys),
+	io = &priv->io;
+	io->id.type = SERIO_8042;
+	io->open = apbps2_open;
+	io->close = apbps2_close;
+	io->write = apbps2_write;
+	io->port_data = priv;
+	strscpy(io->name, "APBPS2 PS/2", sizeof(io->name));
+	snprintf(io->phys, sizeof(io->phys),
 		 "apbps2_%d", apbps2_idx++);
 
 	/* Set reload register to core freq in kHz/10 */
 	iowrite32be(freq_hz / 10000, &priv->regs->reload);
 
-	serio_register_port(priv->io);
+	serio_register_port(io);
 
 	irq = platform_get_irq(ofdev, 0);
 	if (irq < 0)
@@ -177,7 +175,7 @@ static int apbps2_of_probe(struct platform_device *ofdev)
 	err = request_irq(irq, apbps2_isr, IRQF_SHARED, "apbps2", priv);
 	if (err) {
 		dev_err(&ofdev->dev, "request IRQ%d failed\n", irq);
-		serio_unregister_port(priv->io);
+		serio_unregister_port(io);
 		return err;
 	}
 
@@ -194,7 +192,7 @@ static void apbps2_of_remove(struct platform_device *of_dev)
 	int irq = platform_get_irq(of_dev, 0);
 
 	free_irq(irq, priv);
-	serio_unregister_port(priv->io);
+	serio_unregister_port(&priv->io);
 }
 
 static const struct of_device_id apbps2_of_match[] = {
