@@ -147,26 +147,11 @@ static int apbps2_of_probe(struct platform_device *ofdev)
 	/* Reset hardware, disable interrupt */
 	iowrite32be(0, &priv->regs->ctrl);
 
-	/* IRQ */
-	irq = platform_get_irq(ofdev, 0);
-	if (irq < 0)
-		return irq;
-
-	err = devm_request_irq(&ofdev->dev, irq, apbps2_isr,
-				IRQF_SHARED, "apbps2", priv);
-	if (err) {
-		dev_err(&ofdev->dev, "request IRQ%d failed\n", irq);
-		return err;
-	}
-
 	/* Get core frequency */
 	if (of_property_read_u32(ofdev->dev.of_node, "freq", &freq_hz)) {
 		dev_err(&ofdev->dev, "unable to get core frequency\n");
 		return -EINVAL;
 	}
-
-	/* Set reload register to core freq in kHz/10 */
-	iowrite32be(freq_hz / 10000, &priv->regs->reload);
 
 	priv->io = kzalloc_obj(*priv->io);
 	if (!priv->io)
@@ -181,9 +166,23 @@ static int apbps2_of_probe(struct platform_device *ofdev)
 	snprintf(priv->io->phys, sizeof(priv->io->phys),
 		 "apbps2_%d", apbps2_idx++);
 
-	dev_info(&ofdev->dev, "irq = %d, base = 0x%p\n", irq, priv->regs);
+	/* Set reload register to core freq in kHz/10 */
+	iowrite32be(freq_hz / 10000, &priv->regs->reload);
 
 	serio_register_port(priv->io);
+
+	irq = platform_get_irq(ofdev, 0);
+	if (irq < 0)
+		return irq;
+
+	err = request_irq(irq, apbps2_isr, IRQF_SHARED, "apbps2", priv);
+	if (err) {
+		dev_err(&ofdev->dev, "request IRQ%d failed\n", irq);
+		serio_unregister_port(priv->io);
+		return err;
+	}
+
+	dev_info(&ofdev->dev, "irq = %d, base = 0x%p\n", irq, priv->regs);
 
 	platform_set_drvdata(ofdev, priv);
 
@@ -193,7 +192,9 @@ static int apbps2_of_probe(struct platform_device *ofdev)
 static void apbps2_of_remove(struct platform_device *of_dev)
 {
 	struct apbps2_priv *priv = platform_get_drvdata(of_dev);
+	int irq = platform_get_irq(of_dev, 0);
 
+	free_irq(irq, priv);
 	serio_unregister_port(priv->io);
 }
 
