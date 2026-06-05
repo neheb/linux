@@ -620,7 +620,7 @@ static int mal_probe(struct platform_device *ofdev)
 	bd_size = sizeof(struct mal_descriptor) *
 		(NUM_TX_BUFF * mal->num_tx_chans +
 		 NUM_RX_BUFF * mal->num_rx_chans);
-	mal->bd_virt = dma_alloc_coherent(&ofdev->dev, bd_size, &mal->bd_dma,
+	mal->bd_virt = dmam_alloc_coherent(&ofdev->dev, bd_size, &mal->bd_dma,
 					  GFP_KERNEL);
 	if (mal->bd_virt == NULL) {
 		err = -ENOMEM;
@@ -643,7 +643,7 @@ static int mal_probe(struct platform_device *ofdev)
 	if (mal->txeob_irq < 0 || mal->rxeob_irq < 0 || mal->serr_irq < 0) {
 		err = mal->txeob_irq < 0 ? mal->txeob_irq :
 		      mal->rxeob_irq < 0 ? mal->rxeob_irq : mal->serr_irq;
-		goto fail2;
+		goto fail_dummy;
 	}
 
 	if (mal_has_feature(mal, MAL_FTR_COMMON_ERR_INT)) {
@@ -655,7 +655,7 @@ static int mal_probe(struct platform_device *ofdev)
 		mal->rxde_irq = platform_get_irq(ofdev, 4);
 		if (mal->txde_irq < 0 || mal->rxde_irq < 0) {
 			err = mal->txde_irq < 0 ? mal->txde_irq : mal->rxde_irq;
-			goto fail2;
+			goto fail_dummy;
 		}
 		irqflags = 0;
 		hdlr_serr = mal_serr;
@@ -666,7 +666,7 @@ static int mal_probe(struct platform_device *ofdev)
 	err = request_irq(mal->serr_irq, hdlr_serr, irqflags,
 			  "MAL SERR", mal);
 	if (err)
-		goto fail2;
+		goto fail_dummy;
 	err = request_irq(mal->txde_irq, hdlr_txde, irqflags,
 			  "MAL TX DE", mal);
 	if (err)
@@ -709,8 +709,6 @@ static int mal_probe(struct platform_device *ofdev)
 	free_irq(mal->txde_irq, mal);
  fail_serr_irq:
 	free_irq(mal->serr_irq, mal);
- fail2:
-	dma_free_coherent(&ofdev->dev, bd_size, mal->bd_virt, mal->bd_dma);
  fail_dummy:
 	free_netdev(mal->dummy_dev);
  fail_unmap:
@@ -745,12 +743,6 @@ static void mal_remove(struct platform_device *ofdev)
 	free_netdev(mal->dummy_dev);
 
 	dcr_unmap(mal->dcr_host, 0x100);
-
-	dma_free_coherent(&ofdev->dev,
-			  sizeof(struct mal_descriptor) *
-				  (NUM_TX_BUFF * mal->num_tx_chans +
-				   NUM_RX_BUFF * mal->num_rx_chans),
-			  mal->bd_virt, mal->bd_dma);
 }
 
 static const struct of_device_id mal_platform_match[] =
