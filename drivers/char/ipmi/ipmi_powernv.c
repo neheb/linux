@@ -29,7 +29,7 @@ struct ipmi_smi_powernv {
 	 */
 	spinlock_t		msg_lock;
 	struct ipmi_smi_msg	*cur_msg;
-	struct opal_ipmi_msg	*opal_msg;
+	struct opal_ipmi_msg	opal_msg[];
 };
 
 static int ipmi_powernv_start_processing(void *send_info, struct ipmi_smi *intf)
@@ -220,7 +220,7 @@ static int ipmi_powernv_probe(struct platform_device *pdev)
 
 	dev = &pdev->dev;
 
-	ipmi = devm_kzalloc(dev, sizeof(*ipmi), GFP_KERNEL);
+	ipmi = devm_kzalloc(dev, struct_size(ipmi, opal_msg, IPMI_MAX_MSG_LENGTH), GFP_KERNEL);
 	if (!ipmi)
 		return -ENOMEM;
 
@@ -230,14 +230,14 @@ static int ipmi_powernv_probe(struct platform_device *pdev)
 			&prop);
 	if (rc) {
 		dev_warn(dev, "No interface ID property\n");
-		goto err_free;
+		return rc;
 	}
 	ipmi->interface_id = prop;
 
 	rc = of_property_read_u32(dev->of_node, "interrupts", &prop);
 	if (rc) {
 		dev_warn(dev, "No interrupts property\n");
-		goto err_free;
+		return rc;
 	}
 
 	ipmi->irq = platform_get_irq_optional(pdev, 0);
@@ -253,32 +253,20 @@ static int ipmi_powernv_probe(struct platform_device *pdev)
 			 "opal-ipmi", ipmi);
 	if (rc) {
 		dev_warn(dev, "Unable to request irq\n");
-		goto err_free;
-	}
-
-	ipmi->opal_msg = devm_kmalloc(dev,
-			sizeof(*ipmi->opal_msg) + IPMI_MAX_MSG_LENGTH,
-			GFP_KERNEL);
-	if (!ipmi->opal_msg) {
-		rc = -ENOMEM;
-		goto err_unregister;
+		return rc;
 	}
 
 	rc = ipmi_register_smi(&ipmi_powernv_smi_handlers, ipmi, dev, 0);
 	if (rc) {
 		dev_warn(dev, "IPMI SMI registration failed (%d)\n", rc);
-		goto err_free_msg;
+		goto err_unregister;
 	}
 
 	dev_set_drvdata(dev, ipmi);
 	return 0;
 
-err_free_msg:
-	devm_kfree(dev, ipmi->opal_msg);
 err_unregister:
 	free_irq(ipmi->irq, ipmi);
-err_free:
-	devm_kfree(dev, ipmi);
 	return rc;
 }
 
