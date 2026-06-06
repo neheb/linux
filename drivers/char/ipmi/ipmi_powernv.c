@@ -11,7 +11,6 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_irq.h>
 #include <linux/interrupt.h>
 
 #include <asm/opal.h>
@@ -241,8 +240,11 @@ static int ipmi_powernv_probe(struct platform_device *pdev)
 		goto err_free;
 	}
 
-	ipmi->irq = irq_of_parse_and_map(dev->of_node, 0);
-	if (!ipmi->irq) {
+	ipmi->irq = platform_get_irq_optional(pdev, 0);
+	if (ipmi->irq == -EPROBE_DEFER)
+		return ipmi->irq;
+
+	if (ipmi->irq < 0) {
 		dev_info(dev, "Unable to map irq from device tree\n");
 		ipmi->irq = opal_event_request(prop);
 	}
@@ -251,7 +253,7 @@ static int ipmi_powernv_probe(struct platform_device *pdev)
 			 "opal-ipmi", ipmi);
 	if (rc) {
 		dev_warn(dev, "Unable to request irq\n");
-		goto err_dispose;
+		goto err_free;
 	}
 
 	ipmi->opal_msg = devm_kmalloc(dev,
@@ -275,8 +277,6 @@ err_free_msg:
 	devm_kfree(dev, ipmi->opal_msg);
 err_unregister:
 	free_irq(ipmi->irq, ipmi);
-err_dispose:
-	irq_dispose_mapping(ipmi->irq);
 err_free:
 	devm_kfree(dev, ipmi);
 	return rc;
@@ -288,7 +288,6 @@ static void ipmi_powernv_remove(struct platform_device *pdev)
 
 	ipmi_unregister_smi(smi->intf);
 	free_irq(smi->irq, smi);
-	irq_dispose_mapping(smi->irq);
 }
 
 static const struct of_device_id ipmi_powernv_match[] = {
