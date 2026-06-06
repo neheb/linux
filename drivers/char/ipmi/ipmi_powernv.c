@@ -89,7 +89,7 @@ static int ipmi_powernv_send(void *send_info, struct ipmi_smi_msg *msg)
 	/* data_size already includes the netfn and cmd bytes */
 	size = sizeof(*opal_msg) + msg->data_size - 2;
 
-	pr_devel("%s: opal_ipmi_send(0x%llx, %p, %ld)\n", __func__,
+	pr_devel("%s: opal_ipmi_send(0x%llx, %p, %zu)\n", __func__,
 			smi->interface_id, opal_msg, size);
 	rc = opal_ipmi_send(smi->interface_id, opal_msg, size);
 	pr_devel("%s:  -> %d\n", __func__, rc);
