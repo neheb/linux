@@ -210,15 +210,10 @@ static irqreturn_t ipmi_opal_event(int irq, void *data)
 
 static int ipmi_powernv_probe(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
 	struct ipmi_smi_powernv *ipmi;
-	struct device *dev;
 	u32 prop;
 	int rc;
-
-	if (!pdev || !pdev->dev.of_node)
-		return -ENODEV;
-
-	dev = &pdev->dev;
 
 	ipmi = devm_kzalloc(dev, struct_size(ipmi, opal_msg, IPMI_MAX_MSG_LENGTH), GFP_KERNEL);
 	if (!ipmi)
