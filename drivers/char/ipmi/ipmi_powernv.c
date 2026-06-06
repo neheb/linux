@@ -249,33 +249,23 @@ static int ipmi_powernv_probe(struct platform_device *pdev)
 		ipmi->irq = opal_event_request(prop);
 	}
 
-	rc = request_irq(ipmi->irq, ipmi_opal_event, IRQ_TYPE_LEVEL_HIGH,
+	rc = devm_request_irq(dev, ipmi->irq, ipmi_opal_event, IRQ_TYPE_LEVEL_HIGH,
 			 "opal-ipmi", ipmi);
 	if (rc) {
 		dev_warn(dev, "Unable to request irq\n");
 		return rc;
 	}
 
-	rc = ipmi_register_smi(&ipmi_powernv_smi_handlers, ipmi, dev, 0);
-	if (rc) {
-		dev_warn(dev, "IPMI SMI registration failed (%d)\n", rc);
-		goto err_unregister;
-	}
+	platform_set_drvdata(pdev, ipmi);
 
-	dev_set_drvdata(dev, ipmi);
-	return 0;
-
-err_unregister:
-	free_irq(ipmi->irq, ipmi);
-	return rc;
+	return ipmi_register_smi(&ipmi_powernv_smi_handlers, ipmi, dev, 0);
 }
 
 static void ipmi_powernv_remove(struct platform_device *pdev)
 {
-	struct ipmi_smi_powernv *smi = dev_get_drvdata(&pdev->dev);
+	struct ipmi_smi_powernv *smi = platform_get_drvdata(pdev);
 
 	ipmi_unregister_smi(smi->intf);
-	free_irq(smi->irq, smi);
 }
 
 static const struct of_device_id ipmi_powernv_match[] = {
