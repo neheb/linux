@@ -3,6 +3,7 @@
  */
 #include <linux/if_vlan.h>
 #include <linux/dsa/sja1105.h>
+#include <linux/unaligned.h>
 #include <linux/dsa/8021q.h>
 #include <linux/packing.h>
 
@@ -559,7 +560,7 @@ static struct sk_buff *sja1110_rcv_meta(struct sk_buff *skb, u16 rx_header)
 		ts_id = buf[0];
 		source_port = (buf[1] & GENMASK(7, 4)) >> 4;
 		dir = (buf[1] & BIT(3)) >> 3;
-		tstamp = be64_to_cpu(*(__be64 *)(buf + 2));
+		tstamp = get_unaligned_be64(buf + 2);
 
 		tagger_data->meta_tstamp_handler(ds, source_port, ts_id, dir,
 						 tstamp);
