@@ -9,6 +9,7 @@
 
 #include <linux/capability.h>
 #include <linux/errno.h>
+#include <linux/unaligned.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
@@ -499,7 +500,7 @@ int ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len)
 				ipv6_iface_scope_id(&sin->sin6_addr,
 						    IP6CB(skb)->iif);
 		} else {
-			ipv6_addr_set_v4mapped(*(__be32 *)(nh + serr->addr_offset),
+			ipv6_addr_set_v4mapped(get_unaligned_be32(nh + serr->addr_offset),
 					       &sin->sin6_addr);
 			sin->sin6_scope_id = 0;
 		}
