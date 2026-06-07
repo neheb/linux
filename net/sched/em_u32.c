@@ -12,6 +12,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
+#include <linux/unaligned.h>
 #include <net/pkt_cls.h>
 
 static int em_u32_match(struct sk_buff *skb, struct tcf_ematch *em,
@@ -31,7 +32,7 @@ static int em_u32_match(struct sk_buff *skb, struct tcf_ematch *em,
 	if (!tcf_valid_offset(skb, ptr, sizeof(u32)))
 		return 0;
 
-	return !(((*(__be32 *) ptr)  ^ key->val) & key->mask);
+	return !((get_unaligned_be32(ptr) ^ key->val) & key->mask);
 }
 
 static struct tcf_ematch_ops em_u32_ops = {
