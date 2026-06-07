@@ -18,6 +18,7 @@
 
 #include <linux/module.h>
 #include <linux/string.h>
+#include <linux/unaligned.h>
 #include <linux/list.h>
 #include <linux/rculist.h>
 #include <linux/uaccess.h>
@@ -900,7 +901,7 @@ void l2tp_recv_common(struct l2tp_session *session, struct sk_buff *skb,
 
 		}
 	} else if (session->l2specific_type == L2TP_L2SPECTYPE_DEFAULT) {
-		u32 l2h = ntohl(*(__be32 *)ptr);
+		u32 l2h = get_unaligned_be32(ptr);
 
 		if (l2h & 0x40000000) {
 			/* Store L2TP info in the skb */
