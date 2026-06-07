@@ -20,6 +20,7 @@
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/skbuff.h>
+#include <linux/unaligned.h>
 #include <linux/ip.h>
 #include <linux/icmp.h>
 #include <linux/inetdevice.h>
@@ -553,8 +554,8 @@ int ip_recv_error(struct sock *sk, struct msghdr *msg, int len)
 
 	if (sin && ipv4_datagram_support_addr(serr)) {
 		sin->sin_family = AF_INET;
-		sin->sin_addr.s_addr = *(__be32 *)(skb_network_header(skb) +
-						   serr->addr_offset);
+		sin->sin_addr.s_addr = get_unaligned_be32(skb_network_header(skb) +
+							  serr->addr_offset);
 		sin->sin_port = serr->port;
 		memset(&sin->sin_zero, 0, sizeof(sin->sin_zero));
 		msg->msg_namelen = sizeof(*sin);
