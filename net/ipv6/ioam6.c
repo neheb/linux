@@ -14,6 +14,7 @@
 #include <linux/ioam6_genl.h>
 #include <linux/rhashtable.h>
 #include <linux/netdevice.h>
+#include <linux/unaligned.h>
 
 #include <net/addrconf.h>
 #include <net/genetlink.h>
@@ -831,7 +832,7 @@ static void __ioam6_fill_trace_data(struct sk_buff *skb,
 
 		raw64 = READ_ONCE(dev_net(dev)->ipv6.sysctl.ioam6_id_wide);
 
-		*(__be64 *)data = cpu_to_be64(((u64)byte << 56) | raw64);
+		put_unaligned_be64(((u64)byte << 56) | raw64, data);
 		data += sizeof(__be64);
 	}
 
@@ -856,7 +857,7 @@ static void __ioam6_fill_trace_data(struct sk_buff *skb,
 
 	/* namespace data (wide) */
 	if (trace->type.bit10) {
-		*(__be64 *)data = ns->data_wide;
+		put_unaligned_be64(be64_to_cpu(ns->data_wide), data);
 		data += sizeof(__be64);
 	}
 
