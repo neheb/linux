@@ -16,7 +16,7 @@ gb100_fb_sysmem_flush_page_init(struct nvkm_fb *fb)
 	struct nvkm_device *device = fb->subdev.device;
 
 	// Ensure that the address is within hardware limits
-	WARN_ON(fb->sysmem.flush_page_addr > DMA_BIT_MASK(52));
+	WARN_ON((u64)fb->sysmem.flush_page_addr > DMA_BIT_MASK(52));
 
 	nvkm_wr32(device, hshub + NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_HI, addr_hi);
 	nvkm_wr32(device, hshub + NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_LO, addr_lo);

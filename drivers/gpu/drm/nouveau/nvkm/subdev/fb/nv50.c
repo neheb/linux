@@ -215,7 +215,7 @@ static void
 nv50_fb_sysmem_flush_page_init(struct nvkm_fb *fb)
 {
 	// Ensure that the address can actually fit in the register
-	WARN_ON(fb->sysmem.flush_page_addr > DMA_BIT_MASK(40));
+	WARN_ON((u64)fb->sysmem.flush_page_addr > DMA_BIT_MASK(40));
 
 	nvkm_wr32(fb->subdev.device, 0x100c08, fb->sysmem.flush_page_addr >> 8);
 }
