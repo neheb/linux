@@ -11,6 +11,7 @@
 #include <linux/list.h>
 #include <linux/rculist.h>
 #include <linux/skbuff.h>
+#include <linux/unaligned.h>
 #include <linux/netlink.h>
 #include <linux/netfilter.h>
 #include <linux/static_key.h>
@@ -165,9 +166,9 @@ static bool nft_payload_fast_eval(const struct nft_expr *expr,
 
 	*dest = 0;
 	if (priv->len == 2)
-		*(u16 *)dest = *(u16 *)ptr;
+		*(u16 *)dest = get_unaligned((u16 *)ptr);
 	else if (priv->len == 4)
-		*(u32 *)dest = *(u32 *)ptr;
+		*(u32 *)dest = get_unaligned((u32 *)ptr);
 	else
 		*(u8 *)dest = *(u8 *)ptr;
 	return true;
