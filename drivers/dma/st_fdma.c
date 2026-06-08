@@ -127,13 +127,16 @@ static irqreturn_t st_fdma_irq_handler(int irq, void *dev_id)
 {
 	struct st_fdma_dev *fdev = dev_id;
 	irqreturn_t ret = IRQ_NONE;
-	struct st_fdma_chan *fchan = &fdev->chans[0];
+	struct st_fdma_chan *fchan;
 	unsigned long int_sta, clr;
+	int i;
 
 	int_sta = fdma_read(fdev, FDMA_INT_STA_OFST);
 	clr = int_sta;
 
-	for (; int_sta != 0 ; int_sta >>= 2, fchan++) {
+	for (i = 0; int_sta != 0 && i < fdev->nr_channels;
+	     int_sta >>= 2, i++) {
+		fchan = &fdev->chans[i];
 		if (!(int_sta & (FDMA_INT_STA_CH | FDMA_INT_STA_ERR)))
 			continue;
 
