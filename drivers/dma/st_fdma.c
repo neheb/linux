@@ -730,14 +730,10 @@ static int st_fdma_parse_dt(struct platform_device *pdev,
 
 static void st_fdma_free(struct st_fdma_dev *fdev)
 {
-	struct st_fdma_chan *fchan;
 	int i;
 
-	for (i = 0; i < fdev->nr_channels; i++) {
-		fchan = &fdev->chans[i];
-		list_del(&fchan->vchan.chan.device_node);
-		tasklet_kill(&fchan->vchan.task);
-	}
+	for (i = 0; i < fdev->nr_channels; i++)
+		tasklet_kill(&fdev->chans[i].vchan.task);
 }
 
 static int st_fdma_probe(struct platform_device *pdev)
@@ -789,8 +785,8 @@ static int st_fdma_probe(struct platform_device *pdev)
 	if (fdev->irq < 0)
 		return fdev->irq;
 
-	ret = devm_request_irq(&pdev->dev, fdev->irq, st_fdma_irq_handler, 0,
-			       dev_name(&pdev->dev), fdev);
+	ret = request_irq(fdev->irq, st_fdma_irq_handler, 0,
+			  dev_name(&pdev->dev), fdev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to request irq (%d)\n", ret);
 		goto err_rproc;
@@ -821,24 +817,28 @@ static int st_fdma_probe(struct platform_device *pdev)
 	fdev->dma_device.directions = BIT(DMA_DEV_TO_MEM) | BIT(DMA_MEM_TO_DEV);
 	fdev->dma_device.residue_granularity = DMA_RESIDUE_GRANULARITY_BURST;
 
-	ret = dmaenginem_async_device_register(&fdev->dma_device);
+	ret = dma_async_device_register(&fdev->dma_device);
 	if (ret) {
 		dev_err(&pdev->dev,
 			"Failed to register DMA device (%d)\n", ret);
-		goto err_rproc;
+		goto err_rproc_irq;
 	}
 
 	ret = of_dma_controller_register(np, st_fdma_of_xlate, fdev);
 	if (ret) {
 		dev_err(&pdev->dev,
 			"Failed to register controller (%d)\n", ret);
-		goto err_rproc;
+		goto err_rproc_dma;
 	}
 
 	dev_info(&pdev->dev, "ST FDMA engine driver, irq:%d\n", fdev->irq);
 
 	return 0;
 
+err_rproc_dma:
+	dma_async_device_unregister(&fdev->dma_device);
+err_rproc_irq:
+	free_irq(fdev->irq, fdev);
 err_rproc:
 	st_fdma_free(fdev);
 	st_slim_rproc_put(fdev->slim_rproc);
@@ -849,14 +849,11 @@ err:
 static void st_fdma_remove(struct platform_device *pdev)
 {
 	struct st_fdma_dev *fdev = platform_get_drvdata(pdev);
-	int i;
 
 	of_dma_controller_free(pdev->dev.of_node);
-	devm_free_irq(&pdev->dev, fdev->irq, fdev);
-
-	for (i = 0; i < fdev->nr_channels; i++)
-		tasklet_kill(&fdev->chans[i].vchan.task);
-
+	free_irq(fdev->irq, fdev);
+	st_fdma_free(fdev);
+	dma_async_device_unregister(&fdev->dma_device);
 	st_slim_rproc_put(fdev->slim_rproc);
 }
 
