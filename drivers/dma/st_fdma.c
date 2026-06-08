@@ -765,17 +765,6 @@ static int st_fdma_probe(struct platform_device *pdev)
 	fdev->drvdata = drvdata;
 	platform_set_drvdata(pdev, fdev);
 
-	fdev->irq = platform_get_irq(pdev, 0);
-	if (fdev->irq < 0)
-		return fdev->irq;
-
-	ret = devm_request_irq(&pdev->dev, fdev->irq, st_fdma_irq_handler, 0,
-			       dev_name(&pdev->dev), fdev);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to request irq (%d)\n", ret);
-		goto err;
-	}
-
 	fdev->slim_rproc = st_slim_rproc_alloc(pdev, fdev->fw_name);
 	if (IS_ERR(fdev->slim_rproc)) {
 		ret = PTR_ERR(fdev->slim_rproc);
@@ -791,6 +780,17 @@ static int st_fdma_probe(struct platform_device *pdev)
 		fchan->fdev = fdev;
 		fchan->vchan.desc_free = st_fdma_free_desc;
 		vchan_init(&fchan->vchan, &fdev->dma_device);
+	}
+
+	fdev->irq = platform_get_irq(pdev, 0);
+	if (fdev->irq < 0)
+		return fdev->irq;
+
+	ret = devm_request_irq(&pdev->dev, fdev->irq, st_fdma_irq_handler, 0,
+			       dev_name(&pdev->dev), fdev);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to request irq (%d)\n", ret);
+		goto err_rproc;
 	}
 
 	/* Initialise the FDMA dreq (reserve 0 & 31 for FDMA use) */
