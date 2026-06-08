@@ -767,7 +767,7 @@ static int st_fdma_probe(struct platform_device *pdev)
 
 	fdev->irq = platform_get_irq(pdev, 0);
 	if (fdev->irq < 0)
-		return -EINVAL;
+		return fdev->irq;
 
 	ret = devm_request_irq(&pdev->dev, fdev->irq, st_fdma_irq_handler, 0,
 			       dev_name(&pdev->dev), fdev);
