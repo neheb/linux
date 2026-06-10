@@ -173,6 +173,12 @@ static void mv_chan_activate(struct mv_xor_chan *chan)
 	writel(BIT(0), XOR_ACTIVATION(chan));
 }
 
+static void mv_chan_disable(struct mv_xor_chan *chan)
+{
+	mv_chan_mask_interrupts(chan);
+	writel_relaxed(0, XOR_ACTIVATION(chan));
+}
+
 static char mv_chan_is_busy(struct mv_xor_chan *chan)
 {
 	u32 state = readl_relaxed(XOR_ACTIVATION(chan));
@@ -658,6 +664,8 @@ static void mv_xor_free_chan_resources(struct dma_chan *chan)
 	struct mv_xor_desc_slot *iter, *_iter;
 	int in_use_descs = 0;
 
+	mv_chan_disable(mv_chan);
+
 	spin_lock_bh(&mv_chan->lock);
 
 	mv_chan_slot_cleanup(mv_chan);
@@ -874,7 +882,7 @@ static int mv_chan_memcpy_self_test(struct mv_xor_chan *mv_chan)
 		dev_err(dma_chan->device->dev,
 			"Self-test copy timed out, disabling\n");
 		err = -ENODEV;
-		goto free_resources;
+		goto free_chan;
 	}
 
 	dma_sync_single_for_cpu(dma_chan->device->dev, dest_dma,
@@ -883,9 +891,11 @@ static int mv_chan_memcpy_self_test(struct mv_xor_chan *mv_chan)
 		dev_err(dma_chan->device->dev,
 			"Self-test copy failed compare, disabling\n");
 		err = -ENODEV;
-		goto free_resources;
+		goto free_chan;
 	}
 
+free_chan:
+	mv_chan_disable(mv_chan);
 free_resources:
 	dmaengine_unmap_put(unmap);
 	mv_xor_free_chan_resources(dma_chan);
@@ -1007,7 +1017,7 @@ mv_chan_xor_self_test(struct mv_xor_chan *mv_chan)
 		dev_err(dma_chan->device->dev,
 			"Self-test xor timed out, disabling\n");
 		err = -ENODEV;
-		goto free_resources;
+		goto free_chan;
 	}
 
 	dma_sync_single_for_cpu(dma_chan->device->dev, dest_dma,
@@ -1019,10 +1029,12 @@ mv_chan_xor_self_test(struct mv_xor_chan *mv_chan)
 				"Self-test xor failed compare, disabling. index %d, data %x, expected %x\n",
 				i, ptr[i], cmp_word);
 			err = -ENODEV;
-			goto free_resources;
+			goto free_chan;
 		}
 	}
 
+free_chan:
+	mv_chan_disable(mv_chan);
 free_resources:
 	dmaengine_unmap_put(unmap);
 	mv_xor_free_chan_resources(dma_chan);
@@ -1040,6 +1052,7 @@ static int mv_xor_channel_remove(struct mv_xor_chan *mv_chan)
 	struct device *dev = mv_chan->dmadev.dev;
 
 	mv_chan_mask_interrupts(mv_chan);
+	mv_chan_disable(mv_chan);
 	tasklet_kill(&mv_chan->irq_tasklet);
 
 	dma_async_device_unregister(&mv_chan->dmadev);
