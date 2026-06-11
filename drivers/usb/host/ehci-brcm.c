@@ -154,34 +154,28 @@ static int ehci_brcm_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, hcd);
 	priv = hcd_to_ehci_priv(hcd);
 
-	priv->clk = devm_clk_get_optional(dev, NULL);
+	priv->clk = devm_clk_get_optional_enabled(dev, NULL);
 	if (IS_ERR(priv->clk)) {
 		err = PTR_ERR(priv->clk);
 		goto err_hcd;
 	}
 
-	err = clk_prepare_enable(priv->clk);
-	if (err)
-		goto err_hcd;
-
 	hcd->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &res_mem);
 	if (IS_ERR(hcd->regs)) {
 		err = PTR_ERR(hcd->regs);
-		goto err_clk;
+		goto err_hcd;
 	}
 	hcd->rsrc_start = res_mem->start;
 	hcd->rsrc_len = resource_size(res_mem);
 	err = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (err)
-		goto err_clk;
+		goto err_hcd;
 
 	device_wakeup_enable(hcd->self.controller);
 	device_enable_async_suspend(hcd->self.controller);
 
 	return 0;
 
-err_clk:
-	clk_disable_unprepare(priv->clk);
 err_hcd:
 	usb_put_hcd(hcd);
 
@@ -191,10 +185,8 @@ err_hcd:
 static void ehci_brcm_remove(struct platform_device *dev)
 {
 	struct usb_hcd *hcd = platform_get_drvdata(dev);
-	struct brcm_priv *priv = hcd_to_ehci_priv(hcd);
 
 	usb_remove_hcd(hcd);
-	clk_disable_unprepare(priv->clk);
 	usb_put_hcd(hcd);
 }
 
