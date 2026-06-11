@@ -5542,17 +5542,15 @@ static int mvneta_probe(struct platform_device *pdev)
 	if (dev->irq == 0)
 		return -EINVAL;
 
-	pp->clk = devm_clk_get(&pdev->dev, "core");
+	pp->clk = devm_clk_get_enabled(&pdev->dev, "core");
 	if (IS_ERR(pp->clk))
-		pp->clk = devm_clk_get(&pdev->dev, NULL);
+		pp->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(pp->clk))
 		return PTR_ERR(pp->clk);
 
-	clk_prepare_enable(pp->clk);
-
-	pp->clk_bus = devm_clk_get(&pdev->dev, "bus");
-	if (!IS_ERR(pp->clk_bus))
-		clk_prepare_enable(pp->clk_bus);
+	pp->clk_bus = devm_clk_get_optional_enabled(&pdev->dev, "bus");
+	if (IS_ERR(pp->clk_bus))
+		return PTR_ERR(pp->clk_bus);
 
 	pp->phylink_pcs.ops = &mvneta_phylink_pcs_ops;
 
@@ -5596,10 +5594,8 @@ static int mvneta_probe(struct platform_device *pdev)
 
 	phylink = phylink_create(&pp->phylink_config, pdev->dev.fwnode,
 				 phy_mode, &mvneta_phylink_ops);
-	if (IS_ERR(phylink)) {
-		err = PTR_ERR(phylink);
-		goto err_clk;
-	}
+	if (IS_ERR(phylink))
+		return PTR_ERR(phylink);
 
 	pp->phylink = phylink;
 
@@ -5780,9 +5776,6 @@ err_free_ports:
 err_free_phylink:
 	if (pp->phylink)
 		phylink_destroy(pp->phylink);
-err_clk:
-	clk_disable_unprepare(pp->clk_bus);
-	clk_disable_unprepare(pp->clk);
 	return err;
 }
 
@@ -5793,8 +5786,6 @@ static void mvneta_remove(struct platform_device *pdev)
 	struct mvneta_port *pp = netdev_priv(dev);
 
 	unregister_netdev(dev);
-	clk_disable_unprepare(pp->clk_bus);
-	clk_disable_unprepare(pp->clk);
 	free_percpu(pp->ports);
 	free_percpu(pp->stats);
 	phylink_destroy(pp->phylink);
@@ -5860,8 +5851,7 @@ static int mvneta_resume(struct device *device)
 	int err, queue;
 
 	clk_prepare_enable(pp->clk);
-	if (!IS_ERR(pp->clk_bus))
-		clk_prepare_enable(pp->clk_bus);
+	clk_prepare_enable(pp->clk_bus);
 	if (pp->dram_target_info || pp->neta_armada3700)
 		mvneta_conf_mbus_windows(pp, pp->dram_target_info);
 	if (pp->bm_priv) {
