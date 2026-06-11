@@ -5538,17 +5538,15 @@ static int mvneta_probe(struct platform_device *pdev)
 		pp->neta_ac5 = true;
 	}
 
-	dev->irq = irq_of_parse_and_map(dn, 0);
+	dev->irq = platform_get_irq(pdev, 0);
 	if (dev->irq == 0)
 		return -EINVAL;
 
 	pp->clk = devm_clk_get(&pdev->dev, "core");
 	if (IS_ERR(pp->clk))
 		pp->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(pp->clk)) {
-		err = PTR_ERR(pp->clk);
-		goto err_free_irq;
-	}
+	if (IS_ERR(pp->clk))
+		return PTR_ERR(pp->clk);
 
 	clk_prepare_enable(pp->clk);
 
@@ -5785,8 +5783,6 @@ err_free_phylink:
 err_clk:
 	clk_disable_unprepare(pp->clk_bus);
 	clk_disable_unprepare(pp->clk);
-err_free_irq:
-	irq_dispose_mapping(dev->irq);
 	return err;
 }
 
@@ -5801,7 +5797,6 @@ static void mvneta_remove(struct platform_device *pdev)
 	clk_disable_unprepare(pp->clk);
 	free_percpu(pp->ports);
 	free_percpu(pp->stats);
-	irq_dispose_mapping(dev->irq);
 	phylink_destroy(pp->phylink);
 
 	if (pp->bm_priv) {
