@@ -114,18 +114,7 @@ struct fsldma_chan_regs {
 	u64 ndar;	/* 0x24 - Next Descriptor Address Register */
 };
 
-struct fsldma_chan;
 #define FSL_DMA_MAX_CHANS_PER_DEVICE 8
-
-struct fsldma_device {
-	void __iomem *regs;	/* DGSR register base */
-	struct device *dev;
-	struct dma_device common;
-	struct fsldma_chan *chan[FSL_DMA_MAX_CHANS_PER_DEVICE];
-	u32 feature;		/* The same as DMA channels */
-	int irq;		/* Channel IRQ */
-	int addr_bits;		/* DMA addressing bits supported */
-};
 
 /* Define macros for fsldma_chan->feature property */
 #define FSL_DMA_LITTLE_ENDIAN	0x00000000
@@ -172,7 +161,6 @@ struct fsldma_chan {
 	struct dma_pool *desc_pool;	/* Descriptors pool */
 	struct device *dev;		/* Channel device */
 	int irq;			/* Channel IRQ */
-	int id;				/* Raw id of this channel */
 	struct tasklet_struct tasklet;
 	u32 feature;
 	bool idle;			/* DMA controller is idle */
@@ -186,6 +174,17 @@ struct fsldma_chan {
 	void (*set_src_loop_size)(struct fsldma_chan *fsl_chan, int size);
 	void (*set_dst_loop_size)(struct fsldma_chan *fsl_chan, int size);
 	void (*set_request_count)(struct fsldma_chan *fsl_chan, int size);
+};
+
+struct fsldma_device {
+	void __iomem *regs;	/* DGSR register base */
+	struct device *dev;
+	struct dma_device common;
+	u32 feature;		/* The same as DMA channels */
+	int irq;		/* Channel IRQ */
+	int addr_bits;		/* DMA addressing bits supported */
+	u32 nchan;
+	struct fsldma_chan chan[] __counted_by(nchan);
 };
 
 #define to_fsl_chan(chan) container_of(chan, struct fsldma_chan, common)
