@@ -550,10 +550,12 @@ static int mxs_auart_dma_tx(struct mxs_auart_port *s, int size)
 
 	/* [2] : set DMA buffer. */
 	sg_init_one(sgl, s->tx_dma_buf, size);
-	dma_map_sg(s->dev, sgl, 1, DMA_TO_DEVICE);
+	if (dma_map_sg(s->dev, sgl, 1, DMA_TO_DEVICE) != 1)
+		return -EINVAL;
 	desc = dmaengine_prep_slave_sg(channel, sgl,
 			1, DMA_MEM_TO_DEV, DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
 	if (!desc) {
+		dma_unmap_sg(s->dev, sgl, 1, DMA_TO_DEVICE);
 		dev_err(s->dev, "step 2 error\n");
 		return -EINVAL;
 	}
@@ -853,12 +855,14 @@ static int mxs_auart_dma_prep_rx(struct mxs_auart_port *s)
 
 	/* [2] : send DMA request */
 	sg_init_one(sgl, s->rx_dma_buf, UART_XMIT_SIZE);
-	dma_map_sg(s->dev, sgl, 1, DMA_FROM_DEVICE);
+	if (dma_map_sg(s->dev, sgl, 1, DMA_FROM_DEVICE) != 1)
+		return -EINVAL;
 	desc = dmaengine_prep_slave_sg(channel, sgl, 1, DMA_DEV_TO_MEM,
 					DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
 	if (!desc) {
+		dma_unmap_sg(s->dev, sgl, 1, DMA_FROM_DEVICE);
 		dev_err(s->dev, "step 2 error\n");
-		return -1;
+		return -EINVAL;
 	}
 
 	/* [3] : submit the DMA, but do not issue it. */
