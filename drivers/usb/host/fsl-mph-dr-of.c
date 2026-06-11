@@ -292,20 +292,10 @@ static void fsl_usb2_mph_dr_of_remove(struct platform_device *ofdev)
 static int fsl_usb2_mpc5121_init(struct platform_device *pdev)
 {
 	struct fsl_usb2_platform_data *pdata = dev_get_platdata(&pdev->dev);
-	struct clk *clk;
-	int err;
 
-	clk = devm_clk_get(pdev->dev.parent, "ipg");
-	if (IS_ERR(clk)) {
-		dev_err(&pdev->dev, "failed to get clk\n");
-		return PTR_ERR(clk);
-	}
-	err = clk_prepare_enable(clk);
-	if (err) {
-		dev_err(&pdev->dev, "failed to enable clk\n");
-		return err;
-	}
-	pdata->clk = clk;
+	pdata->clk = devm_clk_get_enabled(pdev->dev.parent, "ipg");
+	if (IS_ERR(pdata->clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(pdata->clk), "failed to get clk\n");
 
 	if (pdata->phy_mode == FSL_USB2_PHY_UTMI_WIDE) {
 		u32 reg = 0;
@@ -327,8 +317,6 @@ static void fsl_usb2_mpc5121_exit(struct platform_device *pdev)
 	struct fsl_usb2_platform_data *pdata = dev_get_platdata(&pdev->dev);
 
 	pdata->regs = NULL;
-
-	clk_disable_unprepare(pdata->clk);
 }
 
 static struct fsl_usb2_platform_data fsl_usb2_mpc5121_pd = {
