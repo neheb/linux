@@ -588,7 +588,11 @@ static void mxs_auart_tx_chars(struct mxs_auart_port *s)
 					UART_XMIT_SIZE);
 
 		if (i) {
-			mxs_auart_dma_tx(s, i);
+			if (mxs_auart_dma_tx(s, i)) {
+				clear_bit(MXS_AUART_DMA_TX_SYNC, &s->flags);
+				smp_mb__after_atomic();
+				uart_write_wakeup(&s->port);
+			}
 		} else {
 			clear_bit(MXS_AUART_DMA_TX_SYNC, &s->flags);
 			smp_mb__after_atomic();
