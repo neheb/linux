@@ -1012,13 +1012,10 @@ static irqreturn_t fsldma_ctrl_irq(int irq, void *data)
 	mask = 0xff000000;
 	dev_dbg(fdev->dev, "IRQ: gsr 0x%.8x\n", gsr);
 
-	for (i = 0; i < FSL_DMA_MAX_CHANS_PER_DEVICE; i++) {
-		chan = fdev->chan[i];
-		if (!chan)
-			continue;
-
+	for (i = 0; i < fdev->nchan; i++) {
+		chan = &fdev->chan[i];
 		if (gsr & mask) {
-			dev_dbg(fdev->dev, "IRQ: chan %d\n", chan->id);
+			dev_dbg(fdev->dev, "IRQ: chan %u\n", i);
 			fsldma_chan_irq(irq, chan);
 			handled++;
 		}
@@ -1065,11 +1062,8 @@ static int fsldma_request_irqs(struct fsldma_device *fdev)
 	}
 
 	/* no per-controller IRQ, use the per-channel IRQs */
-	for (i = 0; i < FSL_DMA_MAX_CHANS_PER_DEVICE; i++) {
-		chan = fdev->chan[i];
-		if (!chan)
-			continue;
-
+	for (i = 0; i < fdev->nchan; i++) {
+		chan = &fdev->chan[i];
 		if (chan->irq < 0) {
 			if (chan->irq != -EPROBE_DEFER)
 				chan_err(chan, "interrupts property missing in device tree\n");
@@ -1113,25 +1107,14 @@ out_unwind:
 /*----------------------------------------------------------------------------*/
 
 static int fsl_dma_chan_probe(struct fsldma_device *fdev,
-	struct device_node *node, u32 feature, const char *compatible)
+	struct device_node *node, u32 i, u32 feature, const char *compatible)
 {
-	struct fsldma_chan *chan;
-	struct resource res;
-	int err;
-
-	/* alloc channel */
-	chan = devm_kzalloc(fdev->dev, sizeof(*chan), GFP_KERNEL);
-	if (!chan)
-		return -ENOMEM;
+	struct fsldma_chan *chan = &fdev->chan[i];
 
 	/* ioremap registers for use */
 	chan->regs = devm_of_iomap(fdev->dev, node, 0, NULL);
 	if (IS_ERR(chan->regs))
 		return dev_err_probe(fdev->dev, PTR_ERR(chan->regs), "unable to ioremap registers\n");
-
-	err = of_address_to_resource(node, 0, &res);
-	if (err)
-		return dev_err_probe(fdev->dev, err, "unable to find 'reg' property\n");
 
 	chan->feature = feature;
 	if (!fdev->feature)
@@ -1144,15 +1127,8 @@ static int fsl_dma_chan_probe(struct fsldma_device *fdev,
 	WARN_ON(fdev->feature != chan->feature);
 
 	chan->dev = fdev->dev;
-	chan->id = (res.start & 0xfff) < 0x300 ?
-		   ((res.start - 0x100) & 0xfff) >> 7 :
-		   ((res.start - 0x200) & 0xfff) >> 7;
-	if (chan->id >= FSL_DMA_MAX_CHANS_PER_DEVICE)
-		return dev_err_probe(fdev->dev, -EINVAL, "too many channels for device\n");
-
-	fdev->chan[chan->id] = chan;
 	tasklet_setup(&chan->tasklet, dma_do_tasklet);
-	snprintf(chan->name, sizeof(chan->name), "chan%d", chan->id);
+	snprintf(chan->name, sizeof(chan->name), "chan%u", i);
 
 	/* Initialize the channel */
 	dma_init(chan);
@@ -1189,7 +1165,7 @@ static int fsl_dma_chan_probe(struct fsldma_device *fdev,
 	/* Add the channel to DMA device channel list */
 	list_add_tail(&chan->common.device_node, &fdev->common.channels);
 
-	dev_info(fdev->dev, "#%d (%s), irq %d\n", chan->id, compatible,
+	dev_info(fdev->dev, "#%u (%s), irq %d\n", i, compatible,
 		 chan->irq ? chan->irq : fdev->irq);
 
 	return 0;
@@ -1218,10 +1194,13 @@ static int fsldma_of_probe(struct platform_device *op)
 	if (irq == -EPROBE_DEFER)
 		return irq;
 
-	fdev = devm_kzalloc(dev, sizeof(*fdev), GFP_KERNEL);
+	i = max_t(u32, of_get_child_count(dev->of_node), FSL_DMA_MAX_CHANS_PER_DEVICE);
+
+	fdev = devm_kzalloc(dev, struct_size(fdev, chan, i), GFP_KERNEL);
 	if (!fdev)
 		return -ENOMEM;
 
+	fdev->nchan = i;
 	fdev->dev = dev;
 	INIT_LIST_HEAD(&fdev->common.channels);
 	/* The DMA address bits supported for this device. */
@@ -1262,18 +1241,18 @@ static int fsldma_of_probe(struct platform_device *op)
 	 * of_platform_bus_remove(). Instead, we manually instantiate every DMA
 	 * channel object.
 	 */
+	i = 0;
 	for_each_child_of_node(op->dev.of_node, child) {
 		if (of_device_is_compatible(child, "fsl,eloplus-dma-channel")) {
-			fsl_dma_chan_probe(fdev, child,
+			fsl_dma_chan_probe(fdev, child, i,
 				FSL_DMA_IP_85XX | FSL_DMA_BIG_ENDIAN,
 				"fsl,eloplus-dma-channel");
-		}
-
-		if (of_device_is_compatible(child, "fsl,elo-dma-channel")) {
-			fsl_dma_chan_probe(fdev, child,
+		} else if (of_device_is_compatible(child, "fsl,elo-dma-channel")) {
+			fsl_dma_chan_probe(fdev, child, i,
 				FSL_DMA_IP_83XX | FSL_DMA_LITTLE_ENDIAN,
 				"fsl,elo-dma-channel");
 		}
+		i++;
 	}
 
 	/*
@@ -1293,10 +1272,9 @@ static int fsldma_of_probe(struct platform_device *op)
 	return 0;
 
 out_free_fdev:
-	for (i = 0; i < FSL_DMA_MAX_CHANS_PER_DEVICE; i++) {
-		if (fdev->chan[i])
-			fsl_dma_chan_remove(fdev->chan[i]);
-	}
+	for (i = 0; i < fdev->nchan; i++)
+		if (fdev->chan[i].regs)
+			fsl_dma_chan_remove(&fdev->chan[i]);
 	return err;
 }
 
@@ -1310,7 +1288,7 @@ static void fsldma_of_remove(struct platform_device *op)
 
 	fsldma_free_irqs(fdev);
 
-	for (i = 0; i < FSL_DMA_MAX_CHANS_PER_DEVICE; i++) {
+	for (i = 0; i < fdev->nchan; i++) {
 		if (fdev->chan[i])
 			fsl_dma_chan_remove(fdev->chan[i]);
 	}
@@ -1323,11 +1301,8 @@ static int fsldma_suspend_late(struct device *dev)
 	struct fsldma_chan *chan;
 	int i;
 
-	for (i = 0; i < FSL_DMA_MAX_CHANS_PER_DEVICE; i++) {
-		chan = fdev->chan[i];
-		if (!chan)
-			continue;
-
+	for (i = 0; i < fdev->nchan; i++) {
+		chan = &fdev->chan[i];
 		spin_lock_bh(&chan->desc_lock);
 		if (unlikely(!chan->idle))
 			goto out;
@@ -1339,9 +1314,7 @@ static int fsldma_suspend_late(struct device *dev)
 
 out:
 	for (; i >= 0; i--) {
-		chan = fdev->chan[i];
-		if (!chan)
-			continue;
+		chan = &fdev->chan[i];
 		chan->pm_state = RUNNING;
 		spin_unlock_bh(&chan->desc_lock);
 	}
@@ -1355,11 +1328,8 @@ static int fsldma_resume_early(struct device *dev)
 	u32 mode;
 	int i;
 
-	for (i = 0; i < FSL_DMA_MAX_CHANS_PER_DEVICE; i++) {
-		chan = fdev->chan[i];
-		if (!chan)
-			continue;
-
+	for (i = 0; i < fdev->nchan; i++) {
+		chan = &fdev->chan[i];
 		spin_lock_bh(&chan->desc_lock);
 		mode = chan->regs_save.mr
 			& ~FSL_DMA_MR_CS & ~FSL_DMA_MR_CC & ~FSL_DMA_MR_CA;
