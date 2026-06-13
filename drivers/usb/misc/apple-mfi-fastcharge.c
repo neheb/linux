@@ -173,8 +173,8 @@ static int mfi_fc_probe(struct usb_device *udev)
 		return -ENOMEM;
 
 	battery_desc = &mfi->battery_desc;
-	battery_desc->name = devm_kasprintf(&udev->dev, GFP_KERNEL, "apple_mfi_fastcharge_%d-%d",
-					    udev->bus->busnum, udev->devnum);
+	battery_desc->name = devm_kasprintf(&udev->dev, GFP_KERNEL, "apple_mfi_fastcharge_%s",
+						dev_name(&udev->dev));
 	if (!battery_desc->name)
 		return -ENOMEM;
 
