@@ -178,7 +178,7 @@ static int mfi_fc_probe(struct usb_device *udev)
 	if (!battery_desc->name)
 		return -ENOMEM;
 
-	battery_desc->type = POWER_SUPPLY_TYPE_BATTERY;
+	battery_desc->type = POWER_SUPPLY_TYPE_USB;
 	battery_desc->properties = apple_mfi_fc_properties;
 	battery_desc->num_properties = ARRAY_SIZE(apple_mfi_fc_properties);
 	battery_desc->get_property = apple_mfi_fc_get_property;
