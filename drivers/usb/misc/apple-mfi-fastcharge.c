@@ -147,7 +147,7 @@ static int apple_mfi_fc_property_is_writeable(struct power_supply *psy,
 	}
 }
 
-static enum power_supply_property apple_mfi_fc_properties[] = {
+static const enum power_supply_property apple_mfi_fc_properties[] = {
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_SCOPE
 };
