@@ -47,18 +47,28 @@ struct mfi_device {
 	struct power_supply_desc battery_desc;
 };
 
+static int apple_mfi_fc_send_current(struct mfi_device *mfi, int current_ma)
+{
+	int retval;
+
+	retval = usb_control_msg(mfi->udev, usb_sndctrlpipe(mfi->udev, 0),
+				 0x40, /* Vendor‐defined power request */
+				 USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
+				 current_ma, /* wValue, current offset */
+				 current_ma, /* wIndex, current offset */
+				 NULL, 0, USB_CTRL_SET_TIMEOUT);
+	if (retval < 0)
+		dev_err(&mfi->udev->dev, "Failed to set charge current: %d\n", retval);
+
+	return retval;
+}
+
 static int apple_mfi_fc_set_charge_type(struct mfi_device *mfi,
 					const union power_supply_propval *val)
 {
 	int current_ma;
-	int retval;
-	__u8 request_type;
-
-	if (mfi->charge_type == val->intval) {
-		dev_dbg(&mfi->udev->dev, "charge type %d already set\n",
-				mfi->charge_type);
-		return 0;
-	}
+	int old_type;
+	int ret;
 
 	switch (val->intval) {
 	case POWER_SUPPLY_CHARGE_TYPE_TRICKLE:
@@ -71,21 +81,20 @@ static int apple_mfi_fc_set_charge_type(struct mfi_device *mfi,
 		return -EINVAL;
 	}
 
-	request_type = USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE;
-	retval = usb_control_msg(mfi->udev, usb_sndctrlpipe(mfi->udev, 0),
-				 0x40, /* Vendor‐defined power request */
-				 request_type,
-				 current_ma, /* wValue, current offset */
-				 current_ma, /* wIndex, current offset */
-				 NULL, 0, USB_CTRL_SET_TIMEOUT);
-	if (retval < 0) {
-		dev_err(&mfi->udev->dev, "Failed to set charge type: %d\n", retval);
-		return retval;
+	if (mfi->charge_type == val->intval) {
+		dev_dbg(&mfi->udev->dev, "charge type %d already set\n",
+			mfi->charge_type);
+		return 0;
 	}
 
+	old_type = mfi->charge_type;
 	mfi->charge_type = val->intval;
 
-	return 0;
+	ret = apple_mfi_fc_send_current(mfi, current_ma);
+	if (ret < 0)
+		mfi->charge_type = old_type;
+
+	return ret;
 }
 
 static int apple_mfi_fc_get_property(struct power_supply *psy,
@@ -194,12 +203,28 @@ static int mfi_fc_probe(struct usb_device *udev)
 	if (IS_ERR(battery))
 		return PTR_ERR(battery);
 
+	dev_set_drvdata(&udev->dev, mfi);
+
+	return 0;
+}
+
+static int mfi_fc_resume(struct usb_device *udev, pm_message_t message)
+{
+	struct mfi_device *mfi = dev_get_drvdata(&udev->dev);
+
+	if (!mfi)
+		return 0;
+
+	if (mfi->charge_type == POWER_SUPPLY_CHARGE_TYPE_FAST)
+		return apple_mfi_fc_send_current(mfi, FAST_CURRENT_MA);
+
 	return 0;
 }
 
 static struct usb_device_driver mfi_fc_driver = {
 	.name =		"apple-mfi-fastcharge",
 	.probe =	mfi_fc_probe,
+	.resume =	mfi_fc_resume,
 	.id_table =	mfi_fc_id_table,
 	.match =	mfi_fc_match,
 	.generic_subclass = 1,
