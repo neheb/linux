@@ -49,18 +49,18 @@ struct mfi_device {
 	struct power_supply_desc battery_desc;
 };
 
-static int apple_mfi_fc_send_current(struct mfi_device *mfi, int current_ma)
+static int apple_mfi_fc_send_current(struct usb_device *udev, int current_ma)
 {
 	int retval;
 
-	retval = usb_control_msg(mfi->udev, usb_sndctrlpipe(mfi->udev, 0),
+	retval = usb_control_msg(udev, usb_sndctrlpipe(udev, 0),
 				 0x40, /* Vendor‐defined power request */
 				 USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
 				 current_ma, /* wValue, current offset */
 				 current_ma, /* wIndex, current offset */
 				 NULL, 0, USB_CTRL_SET_TIMEOUT);
 	if (retval < 0)
-		dev_err(&mfi->udev->dev, "Failed to set charge current: %d\n", retval);
+		dev_err(&udev->dev, "Failed to set charge current: %d\n", retval);
 
 	return retval;
 }
@@ -68,6 +68,7 @@ static int apple_mfi_fc_send_current(struct mfi_device *mfi, int current_ma)
 static int apple_mfi_fc_set_charge_type(struct mfi_device *mfi,
 					const union power_supply_propval *val)
 {
+	struct usb_device *udev;
 	int current_ma;
 	int old_type;
 	int ret;
@@ -84,18 +85,20 @@ static int apple_mfi_fc_set_charge_type(struct mfi_device *mfi,
 	}
 
 	mutex_lock(&mfi->lock);
-	if (mfi->charge_type == val->intval) {
+	udev = mfi->udev;
+	if (!udev || mfi->charge_type == val->intval) {
 		mutex_unlock(&mfi->lock);
-		dev_dbg(&mfi->udev->dev, "charge type %d already set\n",
-			mfi->charge_type);
-		return 0;
+		if (udev)
+			dev_dbg(&udev->dev, "charge type %d already set\n",
+				mfi->charge_type);
+		return udev ? 0 : -ENODEV;
 	}
 
 	old_type = mfi->charge_type;
 	mfi->charge_type = val->intval;
 	mutex_unlock(&mfi->lock);
 
-	ret = apple_mfi_fc_send_current(mfi, current_ma);
+	ret = apple_mfi_fc_send_current(udev, current_ma);
 	if (ret < 0) {
 		mutex_lock(&mfi->lock);
 		mfi->charge_type = old_type;
@@ -110,8 +113,17 @@ static int apple_mfi_fc_get_property(struct power_supply *psy,
 		union power_supply_propval *val)
 {
 	struct mfi_device *mfi = power_supply_get_drvdata(psy);
+	struct usb_device *udev;
 
-	dev_dbg(&mfi->udev->dev, "prop: %d\n", psp);
+	mutex_lock(&mfi->lock);
+	udev = mfi->udev;
+	if (!udev) {
+		mutex_unlock(&mfi->lock);
+		return -ENODEV;
+	}
+	mutex_unlock(&mfi->lock);
+
+	dev_dbg(&udev->dev, "prop: %d\n", psp);
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CHARGE_TYPE: {
@@ -134,11 +146,20 @@ static int apple_mfi_fc_set_property(struct power_supply *psy,
 		const union power_supply_propval *val)
 {
 	struct mfi_device *mfi = power_supply_get_drvdata(psy);
+	struct usb_device *udev;
 	int ret;
 
-	dev_dbg(&mfi->udev->dev, "prop: %d\n", psp);
+	mutex_lock(&mfi->lock);
+	udev = mfi->udev;
+	if (!udev) {
+		mutex_unlock(&mfi->lock);
+		return -ENODEV;
+	}
+	mutex_unlock(&mfi->lock);
 
-	ret = pm_runtime_resume_and_get(&mfi->udev->dev);
+	dev_dbg(&udev->dev, "prop: %d\n", psp);
+
+	ret = pm_runtime_resume_and_get(&udev->dev);
 	if (ret)
 		return ret;
 
@@ -150,7 +171,7 @@ static int apple_mfi_fc_set_property(struct power_supply *psy,
 		ret = -EINVAL;
 	}
 
-	pm_runtime_put_autosuspend(&mfi->udev->dev);
+	pm_runtime_put_autosuspend(&udev->dev);
 
 	return ret;
 }
@@ -234,14 +255,27 @@ static int mfi_fc_resume(struct usb_device *udev, pm_message_t message)
 	mutex_unlock(&mfi->lock);
 
 	if (charge_type == POWER_SUPPLY_CHARGE_TYPE_FAST)
-		return apple_mfi_fc_send_current(mfi, FAST_CURRENT_MA);
+		return apple_mfi_fc_send_current(udev, FAST_CURRENT_MA);
 
 	return 0;
+}
+
+static void mfi_fc_disconnect(struct usb_device *udev)
+{
+	struct mfi_device *mfi = dev_get_drvdata(&udev->dev);
+
+	if (!mfi)
+		return;
+
+	mutex_lock(&mfi->lock);
+	mfi->udev = NULL;
+	mutex_unlock(&mfi->lock);
 }
 
 static struct usb_device_driver mfi_fc_driver = {
 	.name =		"apple-mfi-fastcharge",
 	.probe =	mfi_fc_probe,
+	.disconnect =	mfi_fc_disconnect,
 	.resume =	mfi_fc_resume,
 	.id_table =	mfi_fc_id_table,
 	.match =	mfi_fc_match,
