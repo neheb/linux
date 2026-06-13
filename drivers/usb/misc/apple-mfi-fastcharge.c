@@ -7,6 +7,7 @@
 
 /* Standard include files */
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/power_supply.h>
 #include <linux/slab.h>
 #include <linux/usb.h>
@@ -44,6 +45,7 @@ MODULE_DEVICE_TABLE(usb, mfi_fc_id_table);
 struct mfi_device {
 	struct usb_device *udev;
 	int charge_type;
+	struct mutex lock;
 	struct power_supply_desc battery_desc;
 };
 
@@ -81,7 +83,9 @@ static int apple_mfi_fc_set_charge_type(struct mfi_device *mfi,
 		return -EINVAL;
 	}
 
+	mutex_lock(&mfi->lock);
 	if (mfi->charge_type == val->intval) {
+		mutex_unlock(&mfi->lock);
 		dev_dbg(&mfi->udev->dev, "charge type %d already set\n",
 			mfi->charge_type);
 		return 0;
@@ -89,10 +93,14 @@ static int apple_mfi_fc_set_charge_type(struct mfi_device *mfi,
 
 	old_type = mfi->charge_type;
 	mfi->charge_type = val->intval;
+	mutex_unlock(&mfi->lock);
 
 	ret = apple_mfi_fc_send_current(mfi, current_ma);
-	if (ret < 0)
+	if (ret < 0) {
+		mutex_lock(&mfi->lock);
 		mfi->charge_type = old_type;
+		mutex_unlock(&mfi->lock);
+	}
 
 	return ret;
 }
@@ -106,9 +114,11 @@ static int apple_mfi_fc_get_property(struct power_supply *psy,
 	dev_dbg(&mfi->udev->dev, "prop: %d\n", psp);
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_CHARGE_TYPE:
+	case POWER_SUPPLY_PROP_CHARGE_TYPE: {
+		guard(mutex)(&mfi->lock);
 		val->intval = mfi->charge_type;
 		break;
+	}
 	case POWER_SUPPLY_PROP_SCOPE:
 		val->intval = POWER_SUPPLY_SCOPE_DEVICE;
 		break;
@@ -181,6 +191,8 @@ static int mfi_fc_probe(struct usb_device *udev)
 	if (!mfi)
 		return -ENOMEM;
 
+	mutex_init(&mfi->lock);
+
 	battery_desc = &mfi->battery_desc;
 	battery_desc->name = devm_kasprintf(&udev->dev, GFP_KERNEL, "apple_mfi_fastcharge_%s",
 						dev_name(&udev->dev));
@@ -211,11 +223,16 @@ static int mfi_fc_probe(struct usb_device *udev)
 static int mfi_fc_resume(struct usb_device *udev, pm_message_t message)
 {
 	struct mfi_device *mfi = dev_get_drvdata(&udev->dev);
+	int charge_type;
 
 	if (!mfi)
 		return 0;
 
-	if (mfi->charge_type == POWER_SUPPLY_CHARGE_TYPE_FAST)
+	mutex_lock(&mfi->lock);
+	charge_type = mfi->charge_type;
+	mutex_unlock(&mfi->lock);
+
+	if (charge_type == POWER_SUPPLY_CHARGE_TYPE_FAST)
 		return apple_mfi_fc_send_current(mfi, FAST_CURRENT_MA);
 
 	return 0;
