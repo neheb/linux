@@ -216,6 +216,7 @@ static int mfi_fc_probe(struct usb_device *udev)
 		return PTR_ERR(battery);
 
 	dev_set_drvdata(&udev->dev, mfi);
+	usb_enable_autosuspend(udev);
 
 	return 0;
 }
@@ -245,6 +246,7 @@ static struct usb_device_driver mfi_fc_driver = {
 	.id_table =	mfi_fc_id_table,
 	.match =	mfi_fc_match,
 	.generic_subclass = 1,
+	.supports_autosuspend = 1,
 };
 
 static int __init mfi_fc_driver_init(void)
