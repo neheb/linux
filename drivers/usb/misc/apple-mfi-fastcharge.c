@@ -77,9 +77,9 @@ static int apple_mfi_fc_set_charge_type(struct mfi_device *mfi,
 				 request_type,
 				 current_ma, /* wValue, current offset */
 				 current_ma, /* wIndex, current offset */
-				 NULL, 0, USB_CTRL_GET_TIMEOUT);
-	if (retval) {
-		dev_dbg(&mfi->udev->dev, "retval = %d\n", retval);
+				 NULL, 0, USB_CTRL_SET_TIMEOUT);
+	if (retval < 0) {
+		dev_err(&mfi->udev->dev, "Failed to set charge type: %d\n", retval);
 		return retval;
 	}
 
