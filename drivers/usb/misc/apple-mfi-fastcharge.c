@@ -43,9 +43,8 @@ MODULE_DEVICE_TABLE(usb, mfi_fc_id_table);
 /* Driver-local specific stuff */
 struct mfi_device {
 	struct usb_device *udev;
-	struct power_supply *battery;
-	struct power_supply_desc battery_desc;
 	int charge_type;
+	struct power_supply_desc battery_desc;
 };
 
 static int apple_mfi_fc_set_charge_type(struct mfi_device *mfi,
@@ -155,16 +154,6 @@ static enum power_supply_property apple_mfi_fc_properties[] = {
 	POWER_SUPPLY_PROP_SCOPE
 };
 
-static const struct power_supply_desc apple_mfi_fc_desc = {
-	.name                   = "apple_mfi_fastcharge",
-	.type                   = POWER_SUPPLY_TYPE_BATTERY,
-	.properties             = apple_mfi_fc_properties,
-	.num_properties         = ARRAY_SIZE(apple_mfi_fc_properties),
-	.get_property           = apple_mfi_fc_get_property,
-	.set_property           = apple_mfi_fc_set_property,
-	.property_is_writeable  = apple_mfi_fc_property_is_writeable
-};
-
 static bool mfi_fc_match(struct usb_device *udev)
 {
 	int idProduct;
@@ -177,67 +166,42 @@ static bool mfi_fc_match(struct usb_device *udev)
 static int mfi_fc_probe(struct usb_device *udev)
 {
 	struct power_supply_config battery_cfg = {};
-	struct mfi_device *mfi = NULL;
-	char *battery_name;
-	int err;
+	struct power_supply_desc *battery_desc;
+	struct power_supply *battery;
+	struct mfi_device *mfi;
 
-	if (!mfi_fc_match(udev))
-		return -ENODEV;
-
-	mfi = kzalloc_obj(struct mfi_device);
+	mfi = devm_kzalloc(&udev->dev, sizeof(*mfi), GFP_KERNEL);
 	if (!mfi)
 		return -ENOMEM;
 
-	battery_name = kasprintf(GFP_KERNEL, "apple_mfi_fastcharge_%d-%d",
-				 udev->bus->busnum, udev->devnum);
-	if (!battery_name) {
-		err = -ENOMEM;
-		goto err_free_mfi;
-	}
+	battery_desc = &mfi->battery_desc;
+	battery_desc->name = devm_kasprintf(&udev->dev, GFP_KERNEL, "apple_mfi_fastcharge_%d-%d",
+					    udev->bus->busnum, udev->devnum);
+	if (!battery_desc->name)
+		return -ENOMEM;
 
-	mfi->battery_desc = apple_mfi_fc_desc;
-	mfi->battery_desc.name = battery_name;
+	battery_desc->type = POWER_SUPPLY_TYPE_BATTERY;
+	battery_desc->properties = apple_mfi_fc_properties;
+	battery_desc->num_properties = ARRAY_SIZE(apple_mfi_fc_properties);
+	battery_desc->get_property = apple_mfi_fc_get_property;
+	battery_desc->set_property = apple_mfi_fc_set_property;
+	battery_desc->property_is_writeable = apple_mfi_fc_property_is_writeable;
 
 	battery_cfg.drv_data = mfi;
 
 	mfi->charge_type = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
-	mfi->battery = power_supply_register(&udev->dev,
-						&mfi->battery_desc,
-						&battery_cfg);
-	if (IS_ERR(mfi->battery)) {
-		dev_err(&udev->dev, "Can't register battery\n");
-		err = PTR_ERR(mfi->battery);
-		goto err_free_name;
-	}
-
 	mfi->udev = udev;
-	dev_set_drvdata(&udev->dev, mfi);
+
+	battery = devm_power_supply_register(&udev->dev, battery_desc, &battery_cfg);
+	if (IS_ERR(battery))
+		return PTR_ERR(battery);
 
 	return 0;
-
-err_free_name:
-	kfree(battery_name);
-err_free_mfi:
-	kfree(mfi);
-	return err;
-}
-
-static void mfi_fc_disconnect(struct usb_device *udev)
-{
-	struct mfi_device *mfi;
-
-	mfi = dev_get_drvdata(&udev->dev);
-	if (mfi->battery)
-		power_supply_unregister(mfi->battery);
-	kfree(mfi->battery_desc.name);
-	dev_set_drvdata(&udev->dev, NULL);
-	kfree(mfi);
 }
 
 static struct usb_device_driver mfi_fc_driver = {
 	.name =		"apple-mfi-fastcharge",
 	.probe =	mfi_fc_probe,
-	.disconnect =	mfi_fc_disconnect,
 	.id_table =	mfi_fc_id_table,
 	.match =	mfi_fc_match,
 	.generic_subclass = 1,
