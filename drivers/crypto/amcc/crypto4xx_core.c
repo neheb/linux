@@ -949,14 +949,16 @@ static int crypto4xx_register_alg(struct crypto4xx_device *sec_dev,
 				  struct crypto4xx_alg_common *crypto_alg,
 				  int array_size)
 {
-	struct crypto4xx_alg *alg;
+	struct crypto4xx_alg *alg, *tmp;
 	int i;
 	int rc = 0;
 
 	for (i = 0; i < array_size; i++) {
 		alg = kzalloc_obj(struct crypto4xx_alg);
-		if (!alg)
-			return -ENOMEM;
+		if (!alg) {
+			rc = -ENOMEM;
+			goto err;
+		}
 
 		alg->alg = crypto_alg[i];
 		alg->dev = sec_dev;
@@ -971,13 +973,31 @@ static int crypto4xx_register_alg(struct crypto4xx_device *sec_dev,
 			break;
 		}
 
-		if (rc)
+		if (rc) {
 			kfree(alg);
-		else
-			list_add_tail(&alg->entry, &sec_dev->alg_list);
+			goto err;
+		}
+
+		list_add_tail(&alg->entry, &sec_dev->alg_list);
 	}
 
 	return 0;
+
+err:
+	list_for_each_entry_safe(alg, tmp, &sec_dev->alg_list, entry) {
+		list_del(&alg->entry);
+		switch (alg->alg.type) {
+		case CRYPTO_ALG_TYPE_AEAD:
+			crypto_unregister_aead(&alg->alg.u.aead);
+			break;
+
+		default:
+			crypto_unregister_skcipher(&alg->alg.u.cipher);
+		}
+		kfree(alg);
+	}
+
+	return rc;
 }
 
 static void crypto4xx_unregister_alg(struct crypto4xx_device *sec_dev)
@@ -1307,6 +1327,7 @@ static int crypto4xx_probe(struct platform_device *ofdev)
 err_crypto:
 	crypto4xx_unregister_alg(core_dev->dev);
 err_irq:
+	crypto4xx_unregister_alg(&core_dev->dev);
 	free_irq(core_dev->irq, core_dev);
 err_tasklet:
 	tasklet_kill(&core_dev->tasklet);
