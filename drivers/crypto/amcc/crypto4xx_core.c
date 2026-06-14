@@ -889,11 +889,23 @@ int crypto4xx_build_pd(struct crypto_async_request *req,
 		}
 	}
 
+	pd->pd_ctl_len.w = 0x00400000 | (assoclen + datalen);
+	pd_uinfo->state = PD_ENTRY_INUSE | (is_busy ? PD_ENTRY_BUSY : 0);
+
+	/* The engine's DMA scans the descriptor ring in coherent memory, so
+	 * it can observe PD_CTL_HOST_READY and fetch this descriptor as soon
+	 * as the store below is globally visible, without waiting for the
+	 * INT_DESCR_RD doorbell writes after the wmb() below.  Make the
+	 * descriptor and SA writes above (including pd_ctl_len and
+	 * pd_uinfo->state) visible to the device before the ownership
+	 * handover; dma_wmb() orders them as observed by the device, while
+	 * the wmb() before the doorbell only orders the HOST_READY store
+	 * against the MMIO writes, so it cannot replace this dma_wmb().
+	 */
+	dma_wmb();
 	pd->pd_ctl.w = PD_CTL_HOST_READY |
 		((crypto_tfm_alg_type(req->tfm) == CRYPTO_ALG_TYPE_AEAD) ?
 			PD_CTL_HASH_FINAL : 0);
-	pd->pd_ctl_len.w = 0x00400000 | (assoclen + datalen);
-	pd_uinfo->state = PD_ENTRY_INUSE | (is_busy ? PD_ENTRY_BUSY : 0);
 
 	wmb();
 	/* write any value to push engine to read a pd */
@@ -1059,6 +1071,13 @@ static void crypto4xx_bh_tasklet_cb(unsigned long data)
 		     ((READ_ONCE(pd->pd_ctl.w) &
 		       (PD_CTL_PE_DONE | PD_CTL_HOST_READY)) ==
 		       PD_CTL_PE_DONE)) {
+			/* The engine writes the PE_DONE flag and the
+			 * descriptor/result fields into coherent memory; on a
+			 * weakly-ordered system the CPU could read that data
+			 * before the flag read above is visible, so order the
+			 * flag read before the data reads.
+			 */
+			dma_rmb();
 			crypto4xx_pd_done(core_dev->dev, tail);
 			tail = crypto4xx_put_pd_to_pdr(core_dev->dev, tail);
 		} else {
