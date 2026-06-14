@@ -651,6 +651,7 @@ int crypto4xx_build_pd(struct crypto_async_request *req,
 	struct dynamic_sa_ctl *sa;
 	struct ce_gd *gd;
 	struct ce_pd *pd;
+	dma_addr_t gd_dma;
 	u32 num_gd, num_sd;
 	u32 fst_gd = 0xffffffff;
 	u32 fst_sd = 0xffffffff;
@@ -660,7 +661,7 @@ int crypto4xx_build_pd(struct crypto_async_request *req,
 	unsigned int nbytes = datalen;
 	size_t offset_to_sr_ptr;
 	u32 gd_idx = 0;
-	int tmp;
+	int tmp, gd_mapped = 0;
 	bool is_busy, force_sd;
 
 	/*
@@ -786,9 +787,7 @@ int crypto4xx_build_pd(struct crypto_async_request *req,
 	*(u32 *)((unsigned long)sa + offset_to_sr_ptr) = pd_uinfo->sr_pa;
 
 	if (num_gd) {
-		dma_addr_t gd_dma;
 		struct scatterlist *sg;
-
 		/* get first gd we are going to use */
 		gd_idx = fst_gd;
 		pd_uinfo->first_gd = fst_gd;
@@ -805,9 +804,13 @@ int crypto4xx_build_pd(struct crypto_async_request *req,
 			len = min(sg->length, nbytes);
 			gd->ptr = dma_map_page(dev->core_dev->device,
 				sg_page(sg), sg->offset, len, DMA_TO_DEVICE);
+			if (dma_mapping_error(dev->core_dev->device,
+					      gd->ptr))
+				goto err_unmap;
 			gd->ctl_len.len = len;
 			gd->ctl_len.done = 0;
 			gd->ctl_len.ready = 1;
+			gd_mapped++;
 			if (len >= nbytes)
 				break;
 
@@ -817,9 +820,14 @@ int crypto4xx_build_pd(struct crypto_async_request *req,
 			sg = sg_next(sg);
 		}
 	} else {
-		pd->src = (u32)dma_map_page(dev->core_dev->device, sg_page(src),
-				src->offset, min(nbytes, src->length),
-				DMA_TO_DEVICE);
+		dma_addr_t src_dma;
+
+		src_dma = dma_map_page(dev->core_dev->device, sg_page(src),
+				       src->offset, min(nbytes, src->length),
+				       DMA_TO_DEVICE);
+		if (dma_mapping_error(dev->core_dev->device, src_dma))
+			return -ENOMEM;
+		pd->src = (u32)src_dma;
 		/*
 		 * Disable gather in sa command
 		 */
@@ -830,16 +838,21 @@ int crypto4xx_build_pd(struct crypto_async_request *req,
 		pd_uinfo->first_gd = 0xffffffff;
 	}
 	if (!num_sd) {
+		dma_addr_t dest_dma;
+
+		dest_dma = dma_map_page(dev->core_dev->device,
+					sg_page(dst), dst->offset,
+					min(datalen, dst->length),
+					DMA_TO_DEVICE);
+		if (dma_mapping_error(dev->core_dev->device, dest_dma))
+			goto err_unmap;
+		pd->dest = (u32)dest_dma;
 		/*
 		 * we know application give us dst a whole piece of memory
 		 * no need to use scatter ring.
 		 */
 		pd_uinfo->first_sd = 0xffffffff;
 		sa->sa_command_0.bf.scatter = 0;
-		pd->dest = (u32)dma_map_page(dev->core_dev->device,
-					     sg_page(dst), dst->offset,
-					     min(datalen, dst->length),
-					     DMA_TO_DEVICE);
 	} else {
 		dma_addr_t sd_dma;
 		struct ce_sd *sd = NULL;
@@ -887,6 +900,21 @@ int crypto4xx_build_pd(struct crypto_async_request *req,
 	writel(0, dev->ce_base + CRYPTO4XX_INT_DESCR_RD);
 	writel(1, dev->ce_base + CRYPTO4XX_INT_DESCR_RD);
 	return is_busy ? -EBUSY : -EINPROGRESS;
+
+err_unmap:
+	if (num_gd) {
+		gd_idx = fst_gd;
+		while (gd_mapped--) {
+			gd = crypto4xx_get_gdp(dev, &gd_dma, gd_idx);
+			dma_unmap_page(dev->core_dev->device, gd->ptr,
+				       gd->ctl_len.len, DMA_TO_DEVICE);
+			gd_idx = get_next_gd(gd_idx);
+		}
+	} else {
+		dma_unmap_page(dev->core_dev->device, (dma_addr_t)pd->src,
+			       min(datalen, src->length), DMA_TO_DEVICE);
+	}
+	return -ENOMEM;
 }
 
 /*
