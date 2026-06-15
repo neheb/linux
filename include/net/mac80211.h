@@ -826,7 +826,7 @@ struct ieee80211_bss_conf {
 	u32 sync_device_ts;
 	u8 sync_dtim_count;
 	u32 basic_rates;
-	struct ieee80211_rate *beacon_rate;
+	const struct ieee80211_rate *beacon_rate;
 	int mcast_rate[NUM_NL80211_BANDS];
 	u16 ht_operation_mode;
 	s32 cqm_rssi_thold;
@@ -1627,7 +1627,7 @@ ieee80211_tx_info_clear_status(struct ieee80211_tx_info *info)
  * @RX_FLAG_AMPDU_EOF_BIT_KNOWN: The EOF value is known
  * @RX_FLAG_RADIOTAP_HE: HE radiotap data is present
  *	(&struct ieee80211_radiotap_he, mac80211 will fill in
- *	
+ *
  *	 - DATA3_DATA_MCS
  *	 - DATA3_DATA_DCM
  *	 - DATA3_CODING
@@ -1635,7 +1635,7 @@ ieee80211_tx_info_clear_status(struct ieee80211_tx_info *info)
  *	 - DATA5_DATA_BW_RU_ALLOC
  *	 - DATA6_NSTS
  *	 - DATA3_STBC
- *	
+ *
  *	from the RX info data, so leave those zeroed when building this data)
  * @RX_FLAG_RADIOTAP_HE_MU: HE MU radiotap data is present
  *	(&struct ieee80211_radiotap_he_mu)
@@ -3405,7 +3405,7 @@ static inline void SET_IEEE80211_PERM_ADDR(struct ieee80211_hw *hw, const u8 *ad
 	memcpy(hw->wiphy->perm_addr, addr, ETH_ALEN);
 }
 
-static inline struct ieee80211_rate *
+static inline const struct ieee80211_rate *
 ieee80211_get_tx_rate(const struct ieee80211_hw *hw,
 		      const struct ieee80211_tx_info *c)
 {
@@ -3418,7 +3418,7 @@ ieee80211_get_tx_rate(const struct ieee80211_hw *hw,
 	return &hw->wiphy->bands[c->band]->bitrates[c->control.rates[0].idx];
 }
 
-static inline struct ieee80211_rate *
+static inline const struct ieee80211_rate *
 ieee80211_get_rts_cts_rate(const struct ieee80211_hw *hw,
 			   const struct ieee80211_tx_info *c)
 {
@@ -3427,7 +3427,7 @@ ieee80211_get_rts_cts_rate(const struct ieee80211_hw *hw,
 	return &hw->wiphy->bands[c->band]->bitrates[c->control.rts_cts_rate_idx];
 }
 
-static inline struct ieee80211_rate *
+static inline const struct ieee80211_rate *
 ieee80211_get_alt_retry_rate(const struct ieee80211_hw *hw,
 			     const struct ieee80211_tx_info *c, int idx)
 {
@@ -6129,7 +6129,7 @@ __le16 ieee80211_generic_frame_duration(struct ieee80211_hw *hw,
 					struct ieee80211_vif *vif,
 					enum nl80211_band band,
 					size_t frame_len,
-					struct ieee80211_rate *rate);
+					const struct ieee80211_rate *rate);
 
 /**
  * ieee80211_get_buffered_bc - accessing buffered broadcast and multicast frames

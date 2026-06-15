@@ -289,7 +289,7 @@ static void rtl8187_tx(struct ieee80211_hw *dev,
 		u16 fc = le16_to_cpu(tx_hdr->frame_control);
 
 		struct rtl8187b_tx_hdr *hdr = skb_push(skb, sizeof(*hdr));
-		struct ieee80211_rate *txrate =
+		const struct ieee80211_rate *txrate =
 			ieee80211_get_tx_rate(dev, info);
 		memset(hdr, 0, sizeof(*hdr));
 		hdr->flags = cpu_to_le32(flags);

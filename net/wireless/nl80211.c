@@ -2233,7 +2233,7 @@ static int nl80211_send_band_rateinfo(struct sk_buff *msg,
 				      bool large)
 {
 	struct nlattr *nl_rates, *nl_rate;
-	struct ieee80211_rate *rate;
+	const struct ieee80211_rate *rate;
 	int i;
 
 	/* add HT info */
@@ -5802,7 +5802,7 @@ static u32 rateset_to_mask(struct ieee80211_supported_band *sband,
 		int ridx;
 
 		for (ridx = 0; ridx < sband->n_bitrates; ridx++) {
-			struct ieee80211_rate *srate =
+			const struct ieee80211_rate *srate =
 				&sband->bitrates[ridx];
 			if (rate == srate->bitrate) {
 				mask |= 1 << ridx;

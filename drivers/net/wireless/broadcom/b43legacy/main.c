@@ -1018,7 +1018,7 @@ static void b43legacy_write_beacon_template(struct b43legacy_wldev *dev,
 
 static void b43legacy_write_probe_resp_plcp(struct b43legacy_wldev *dev,
 					    u16 shm_offset, u16 size,
-					    struct ieee80211_rate *rate)
+					    const struct ieee80211_rate *rate)
 {
 	struct b43legacy_plcp_hdr4 plcp;
 	u32 tmp;
@@ -1049,7 +1049,7 @@ static void b43legacy_write_probe_resp_plcp(struct b43legacy_wldev *dev,
  */
 static const u8 *b43legacy_generate_probe_resp(struct b43legacy_wldev *dev,
 					       u16 *dest_size,
-					       struct ieee80211_rate *rate)
+					       const struct ieee80211_rate *rate)
 {
 	const u8 *src_data;
 	u8 *dest_data;
@@ -1105,7 +1105,7 @@ static const u8 *b43legacy_generate_probe_resp(struct b43legacy_wldev *dev,
 static void b43legacy_write_probe_resp_template(struct b43legacy_wldev *dev,
 						u16 ram_offset,
 						u16 shm_size_offset,
-						struct ieee80211_rate *rate)
+						const struct ieee80211_rate *rate)
 {
 	const u8 *probe_resp_data;
 	u16 size;

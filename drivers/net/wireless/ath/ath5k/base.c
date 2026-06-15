@@ -693,7 +693,7 @@ static enum ath5k_pkt_type get_hw_packet_type(struct sk_buff *skb)
 	return htype;
 }
 
-static struct ieee80211_rate *
+static const struct ieee80211_rate *
 ath5k_get_rate(const struct ieee80211_hw *hw,
 	       const struct ieee80211_tx_info *info,
 	       struct ath5k_buf *bf, int idx)
@@ -714,7 +714,7 @@ ath5k_get_rate_hw_value(const struct ieee80211_hw *hw,
 			const struct ieee80211_tx_info *info,
 			struct ath5k_buf *bf, int idx)
 {
-	struct ieee80211_rate *rate;
+	const struct ieee80211_rate *rate;
 	u16 hw_rate;
 	u8 rc_flags;
 
@@ -775,7 +775,7 @@ ath5k_txbuf_setup(struct ath5k_hw *ah, struct ath5k_buf *bf,
 	struct sk_buff *skb = bf->skb;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	unsigned int pktlen, flags, keyidx = AR5K_TXKEYIX_INVALID;
-	struct ieee80211_rate *rate;
+	const struct ieee80211_rate *rate;
 	struct ieee80211_sta *sta;
 	unsigned int mrr_rate[3], mrr_tries[3];
 	int i, ret;

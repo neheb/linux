@@ -1865,7 +1865,7 @@ minstrel_ht_fill_rate_array(u8 *dest, struct ieee80211_supported_band *sband,
 	int i, j;
 
 	for (i = 0; i < sband->n_bitrates; i++) {
-		struct ieee80211_rate *rate = &sband->bitrates[i];
+		const struct ieee80211_rate *rate = &sband->bitrates[i];
 
 		for (j = 0; j < n_rates; j++) {
 			if (rate->bitrate != bitrates[j])

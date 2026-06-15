@@ -121,7 +121,7 @@ struct ieee80211_bss {
 #define IEEE80211_MAX_SUPP_RATES 32
 	u8 supp_rates[IEEE80211_MAX_SUPP_RATES];
 	size_t supp_rates_len;
-	struct ieee80211_rate *beacon_rate;
+	const struct ieee80211_rate *beacon_rate;
 
 	u32 vht_cap_info;
 

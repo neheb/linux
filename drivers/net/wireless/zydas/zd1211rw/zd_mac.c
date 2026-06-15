@@ -856,7 +856,7 @@ static int fill_ctrlset(struct zd_mac *mac,
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *) skb->data;
 	unsigned int frag_len = skb->len + FCS_LEN;
 	unsigned int packet_length;
-	struct ieee80211_rate *txrate;
+	const struct ieee80211_rate *txrate;
 	struct zd_ctrlset *cs = skb_push(skb, sizeof(struct zd_ctrlset));
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 

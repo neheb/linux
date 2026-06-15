@@ -290,7 +290,7 @@ static void ieee80211_handle_mu_mimo_mon(struct ieee80211_sub_if_data *sdata,
 static void
 ieee80211_add_rx_radiotap_header(struct ieee80211_local *local,
 				 struct sk_buff *skb,
-				 struct ieee80211_rate *rate,
+				 const struct ieee80211_rate *rate,
 				 int rtap_len, bool has_fcs)
 {
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
@@ -721,7 +721,7 @@ ieee80211_add_rx_radiotap_header(struct ieee80211_local *local,
 static struct sk_buff *
 ieee80211_make_monitor_skb(struct ieee80211_local *local,
 			   struct sk_buff **origskb,
-			   struct ieee80211_rate *rate,
+			   const struct ieee80211_rate *rate,
 			   int rtap_space, bool use_origskb)
 {
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(*origskb);
@@ -824,7 +824,7 @@ ieee80211_validate_monitor_radio(struct ieee80211_sub_if_data *sdata,
  */
 static struct sk_buff *
 ieee80211_rx_monitor(struct ieee80211_local *local, struct sk_buff *origskb,
-		     struct ieee80211_rate *rate)
+		     const struct ieee80211_rate *rate)
 {
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(origskb);
 	struct ieee80211_sub_if_data *sdata, *prev_sdata = NULL;
@@ -5596,7 +5596,7 @@ void ieee80211_rx_list(struct ieee80211_hw *hw,
 		       struct sk_buff *skb, struct list_head *list)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
-	struct ieee80211_rate *rate = NULL;
+	const struct ieee80211_rate *rate = NULL;
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;

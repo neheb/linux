@@ -938,7 +938,7 @@ static void ieee80211_get_rates(struct ieee80211_supported_band *sband,
 		}
 
 		for (j = 0; j < sband->n_bitrates; j++) {
-			struct ieee80211_rate *br;
+			const struct ieee80211_rate *br;
 			int brate;
 
 			br = &sband->bitrates[j];

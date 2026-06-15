@@ -112,7 +112,7 @@ static const unsigned int ack_rates_high[] =
  */
 int
 ath5k_hw_get_frame_duration(struct ath5k_hw *ah, enum nl80211_band band,
-		int len, struct ieee80211_rate *rate, bool shortpre)
+		int len, const struct ieee80211_rate *rate, bool shortpre)
 {
 	int sifs, preamble, plcp_bits, sym_time;
 	int bitrate, bits, symbols, symbol_bits;
@@ -277,7 +277,7 @@ ath5k_hw_update_mib_counters(struct ath5k_hw *ah)
 static inline void
 ath5k_hw_write_rate_duration(struct ath5k_hw *ah)
 {
-	struct ieee80211_rate *rate;
+	const struct ieee80211_rate *rate;
 	unsigned int i;
 	/* 802.11g covers both OFDM and CCK */
 	u8 band = NL80211_BAND_2GHZ;

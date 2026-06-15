@@ -641,7 +641,7 @@ static void rate_fixup_ratelist(struct ieee80211_vif *vif,
 				struct ieee80211_tx_rate *rates,
 				int max_rates)
 {
-	struct ieee80211_rate *rate;
+	const struct ieee80211_rate *rate;
 	bool inval = false;
 	int i;
 

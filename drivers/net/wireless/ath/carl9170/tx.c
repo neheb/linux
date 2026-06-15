@@ -707,7 +707,7 @@ static void carl9170_tx_rate_tpc_chains(struct ar9170 *ar,
 	struct ieee80211_tx_info *info,	struct ieee80211_tx_rate *txrate,
 	unsigned int *phyrate, unsigned int *tpc, unsigned int *chains)
 {
-	struct ieee80211_rate *rate = NULL;
+	const struct ieee80211_rate *rate = NULL;
 	u8 *txpower;
 	unsigned int idx;
 

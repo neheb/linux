@@ -135,7 +135,7 @@ static int wl1251_tx_fill_hdr(struct wl1251 *wl, struct sk_buff *skb,
 			      struct ieee80211_tx_info *control)
 {
 	struct tx_double_buffer_desc *tx_hdr;
-	struct ieee80211_rate *rate;
+	const struct ieee80211_rate *rate;
 	int id;
 	u16 fc;
 

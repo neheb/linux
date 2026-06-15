@@ -1213,7 +1213,7 @@ static int cfg80211_wext_siwrate(struct net_device *dev,
 		if (sband == NULL)
 			continue;
 		for (ridx = 0; ridx < sband->n_bitrates; ridx++) {
-			struct ieee80211_rate *srate = &sband->bitrates[ridx];
+			const struct ieee80211_rate *srate = &sband->bitrates[ridx];
 			if (fixed == srate->bitrate) {
 				mask.control[band].legacy = 1 << ridx;
 				match = true;
@@ -1233,7 +1233,7 @@ static int cfg80211_wext_siwrate(struct net_device *dev,
 
 	if (dev->ieee80211_ptr->valid_links)
 		return -EOPNOTSUPP;
-	
+
 	return rdev_set_bitrate_mask(rdev, dev, 0, NULL, &mask);
 }
 

@@ -1194,7 +1194,7 @@ static u8 _rtl_get_tx_hw_rate(struct ieee80211_hw *hw,
 {
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
 	struct ieee80211_tx_rate *r = &info->status.rates[0];
-	struct ieee80211_rate *txrate;
+	const struct ieee80211_rate *txrate;
 	u8 hw_value = 0x0;
 
 	if (r->flags & IEEE80211_TX_RC_MCS) {
