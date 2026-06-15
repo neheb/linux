@@ -559,7 +559,7 @@ int ath5k_hw_set_ifs_intervals(struct ath5k_hw *ah, unsigned int slot_time)
 	struct ieee80211_channel *channel = ah->ah_current_channel;
 	enum nl80211_band band;
 	struct ieee80211_supported_band *sband;
-	struct ieee80211_rate *rate;
+	const struct ieee80211_rate *rate;
 	u32 ack_tx_time, eifs, eifs_clock, sifs, sifs_clock;
 	u32 slot_time_clock = ath5k_hw_htoclock(ah, slot_time);
 	u32 rate_flags, i;

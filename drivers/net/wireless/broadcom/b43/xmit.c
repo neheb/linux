@@ -246,7 +246,7 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 	    (const struct ieee80211_hdr *)fragment_data;
 	int use_encryption = !!info->control.hw_key;
 	__le16 fctl = wlhdr->frame_control;
-	struct ieee80211_rate *fbrate;
+	const struct ieee80211_rate *fbrate;
 	u8 rate, rate_fb;
 	int rate_ofdm, rate_fb_ofdm;
 	unsigned int plcp_fragment_len;
@@ -256,7 +256,7 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 			      phy->type == B43_PHYTYPE_N ||
 			      phy->type == B43_PHYTYPE_HT);
 	u8 extra_ft = 0;
-	struct ieee80211_rate *txrate;
+	const struct ieee80211_rate *txrate;
 	struct ieee80211_tx_rate *rates;
 
 	memset(txhdr, 0, sizeof(*txhdr));
@@ -426,7 +426,7 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 		int rts_rate, rts_rate_fb;
 		int rts_rate_ofdm, rts_rate_fb_ofdm;
 		struct b43_plcp_hdr6 *plcp;
-		struct ieee80211_rate *rts_cts_rate;
+		const struct ieee80211_rate *rts_cts_rate;
 
 		rts_cts_rate = ieee80211_get_rts_cts_rate(dev->wl->hw, info);
 

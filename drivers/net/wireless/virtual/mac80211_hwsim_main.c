@@ -1325,7 +1325,7 @@ static void mac80211_hwsim_set_tsf(struct ieee80211_hw *hw,
 	}
 }
 
-static struct ieee80211_rate *
+static const struct ieee80211_rate *
 mac80211_hwsim_get_tx_rate(struct ieee80211_hw *hw,
 			   struct ieee80211_tx_info *info)
 {
@@ -1345,7 +1345,7 @@ static void mac80211_hwsim_monitor_rx(struct ieee80211_hw *hw,
 	struct hwsim_radiotap_hdr *hdr;
 	u16 flags, bitrate;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(tx_skb);
-	struct ieee80211_rate *txrate = mac80211_hwsim_get_tx_rate(hw, info);
+	const struct ieee80211_rate *txrate = mac80211_hwsim_get_tx_rate(hw, info);
 
 	if (!txrate)
 		bitrate = 0;
@@ -1608,7 +1608,7 @@ static void mac80211_hwsim_write_tsf(struct mac80211_hwsim_data *data,
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_mgmt *mgmt = (struct ieee80211_mgmt *)skb->data;
-	struct ieee80211_rate *txrate;
+	const struct ieee80211_rate *txrate;
 	/* TODO: get MCS */
 	int bitrate = 100;
 

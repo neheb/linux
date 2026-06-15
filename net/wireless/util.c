@@ -28,7 +28,7 @@ const struct ieee80211_rate *
 ieee80211_get_response_rate(struct ieee80211_supported_band *sband,
 			    u32 basic_rates, int bitrate)
 {
-	struct ieee80211_rate *result = &sband->bitrates[0];
+	const struct ieee80211_rate *result = &sband->bitrates[0];
 	int i;
 
 	for (i = 0; i < sband->n_bitrates; i++) {
@@ -45,7 +45,7 @@ EXPORT_SYMBOL(ieee80211_get_response_rate);
 
 u32 ieee80211_mandatory_rates(struct ieee80211_supported_band *sband)
 {
-	struct ieee80211_rate *bitrates;
+	const struct ieee80211_rate *bitrates;
 	u32 mandatory_rates = 0;
 	enum ieee80211_rate_flags mandatory_flag;
 	int i;

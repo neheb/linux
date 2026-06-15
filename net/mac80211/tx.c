@@ -45,7 +45,7 @@ static __le16 ieee80211_duration(struct ieee80211_tx_data *tx,
 				 int next_frag_len)
 {
 	int rate, mrate, erp, dur, i;
-	struct ieee80211_rate *txrate;
+	const struct ieee80211_rate *txrate;
 	struct ieee80211_local *local = tx->local;
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_hdr *hdr;
@@ -128,7 +128,7 @@ static __le16 ieee80211_duration(struct ieee80211_tx_data *tx,
 	/* use lowest available if everything fails */
 	mrate = sband->bitrates[0].bitrate;
 	for (i = 0; i < sband->n_bitrates; i++) {
-		struct ieee80211_rate *r = &sband->bitrates[i];
+		const struct ieee80211_rate *r = &sband->bitrates[i];
 		u32 flag;
 
 		if (r->bitrate > txrate->bitrate)

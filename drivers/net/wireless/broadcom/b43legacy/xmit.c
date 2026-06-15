@@ -181,13 +181,13 @@ static int generate_txhdr_fw3(struct b43legacy_wldev *dev,
 	const struct ieee80211_hdr *wlhdr;
 	int use_encryption = !!info->control.hw_key;
 	u8 rate;
-	struct ieee80211_rate *rate_fb;
+	const struct ieee80211_rate *rate_fb;
 	int rate_ofdm;
 	int rate_fb_ofdm;
 	unsigned int plcp_fragment_len;
 	u32 mac_ctl = 0;
 	u16 phy_ctl = 0;
-	struct ieee80211_rate *tx_rate;
+	const struct ieee80211_rate *tx_rate;
 	struct ieee80211_tx_rate *rates;
 
 	wlhdr = (const struct ieee80211_hdr *)fragment_data;

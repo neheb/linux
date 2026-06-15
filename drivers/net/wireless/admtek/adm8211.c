@@ -1678,7 +1678,7 @@ static void adm8211_tx(struct ieee80211_hw *dev,
 	int plcp, dur, len, plcp_signal, short_preamble;
 	struct ieee80211_hdr *hdr;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
-	struct ieee80211_rate *txrate = ieee80211_get_tx_rate(dev, info);
+	const struct ieee80211_rate *txrate = ieee80211_get_tx_rate(dev, info);
 	u8 rc_flags;
 
 	rc_flags = info->control.rates[0].flags;

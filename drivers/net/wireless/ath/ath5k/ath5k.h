@@ -1532,7 +1532,7 @@ int ath5k_eeprom_mode_from_channel(struct ath5k_hw *ah,
 /* Protocol Control Unit Functions */
 /* Helpers */
 int ath5k_hw_get_frame_duration(struct ath5k_hw *ah, enum nl80211_band band,
-		int len, struct ieee80211_rate *rate, bool shortpre);
+		int len, const struct ieee80211_rate *rate, bool shortpre);
 unsigned int ath5k_hw_get_default_slottime(struct ath5k_hw *ah);
 unsigned int ath5k_hw_get_default_sifs(struct ath5k_hw *ah);
 int ath5k_hw_set_opmode(struct ath5k_hw *ah, enum nl80211_iftype opmode);

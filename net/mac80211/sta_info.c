@@ -774,7 +774,7 @@ __sta_info_alloc(struct ieee80211_sub_if_data *sdata,
 		}
 
 		for (r = 0; r < hw->wiphy->bands[i]->n_bitrates; r++) {
-			struct ieee80211_rate *rate;
+			const struct ieee80211_rate *rate;
 
 			rate = &hw->wiphy->bands[i]->bitrates[r];
 

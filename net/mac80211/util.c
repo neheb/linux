@@ -178,7 +178,7 @@ __le16 ieee80211_generic_frame_duration(struct ieee80211_hw *hw,
 					struct ieee80211_vif *vif,
 					enum nl80211_band band,
 					size_t frame_len,
-					struct ieee80211_rate *rate)
+					const struct ieee80211_rate *rate)
 {
 	struct ieee80211_sub_if_data *sdata;
 	u16 dur;
@@ -205,7 +205,7 @@ __le16 ieee80211_rts_duration(struct ieee80211_hw *hw,
 			      const struct ieee80211_tx_info *frame_txctl)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
-	struct ieee80211_rate *rate;
+	const struct ieee80211_rate *rate;
 	struct ieee80211_sub_if_data *sdata;
 	bool short_preamble;
 	int erp, bitrate;
@@ -248,7 +248,7 @@ __le16 ieee80211_ctstoself_duration(struct ieee80211_hw *hw,
 				    const struct ieee80211_tx_info *frame_txctl)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
-	struct ieee80211_rate *rate;
+	const struct ieee80211_rate *rate;
 	struct ieee80211_sub_if_data *sdata;
 	bool short_preamble;
 	int erp, bitrate;
