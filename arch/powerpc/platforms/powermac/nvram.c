@@ -558,7 +558,7 @@ int __init pmac_nvram_init(void)
 {
 	struct device_node *dp;
 	struct resource r1, r2;
-	unsigned int s1 = 0, s2 = 0;
+	unsigned int __maybe_unused s1, s2;
 	int err = 0;
 
 	nvram_naddrs = 0;
