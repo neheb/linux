@@ -87,11 +87,11 @@
 #endif
 
 #ifdef _FP_DECL_EX
-#define FP_DECL_EX					\
-  int _fex = 0;						\
+#define FP_DECL_EX						\
+  int __attribute__((__unused__)) _fex = 0;			\
   _FP_DECL_EX
 #else
-#define FP_DECL_EX int _fex = 0
+#define FP_DECL_EX int __attribute__((__unused__)) _fex = 0
 #endif
   
 #ifndef FP_INIT_ROUNDMODE
