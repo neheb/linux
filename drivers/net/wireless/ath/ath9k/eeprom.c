@@ -241,11 +241,24 @@ void ath9k_hw_fill_vpd_table(u8 pwrMin, u8 pwrMax, u8 *pPwrList,
 			     u8 *pVpdList, u16 numIntercepts,
 			     u8 *pRetVpdList)
 {
-	u16 i, k;
+	u16 i, k, maxIndex;
+	u16 range;
 	u8 currPwr = pwrMin;
 	u16 idxL = 0, idxR = 0;
 
-	for (i = 0; i <= (pwrMax - pwrMin) / 2; i++) {
+	if (pwrMax < pwrMin) {
+		pr_warn_ratelimited("ath9k: VPD table pwrMax (%u) < pwrMin (%u)\n", pwrMax, pwrMin);
+		memset(pRetVpdList, 0, AR5416_MAX_PWR_RANGE_IN_HALF_DB);
+		return;
+	}
+
+	range = (pwrMax - pwrMin) / 2;
+	maxIndex = min_t(u16, range, AR5416_MAX_PWR_RANGE_IN_HALF_DB - 1);
+	if (range >= AR5416_MAX_PWR_RANGE_IN_HALF_DB)
+		pr_warn_ratelimited("ath9k: VPD table range %u exceeds maximum, clamped to %u\n",
+				    range, maxIndex);
+
+	for (i = 0; i <= maxIndex; i++) {
 		ath9k_hw_get_lower_upper_index(currPwr, pPwrList,
 					       numIntercepts, &(idxL),
 					       &(idxR));
@@ -460,12 +473,8 @@ void ath9k_hw_get_gain_boundaries_pdadcs(struct ath_hw *ah,
 	int i, j, k;
 	int16_t ss;
 	u16 idxL = 0, idxR = 0, numPiers;
-	static u8 vpdTableL[AR5416_NUM_PD_GAINS]
-		[AR5416_MAX_PWR_RANGE_IN_HALF_DB];
-	static u8 vpdTableR[AR5416_NUM_PD_GAINS]
-		[AR5416_MAX_PWR_RANGE_IN_HALF_DB];
-	static u8 vpdTableI[AR5416_NUM_PD_GAINS]
-		[AR5416_MAX_PWR_RANGE_IN_HALF_DB];
+	u8 vpdTableL[AR5416_NUM_PD_GAINS][AR5416_MAX_PWR_RANGE_IN_HALF_DB];
+	u8 vpdTableR[AR5416_NUM_PD_GAINS][AR5416_MAX_PWR_RANGE_IN_HALF_DB];
 
 	u8 *pVpdL, *pVpdR, *pPwrL, *pPwrR;
 	u8 minPwrT4[AR5416_NUM_PD_GAINS];
@@ -473,6 +482,8 @@ void ath9k_hw_get_gain_boundaries_pdadcs(struct ath_hw *ah,
 	int16_t vpdStep;
 	int16_t tmpVal;
 	u16 sizeCurrVpdTable, maxIndex, tgtIndex;
+	u16 vpdRange, vpdFillMax;
+	u16 vpdFillMaxArr[AR5416_NUM_PD_GAINS];
 	bool match;
 	int16_t minDelta = 0;
 	struct chan_centers centers;
@@ -506,30 +517,27 @@ void ath9k_hw_get_gain_boundaries_pdadcs(struct ath_hw *ah,
 				minPwrT4[i] = data_9287[idxL].pwrPdg[i][0];
 				maxPwrT4[i] = data_9287[idxL].pwrPdg[i][intercepts - 1];
 				ath9k_hw_fill_vpd_table(minPwrT4[i], maxPwrT4[i],
-						data_9287[idxL].pwrPdg[i],
-						data_9287[idxL].vpdPdg[i],
-						intercepts,
-						vpdTableI[i]);
+							data_9287[idxL].pwrPdg[i],
+							data_9287[idxL].vpdPdg[i], intercepts,
+							vpdTableL[i]);
 			}
 		} else if (eeprom_4k) {
 			for (i = 0; i < numXpdGains; i++) {
 				minPwrT4[i] = data_4k[idxL].pwrPdg[i][0];
 				maxPwrT4[i] = data_4k[idxL].pwrPdg[i][intercepts - 1];
 				ath9k_hw_fill_vpd_table(minPwrT4[i], maxPwrT4[i],
-						data_4k[idxL].pwrPdg[i],
-						data_4k[idxL].vpdPdg[i],
-						intercepts,
-						vpdTableI[i]);
+							data_4k[idxL].pwrPdg[i],
+							data_4k[idxL].vpdPdg[i], intercepts,
+							vpdTableL[i]);
 			}
 		} else {
 			for (i = 0; i < numXpdGains; i++) {
 				minPwrT4[i] = data_def[idxL].pwrPdg[i][0];
 				maxPwrT4[i] = data_def[idxL].pwrPdg[i][intercepts - 1];
 				ath9k_hw_fill_vpd_table(minPwrT4[i], maxPwrT4[i],
-						data_def[idxL].pwrPdg[i],
-						data_def[idxL].vpdPdg[i],
-						intercepts,
-						vpdTableI[i]);
+							data_def[idxL].pwrPdg[i],
+							data_def[idxL].vpdPdg[i], intercepts,
+							vpdTableL[i]);
 			}
 		}
 	} else {
@@ -567,17 +575,35 @@ void ath9k_hw_get_gain_boundaries_pdadcs(struct ath_hw *ah,
 						intercepts,
 						vpdTableR[i]);
 
-			for (j = 0; j <= (maxPwrT4[i] - minPwrT4[i]) / 2; j++) {
-				vpdTableI[i][j] =
-					(u8)(ath9k_hw_interpolate((u16)
-					     FREQ2FBIN(centers.
-						       synth_center,
-						       IS_CHAN_2GHZ
-						       (chan)),
-					     bChans[idxL], bChans[idxR],
-					     vpdTableL[i][j], vpdTableR[i][j]));
+			vpdRange = (maxPwrT4[i] >= minPwrT4[i]) ? (maxPwrT4[i] - minPwrT4[i]) / 2 :
+								  0;
+			vpdFillMax = min_t(u16, vpdRange, AR5416_MAX_PWR_RANGE_IN_HALF_DB - 1);
+			/*
+			 * vpdTableL doubles as the interpolated output in-place.
+			 * ath9k_hw_interpolate() receives vpdTableL[i][j] by
+			 * value (left-pier data) before the return overwrites
+			 * vpdTableL[i][j], and each column j is read only once
+			 * per iteration — safe as long as vpdTableR remains a
+			 * separate buffer.
+			 */
+			for (j = 0; j <= vpdFillMax; j++) {
+				vpdTableL[i][j] = (u8)(ath9k_hw_interpolate(
+					(u16)FREQ2FBIN(centers.synth_center, IS_CHAN_2GHZ(chan)),
+					bChans[idxL], bChans[idxR], vpdTableL[i][j],
+					vpdTableR[i][j]));
 			}
 		}
+	}
+
+	/*
+	 * Compute safe VPD table index limit for each gain row.
+	 * This mirrors the vpdFillMax computation in the else-branch
+	 * interpolation above — both clamp the same derived value.
+	 */
+	for (i = 0; i < numXpdGains; i++) {
+		vpdFillMaxArr[i] = min_t(
+			u16, (maxPwrT4[i] >= minPwrT4[i]) ? (maxPwrT4[i] - minPwrT4[i]) / 2 : 0,
+			AR5416_MAX_PWR_RANGE_IN_HALF_DB - 1);
 	}
 
 	k = 0;
@@ -605,33 +631,39 @@ void ath9k_hw_get_gain_boundaries_pdadcs(struct ath_hw *ah,
 					(minPwrT4[i] / 2)) -
 				       tPdGainOverlap + 1 + minDelta);
 		}
-		vpdStep = (int16_t)(vpdTableI[i][1] - vpdTableI[i][0]);
+		sizeCurrVpdTable = vpdFillMaxArr[i] + 1;
+
+		if (sizeCurrVpdTable >= 2)
+			vpdStep = (int16_t)(vpdTableL[i][1] - vpdTableL[i][0]);
+		else
+			vpdStep = 1; /* no entries to diff; avoids zero-step extrapolation */
 		vpdStep = (int16_t)((vpdStep < 1) ? 1 : vpdStep);
 
 		while ((ss < 0) && (k < (AR5416_NUM_PDADC_VALUES - 1))) {
-			tmpVal = (int16_t)(vpdTableI[i][0] + ss * vpdStep);
+			tmpVal = (int16_t)(vpdTableL[i][0] + ss * vpdStep);
 			pPDADCValues[k++] = (u8)((tmpVal < 0) ? 0 : tmpVal);
 			ss++;
 		}
-
-		sizeCurrVpdTable = (u8) ((maxPwrT4[i] - minPwrT4[i]) / 2 + 1);
 		tgtIndex = (u8)(pPdGainBoundaries[i] + tPdGainOverlap -
 				(minPwrT4[i] / 2));
 		maxIndex = (tgtIndex < sizeCurrVpdTable) ?
 			tgtIndex : sizeCurrVpdTable;
 
 		while ((ss < maxIndex) && (k < (AR5416_NUM_PDADC_VALUES - 1))) {
-			pPDADCValues[k++] = vpdTableI[i][ss++];
+			pPDADCValues[k++] = vpdTableL[i][ss++];
 		}
 
-		vpdStep = (int16_t)(vpdTableI[i][sizeCurrVpdTable - 1] -
-				    vpdTableI[i][sizeCurrVpdTable - 2]);
+		if (sizeCurrVpdTable >= 2)
+			vpdStep = (int16_t)(vpdTableL[i][sizeCurrVpdTable - 1] -
+					    vpdTableL[i][sizeCurrVpdTable - 2]);
+		else
+			vpdStep = 1; /* no entries to diff; avoids zero-step extrapolation */
 		vpdStep = (int16_t)((vpdStep < 1) ? 1 : vpdStep);
 
 		if (tgtIndex >= maxIndex) {
 			while ((ss <= tgtIndex) &&
 			       (k < (AR5416_NUM_PDADC_VALUES - 1))) {
-				tmpVal = (int16_t)((vpdTableI[i][sizeCurrVpdTable - 1] +
+				tmpVal = (int16_t)((vpdTableL[i][sizeCurrVpdTable - 1] +
 						    (ss - maxIndex + 1) * vpdStep));
 				pPDADCValues[k++] = (u8)((tmpVal > 255) ?
 							 255 : tmpVal);
@@ -642,14 +674,21 @@ void ath9k_hw_get_gain_boundaries_pdadcs(struct ath_hw *ah,
 
 	if (eeprom_4k)
 		pdgain_boundary_default = 58;
-	else
+	else if (i > 0)
 		pdgain_boundary_default = pPdGainBoundaries[i - 1];
+	else
+		pdgain_boundary_default = MAX_RATE_POWER;
 
 	while (i < AR5416_PD_GAINS_IN_MASK) {
 		pPdGainBoundaries[i] = pdgain_boundary_default;
 		i++;
 	}
 
+	/* Ensure the table contains at least one valid element. */
+	if (k == 0) {
+		WARN_ONCE(1, "ath9k: no PDADC values produced for gain boundaries\n");
+		pPDADCValues[k++] = 0;
+	}
 	while (k < AR5416_NUM_PDADC_VALUES) {
 		pPDADCValues[k] = pPDADCValues[k - 1];
 		k++;
