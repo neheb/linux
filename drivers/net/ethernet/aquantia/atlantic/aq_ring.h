@@ -47,7 +47,7 @@ struct __packed aq_ring_buff_s {
 			u32 rss_hash;
 			u16 next;
 			u8 is_hash_l4;
-			u8 rsvd1;
+			u8 rsc_cnt;
 			struct aq_rxpage rxdata;
 			u16 vlan_rx_tag;
 		};
@@ -89,7 +89,7 @@ struct __packed aq_ring_buff_s {
 			u32 clk_sel:1;
 			u32 rsvd3:1;
 			u16 eop_index;
-			u16 rsvd4;
+			u16 hdr_len;
 		};
 		u64 flags;
 	};

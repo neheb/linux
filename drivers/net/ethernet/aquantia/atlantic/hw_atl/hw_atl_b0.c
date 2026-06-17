@@ -983,6 +983,12 @@ int hw_atl_b0_hw_ring_rx_receive(struct aq_hw_s *self, struct aq_ring_s *ring)
 
 		buff->is_lro = !!(HW_ATL_B0_RXD_WB_STAT2_RSCCNT &
 				  rxd_wb->status);
+		if (buff->is_lro) {
+			buff->rsc_cnt = (u8)((rxd_wb->status &
+					     HW_ATL_B0_RXD_WB_STAT2_RSCCNT) >> 12);
+			buff->hdr_len = (u16)((rxd_wb->type & HW_ATL_B0_RXD_WB_STAT_HDRLEN) >>
+					      HW_ATL_B0_RXD_WB_STAT_HDRLEN_SHIFT);
+		}
 		if (HW_ATL_B0_RXD_WB_STAT2_EOP & rxd_wb->status) {
 			buff->len = rxd_wb->pkt_len %
 				ring->frame_max;

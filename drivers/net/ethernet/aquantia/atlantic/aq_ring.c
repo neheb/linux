@@ -413,6 +413,20 @@ static void aq_rx_checksum(struct aq_ring_s *self,
 		__skb_incr_checksum_unnecessary(skb);
 }
 
+static void aq_ring_set_lro_gso_size(struct sk_buff *skb,
+				     struct aq_ring_buff_s *buff)
+{
+	unsigned int payload;
+
+	if (!buff->is_lro || buff->rsc_cnt <= 1)
+		return;
+
+	payload = skb->len + ETH_HLEN - buff->hdr_len;
+	skb_shinfo(skb)->gso_size = payload / buff->rsc_cnt;
+	skb_shinfo(skb)->gso_type = (skb->protocol == htons(ETH_P_IPV6))
+				    ? SKB_GSO_TCPV6 : SKB_GSO_TCPV4;
+}
+
 int aq_xdp_xmit(struct net_device *dev, int num_frames,
 		struct xdp_frame **frames, u32 flags)
 {
@@ -741,6 +755,8 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 						: AQ_NIC_RING2QMAP(self->aq_nic,
 								   self->idx));
 
+		aq_ring_set_lro_gso_size(skb, buff);
+
 		u64_stats_update_begin(&self->stats.rx.syncp);
 		++self->stats.rx.packets;
 		self->stats.rx.bytes += skb->len;
@@ -883,6 +899,8 @@ static int __aq_ring_xdp_clean(struct aq_ring_s *rx_ring,
 				    is_ptp_ring ? 0
 						: AQ_NIC_RING2QMAP(rx_ring->aq_nic,
 								   rx_ring->idx));
+
+		aq_ring_set_lro_gso_size(skb, buff);
 
 		napi_gro_receive(napi, skb);
 	}
