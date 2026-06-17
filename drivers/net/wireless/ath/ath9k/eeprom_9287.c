@@ -366,6 +366,15 @@ static void ath9k_hw_set_ar9287_power_cal_table(struct ath_hw *ah,
 	int16_t diff = 0;
 	struct ar9287_eeprom *pEepData = &ah->eeprom.map9287;
 
+	/*
+	 * pdadcValues must be zeroed here: under EEP_OL_PWRCTRL the
+	 * ath9k_hw_get_gain_boundaries_pdadcs() init path is skipped and
+	 * only the unconditional diff-offset shift below runs, which would
+	 * otherwise operate on indeterminate stack data.  eeprom_def.c
+	 * does not need this because both branches of its OLC/!OLC fork
+	 * fully populate the array.
+	 */
+	memset(pdadcValues, 0, sizeof(pdadcValues));
 	xpdMask = pEepData->modalHeader.xpdGain;
 
 	if (ath9k_hw_ar9287_get_eeprom_rev(ah) >= AR9287_EEP_MINOR_VER_2)
@@ -463,13 +472,23 @@ static void ath9k_hw_set_ar9287_power_cal_table(struct ath_hw *ah,
 					     (int32_t)AR9287_PWR_TABLE_OFFSET_DB);
 				diff *= 2;
 
-				for (j = 0; j < ((u16)AR5416_NUM_PDADC_VALUES-diff); j++)
-					pdadcValues[j] = pdadcValues[j+diff];
+				/* diff is safe: the bounds check above ensures
+				 * it is in [0, AR5416_NUM_PDADC_VALUES), so the
+				 * subtraction AR5416_NUM_PDADC_VALUES - diff
+				 * cannot underflow.
+				 */
+				if (diff >= 0 && diff < AR5416_NUM_PDADC_VALUES) {
+					for (j = 0; j < ((u16)AR5416_NUM_PDADC_VALUES - diff); j++)
+						pdadcValues[j] = pdadcValues[j + diff];
 
-				for (j = (u16)(AR5416_NUM_PDADC_VALUES-diff);
-				     j < AR5416_NUM_PDADC_VALUES; j++)
-					pdadcValues[j] =
-					  pdadcValues[AR5416_NUM_PDADC_VALUES-diff];
+					for (j = (u16)(AR5416_NUM_PDADC_VALUES - diff);
+					     j < AR5416_NUM_PDADC_VALUES; j++)
+						pdadcValues[j] =
+							pdadcValues[AR5416_NUM_PDADC_VALUES - diff - 1];
+				} else {
+					ath_warn(ath9k_hw_common(ah),
+						 "ignoring invalid PDADC offset %d\n", diff);
+				}
 			}
 
 			if (!ath9k_hw_ar9287_get_eeprom(ah, EEP_OL_PWRCTRL)) {
