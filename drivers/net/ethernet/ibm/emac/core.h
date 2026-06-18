@@ -159,7 +159,6 @@ struct emac_instance {
 	struct net_device		*ndev;
 	struct emac_regs		__iomem *emacp;
 	struct platform_device		*ofdev;
-	struct device_node		**blist; /* bootlist entry */
 
 	/* MAL linkage */
 	u32				mal_ph;
