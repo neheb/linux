@@ -116,7 +116,7 @@ static inline void emac_report_timeout_error(struct emac_instance *dev,
 				  EMAC_FTR_440EP_PHY_CLK_FIX))
 		DBG(dev, "%s" NL, error);
 	else if (net_ratelimit())
-		printk(KERN_ERR "%pOF: %s\n", dev->ofdev->dev.of_node, error);
+		dev_err(&dev->ofdev->dev, "%s\n", error);
 }
 
 /* EMAC PHY clock workaround:
@@ -465,8 +465,7 @@ static u32 __emac_calc_base_mr1(struct emac_instance *dev, int tx_size, int rx_s
 		ret |= EMAC_MR1_TFS_2K;
 		break;
 	default:
-		printk(KERN_WARNING "%s: Unknown Tx FIFO size %d\n",
-		       dev->ndev->name, tx_size);
+		netdev_warn(dev->ndev, "Unknown Tx FIFO size %d\n", tx_size);
 	}
 
 	switch(rx_size) {
@@ -477,8 +476,7 @@ static u32 __emac_calc_base_mr1(struct emac_instance *dev, int tx_size, int rx_s
 		ret |= EMAC_MR1_RFS_4K;
 		break;
 	default:
-		printk(KERN_WARNING "%s: Unknown Rx FIFO size %d\n",
-		       dev->ndev->name, rx_size);
+		netdev_warn(dev->ndev, "Unknown Rx FIFO size %d\n", rx_size);
 	}
 
 	return ret;
@@ -505,8 +503,7 @@ static u32 __emac4_calc_base_mr1(struct emac_instance *dev, int tx_size, int rx_
 		ret |= EMAC4_MR1_TFS_2K;
 		break;
 	default:
-		printk(KERN_WARNING "%s: Unknown Tx FIFO size %d\n",
-		       dev->ndev->name, tx_size);
+		netdev_warn(dev->ndev, "Unknown Tx FIFO size %d\n", tx_size);
 	}
 
 	switch(rx_size) {
@@ -523,8 +520,7 @@ static u32 __emac4_calc_base_mr1(struct emac_instance *dev, int tx_size, int rx_
 		ret |= EMAC4_MR1_RFS_2K;
 		break;
 	default:
-		printk(KERN_WARNING "%s: Unknown Rx FIFO size %d\n",
-		       dev->ndev->name, rx_size);
+		netdev_warn(dev->ndev, "Unknown Rx FIFO size %d\n", rx_size);
 	}
 
 	return ret;
@@ -1232,13 +1228,13 @@ emac_alloc_rx_skb_napi(struct emac_instance *dev, int slot)
 static void emac_print_link_status(struct emac_instance *dev)
 {
 	if (netif_carrier_ok(dev->ndev))
-		printk(KERN_INFO "%s: link is up, %d %s%s\n",
-		       dev->ndev->name, dev->phy.speed,
-		       dev->phy.duplex == DUPLEX_FULL ? "FDX" : "HDX",
-		       dev->phy.pause ? ", pause enabled" :
-		       dev->phy.asym_pause ? ", asymmetric pause enabled" : "");
+		netdev_info(dev->ndev, "link is up, %d %s%s\n",
+			    dev->phy.speed,
+			    dev->phy.duplex == DUPLEX_FULL ? "FDX" : "HDX",
+			    dev->phy.pause ? ", pause enabled" :
+			    dev->phy.asym_pause ? ", asymmetric pause enabled" : "");
 	else
-		printk(KERN_INFO "%s: link is down\n", dev->ndev->name);
+		netdev_info(dev->ndev, "link is down\n");
 }
 
 /* Process ctx, rtnl_lock semaphore */
@@ -1252,8 +1248,7 @@ static int emac_open(struct net_device *ndev)
 	/* Allocate RX ring */
 	for (i = 0; i < NUM_RX_BUFF; ++i)
 		if (emac_alloc_rx_skb(dev, i)) {
-			printk(KERN_ERR "%s: failed to allocate RX ring\n",
-			       ndev->name);
+			netdev_err(ndev, "failed to allocate RX ring\n");
 			goto oom;
 		}
 
@@ -2822,7 +2817,7 @@ static int emac_init_phy(struct emac_instance *dev)
 		dcri_clrset(SDR0, SDR0_MFR, SDR0_MFR_ECS, 0);
 	mutex_unlock(&emac_phy_map_lock);
 	if (i == 0x20) {
-		printk(KERN_WARNING "%pOF: can't find PHY!\n", np);
+		dev_warn(&dev->ofdev->dev, "can't find PHY\n");
 		return -ENXIO;
 	}
 
@@ -2948,8 +2943,8 @@ static int emac_init_config(struct emac_instance *dev)
 #ifdef CONFIG_IBM_EMAC_NO_FLOW_CTRL
 			dev->features |= EMAC_FTR_NO_FLOW_CONTROL_40x;
 #else
-			printk(KERN_ERR "%pOF: Flow control not disabled!\n",
-					np);
+			dev_err(&dev->ofdev->dev,
+				"Flow control not disabled\n");
 			return -ENXIO;
 #endif
 		}
@@ -2972,7 +2967,7 @@ static int emac_init_config(struct emac_instance *dev)
 #ifdef CONFIG_IBM_EMAC_TAH
 		dev->features |= EMAC_FTR_HAS_TAH;
 #else
-		printk(KERN_ERR "%pOF: TAH support not enabled !\n", np);
+		dev_err(&dev->ofdev->dev, "TAH support not enabled\n");
 		return -ENXIO;
 #endif
 	}
@@ -2981,7 +2976,7 @@ static int emac_init_config(struct emac_instance *dev)
 #ifdef CONFIG_IBM_EMAC_ZMII
 		dev->features |= EMAC_FTR_HAS_ZMII;
 #else
-		printk(KERN_ERR "%pOF: ZMII support not enabled !\n", np);
+		dev_err(&dev->ofdev->dev, "ZMII support not enabled\n");
 		return -ENXIO;
 #endif
 	}
@@ -2990,7 +2985,7 @@ static int emac_init_config(struct emac_instance *dev)
 #ifdef CONFIG_IBM_EMAC_RGMII
 		dev->features |= EMAC_FTR_HAS_RGMII;
 #else
-		printk(KERN_ERR "%pOF: RGMII support not enabled !\n", np);
+		dev_err(&dev->ofdev->dev, "RGMII support not enabled\n");
 		return -ENXIO;
 #endif
 	}
@@ -3133,8 +3128,9 @@ static int emac_probe(struct platform_device *ofdev)
 	dev->commac.rx_chan_mask = MAL_CHAN_MASK(dev->mal_rx_chan);
 	err = mal_register_commac(dev->mal, &dev->commac);
 	if (err) {
-		printk(KERN_ERR "%pOF: failed to register with mal %pOF!\n",
-		       np, dev->mal_dev->dev.of_node);
+		dev_err(&dev->ofdev->dev,
+			"failed to register with mal %pOF\n",
+			dev->mal_dev->dev.of_node);
 		goto err_rel_deps;
 	}
 	dev->rx_skb_size = emac_rx_skb_size(ndev->mtu);
@@ -3210,8 +3206,8 @@ static int emac_probe(struct platform_device *ofdev)
 
 	err = register_netdev(ndev);
 	if (err) {
-		printk(KERN_ERR "%pOF: failed to register net device (%d)!\n",
-		       np, err);
+		dev_err(&dev->ofdev->dev, "failed to register net device (%d)\n",
+			err);
 		goto err_detach_tah;
 	}
 
@@ -3221,15 +3217,15 @@ static int emac_probe(struct platform_device *ofdev)
 	smp_wmb();
 	platform_set_drvdata(ofdev, dev);
 
-	printk(KERN_INFO "%s: EMAC-%d %pOF, MAC %pM\n",
-	       ndev->name, dev->cell_index, np, ndev->dev_addr);
+	netdev_info(ndev, "EMAC-%d %pOF, MAC %pM\n",
+		    dev->cell_index, np, ndev->dev_addr);
 
 	if (dev->phy_mode == PHY_INTERFACE_MODE_SGMII)
-		printk(KERN_NOTICE "%s: in SGMII mode\n", ndev->name);
+		netdev_notice(ndev, "in SGMII mode\n");
 
 	if (dev->phy.address >= 0)
-		printk("%s: found %s PHY (0x%02x)\n", ndev->name,
-		       dev->phy.def->name, dev->phy.address);
+		netdev_info(ndev, "found %s PHY (0x%02x)\n",
+			    dev->phy.def->name, dev->phy.address);
 
 	/* Life is good */
 	return 0;
@@ -3314,7 +3310,7 @@ static int __init emac_init(void)
 {
 	int rc;
 
-	printk(KERN_INFO DRV_DESC ", version " DRV_VERSION "\n");
+	pr_info(DRV_DESC ", version " DRV_VERSION "\n");
 
 	/* Init submodules */
 	rc = mal_init();
