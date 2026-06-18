@@ -1980,6 +1980,20 @@ static void emac_rxde(void *param)
 	emac_rx_disable_async(dev);
 }
 
+/* WOL IRQ handler */
+static irqreturn_t emac_wol_irq(int irq, void *dev_instance)
+{
+	struct emac_instance *dev = dev_instance;
+	struct emac_regs __iomem *p = dev->emacp;
+
+	/* Clear interrupt status */
+	out_be32(&p->isr, in_be32(&p->isr));
+
+	pm_wakeup_event(&dev->ofdev->dev, 0);
+
+	return IRQ_HANDLED;
+}
+
 /* Hard IRQ */
 static irqreturn_t emac_irq(int irq, void *dev_instance)
 {
@@ -2354,6 +2368,41 @@ static void emac_ethtool_get_drvinfo(struct net_device *ndev,
 		 dev->cell_index, dev->ofdev->dev.of_node);
 }
 
+static void emac_ethtool_get_wol(struct net_device *ndev,
+				 struct ethtool_wolinfo *wol)
+{
+	struct emac_instance *dev = netdev_priv(ndev);
+	struct emac_regs __iomem *p = dev->emacp;
+
+	wol->supported = WAKE_MAGIC;
+	wol->wolopts = 0;
+
+	if (in_be32(&p->mr0) & EMAC_MR0_WKE)
+		wol->wolopts |= WAKE_MAGIC;
+}
+
+static int emac_ethtool_set_wol(struct net_device *ndev,
+				struct ethtool_wolinfo *wol)
+{
+	struct emac_instance *dev = netdev_priv(ndev);
+	struct emac_regs __iomem *p = dev->emacp;
+	u32 mr0;
+
+	if (wol->wolopts & ~WAKE_MAGIC)
+		return -EOPNOTSUPP;
+
+	mr0 = in_be32(&p->mr0);
+	if (wol->wolopts & WAKE_MAGIC)
+		mr0 |= EMAC_MR0_WKE;
+	else
+		mr0 &= ~EMAC_MR0_WKE;
+	out_be32(&p->mr0, mr0);
+
+	device_set_wakeup_enable(&dev->ofdev->dev, wol->wolopts & WAKE_MAGIC);
+
+	return 0;
+}
+
 static const struct ethtool_ops emac_ethtool_ops = {
 	.get_drvinfo = emac_ethtool_get_drvinfo,
 
@@ -2368,6 +2417,9 @@ static const struct ethtool_ops emac_ethtool_ops = {
 	.get_strings = emac_ethtool_get_strings,
 	.get_sset_count = emac_ethtool_get_sset_count,
 	.get_ethtool_stats = emac_ethtool_get_ethtool_stats,
+
+	.get_wol = emac_ethtool_get_wol,
+	.set_wol = emac_ethtool_set_wol,
 
 	.get_link = ethtool_op_get_link,
 	.get_link_ksettings = emac_ethtool_get_link_ksettings,
@@ -3117,6 +3169,24 @@ static int emac_probe(struct platform_device *ofdev)
 
 	ndev->irq = dev->emac_irq;
 
+	/* Setup WOL IRQ */
+	dev->wol_irq = platform_get_irq(ofdev, 1);
+	if (dev->wol_irq < 0) {
+		err = dev->wol_irq;
+		goto err_gone;
+	}
+
+	err = devm_request_irq(&ofdev->dev, dev->wol_irq,
+			       emac_wol_irq, 0, "EMAC WOL", dev);
+	if (err) {
+		dev_err_probe(&ofdev->dev, err,
+			      "failed to request WOL IRQ %d",
+			      dev->wol_irq);
+		goto err_gone;
+	}
+
+	device_init_wakeup(&ofdev->dev, true);
+
 	/* Wait for dependent devices */
 	err = emac_wait_deps(dev);
 	if (err)
@@ -3263,6 +3333,16 @@ static int emac_suspend(struct device *dev)
 
 	netif_device_detach(ndev);
 	mal_poll_disable(priv->mal, &priv->commac);
+
+	if (device_may_wakeup(dev) && priv->wol_irq > 0) {
+		struct emac_regs __iomem *p = priv->emacp;
+
+		/* Enable wake-on-LAN in hardware */
+		out_be32(&p->mr0, in_be32(&p->mr0) | EMAC_MR0_WKE);
+
+		enable_irq_wake(priv->wol_irq);
+	}
+
 	return 0;
 }
 
@@ -3273,6 +3353,15 @@ static int emac_resume(struct device *dev)
 
 	if (!netif_running(ndev))
 		return 0;
+
+	if (device_may_wakeup(dev) && priv->wol_irq > 0) {
+		struct emac_regs __iomem *p = priv->emacp;
+
+		disable_irq_wake(priv->wol_irq);
+
+		/* Disable wake-on-LAN in hardware */
+		out_be32(&p->mr0, in_be32(&p->mr0) & ~EMAC_MR0_WKE);
+	}
 
 	mal_poll_enable(priv->mal, &priv->commac);
 	netif_device_attach(ndev);
