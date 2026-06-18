@@ -55,7 +55,7 @@ void tah_reset(struct platform_device *ofdev)
 		--n;
 
 	if (unlikely(!n))
-		printk(KERN_ERR "%pOF: reset timeout\n", ofdev->dev.of_node);
+		dev_err(&ofdev->dev, "reset timeout\n");
 
 	/* 10KB TAH TX FIFO accommodates the max MTU of 9000 */
 	out_be32(&p->mr,
@@ -101,17 +101,15 @@ static int tah_probe(struct platform_device *ofdev)
 	dev->ofdev = ofdev;
 
 	dev->base = devm_platform_ioremap_resource(ofdev, 0);
-	if (IS_ERR(dev->base)) {
-		dev_err(&ofdev->dev, "can't map device registers");
+	if (IS_ERR(dev->base))
 		return PTR_ERR(dev->base);
-	}
 
 	platform_set_drvdata(ofdev, dev);
 
 	/* Initialize TAH and enable IPv4 checksum verification, no TSO yet */
 	tah_reset(ofdev);
 
-	printk(KERN_INFO "TAH %pOF initialized\n", ofdev->dev.of_node);
+	dev_info(&ofdev->dev, "initialized\n");
 	smp_wmb();
 
 	return 0;

@@ -118,15 +118,14 @@ int zmii_attach(struct platform_device *ofdev, int input,
 		} else {
 			dev->mode = *mode;
 		}
-		printk(KERN_NOTICE "%pOF: bridge in %s mode\n",
-		       ofdev->dev.of_node,
-		       zmii_mode_name(dev->mode));
+		dev_notice(&ofdev->dev, "bridge in %s mode\n",
+			   zmii_mode_name(dev->mode));
 	} else {
 		/* All inputs must use the same mode */
 		if (*mode != PHY_INTERFACE_MODE_NA && *mode != dev->mode) {
-			printk(KERN_ERR
-			       "%pOF: invalid mode %d specified for input %d\n",
-			       ofdev->dev.of_node, *mode, input);
+			dev_err(&ofdev->dev,
+				"invalid mode %d specified for input %d\n",
+				*mode, input);
 			mutex_unlock(&dev->lock);
 			return -EINVAL;
 		}
@@ -247,10 +246,8 @@ static int zmii_probe(struct platform_device *ofdev)
 	dev->mode = PHY_INTERFACE_MODE_NA;
 
 	dev->base = devm_platform_ioremap_resource(ofdev, 0);
-	if (IS_ERR(dev->base)) {
-		dev_err(&ofdev->dev, "can't map device registers");
+	if (IS_ERR(dev->base))
 		return PTR_ERR(dev->base);
-	}
 
 	/* We may need FER value for autodetection later */
 	dev->fer_save = in_be32(&dev->base->fer);
@@ -258,7 +255,7 @@ static int zmii_probe(struct platform_device *ofdev)
 	/* Disable all inputs by default */
 	out_be32(&dev->base->fer, 0);
 
-	printk(KERN_INFO "ZMII %pOF initialized\n", ofdev->dev.of_node);
+	dev_info(&ofdev->dev, "ZMII initialized\n");
 	smp_wmb();
 	platform_set_drvdata(ofdev, dev);
 

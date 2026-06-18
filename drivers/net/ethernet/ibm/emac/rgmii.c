@@ -86,8 +86,7 @@ int rgmii_attach(struct platform_device *ofdev, int input, int mode)
 
 	/* Check if we need to attach to a RGMII */
 	if (input < 0 || !rgmii_valid_mode(mode)) {
-		printk(KERN_ERR "%pOF: unsupported settings !\n",
-		       ofdev->dev.of_node);
+		dev_err(&ofdev->dev, "unsupported settings\n");
 		return -ENODEV;
 	}
 
@@ -96,8 +95,8 @@ int rgmii_attach(struct platform_device *ofdev, int input, int mode)
 	/* Enable this input */
 	out_be32(&p->fer, in_be32(&p->fer) | rgmii_mode_mask(mode, input));
 
-	printk(KERN_NOTICE "%pOF: input %d in %s mode\n",
-	       ofdev->dev.of_node, input, phy_modes(mode));
+	dev_notice(&ofdev->dev, "input %d in %s mode\n",
+		   input, phy_modes(mode));
 
 	++dev->users;
 
@@ -231,10 +230,8 @@ static int rgmii_probe(struct platform_device *ofdev)
 	dev->ofdev = ofdev;
 
 	dev->base = devm_platform_ioremap_resource(ofdev, 0);
-	if (IS_ERR(dev->base)) {
-		dev_err(&ofdev->dev, "can't map device registers");
+	if (IS_ERR(dev->base))
 		return PTR_ERR(dev->base);
-	}
 
 	/* Check for RGMII flags */
 	if (of_property_read_bool(ofdev->dev.of_node, "has-mdio"))
@@ -250,10 +247,8 @@ static int rgmii_probe(struct platform_device *ofdev)
 	/* Disable all inputs by default */
 	out_be32(&dev->base->fer, 0);
 
-	printk(KERN_INFO
-	       "RGMII %pOF initialized with%s MDIO support\n",
-	       ofdev->dev.of_node,
-	       (dev->flags & EMAC_RGMII_FLAG_HAS_MDIO) ? "" : "out");
+	dev_info(&ofdev->dev, "initialized with%s MDIO support\n",
+		 (dev->flags & EMAC_RGMII_FLAG_HAS_MDIO) ? "" : "out");
 
 	smp_wmb();
 	platform_set_drvdata(ofdev, dev);

@@ -366,7 +366,7 @@ static struct mii_phy_def bcm5248_phy_def = {
 
 static int m88e1111_init(struct mii_phy *phy)
 {
-	pr_debug("%s: Marvell 88E1111 Ethernet\n", __func__);
+	dev_dbg(&phy->dev->dev, "Marvell 88E1111 Ethernet\n");
 	phy_write(phy, 0x14, 0x0ce3);
 	phy_write(phy, 0x18, 0x4101);
 	phy_write(phy, 0x09, 0x0e00);
@@ -387,7 +387,7 @@ static int m88e1112_init(struct mii_phy *phy)
 
 	u16 reg_short;
 
-	pr_debug("%s: Marvell 88E1112 Ethernet\n", __func__);
+	dev_dbg(&phy->dev->dev, "Marvell 88E1112 Ethernet\n");
 
 	/* Set access to Page 2 */
 	phy_write(phy, 0x16, 0x0002);

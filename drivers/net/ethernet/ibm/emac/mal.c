@@ -46,8 +46,7 @@ int mal_register_commac(struct mal_instance *mal, struct mal_commac *commac)
 	    (mal->rx_chan_mask & commac->rx_chan_mask)) {
 		spin_unlock_irqrestore(&mal->lock, flags);
 		netdev_unlock(mal->napi.dev);
-		printk(KERN_WARNING "mal%d: COMMAC channels conflict!\n",
-		       mal->index);
+		dev_warn(&mal->ofdev->dev, "COMMAC channels conflict\n");
 		return -EBUSY;
 	}
 
@@ -94,9 +93,9 @@ int mal_set_rcbs(struct mal_instance *mal, int channel, unsigned long size)
 	MAL_DBG(mal, "set_rbcs(%d, %lu)" NL, channel, size);
 
 	if (size & 0xf) {
-		printk(KERN_WARNING
-		       "mal%d: incorrect RX size %lu for the channel %d\n",
-		       mal->index, size, channel);
+		dev_warn(&mal->ofdev->dev,
+			 "incorrect RX size %lu for the channel %d\n",
+			 size, channel);
 		return -EINVAL;
 	}
 
@@ -252,10 +251,9 @@ static irqreturn_t mal_serr(int irq, void *dev_instance)
 			 * incorrect physical address in BD (i.e. bug)
 			 */
 			if (net_ratelimit())
-				printk(KERN_ERR
-				       "mal%d: system error, "
-				       "PLB (ESR = 0x%08x)\n",
-				       mal->index, esr);
+				dev_err(&mal->ofdev->dev,
+					"system error, PLB (ESR = 0x%08x)\n",
+					esr);
 			return IRQ_HANDLED;
 		}
 
@@ -263,9 +261,8 @@ static irqreturn_t mal_serr(int irq, void *dev_instance)
 		 * EBC setup
 		 */
 		if (net_ratelimit())
-			printk(KERN_ERR
-			       "mal%d: system error, OPB (ESR = 0x%08x)\n",
-			       mal->index, esr);
+			dev_err(&mal->ofdev->dev,
+				"system error, OPB (ESR = 0x%08x)\n", esr);
 	}
 	return IRQ_HANDLED;
 }
@@ -328,9 +325,8 @@ static irqreturn_t mal_txde(int irq, void *dev_instance)
 	MAL_DBG(mal, "txde %08x" NL, deir);
 
 	if (net_ratelimit())
-		printk(KERN_ERR
-		       "mal%d: TX descriptor error (TXDEIR = 0x%08x)\n",
-		       mal->index, deir);
+		dev_err(&mal->ofdev->dev,
+			"TX descriptor error (TXDEIR = 0x%08x)\n", deir);
 
 	return IRQ_HANDLED;
 }
@@ -478,7 +474,7 @@ static void mal_reset(struct mal_instance *mal)
 		--n;
 
 	if (unlikely(!n))
-		printk(KERN_ERR "mal%d: reset timeout\n", mal->index);
+		dev_err(&mal->ofdev->dev, "reset timeout\n");
 }
 
 int mal_get_regs_len(struct mal_instance *mal)
@@ -545,32 +541,26 @@ static int mal_probe(struct platform_device *ofdev)
 
 	err = of_property_read_u32(ofdev->dev.of_node, "num-tx-chans", &val);
 	if (err) {
-		printk(KERN_ERR
-		       "mal%d: can't find MAL num-tx-chans property!\n",
-		       index);
+		dev_err(&ofdev->dev, "can't find MAL num-tx-chans property\n");
 		return -ENODEV;
 	}
 	mal->num_tx_chans = val;
 
 	err = of_property_read_u32(ofdev->dev.of_node, "num-rx-chans", &val);
 	if (err) {
-		printk(KERN_ERR
-		       "mal%d: can't find MAL num-rx-chans property!\n",
-		       index);
+		dev_err(&ofdev->dev, "can't find MAL num-rx-chans property\n");
 		return -ENODEV;
 	}
 	mal->num_rx_chans = val;
 
 	dcr_base = dcr_resource_start(ofdev->dev.of_node, 0);
 	if (dcr_base == 0) {
-		printk(KERN_ERR
-		       "mal%d: can't find DCR resource!\n", index);
+		dev_err(&ofdev->dev, "can't find DCR resource\n");
 		return -ENODEV;
 	}
 	mal->dcr_host = dcr_map(ofdev->dev.of_node, dcr_base, 0x100);
 	if (!DCR_MAP_OK(mal->dcr_host)) {
-		printk(KERN_ERR
-		       "mal%d: failed to map DCRs !\n", index);
+		dev_err(&ofdev->dev, "failed to map DCRs\n");
 		return -ENODEV;
 	}
 
@@ -580,8 +570,7 @@ static int mal_probe(struct platform_device *ofdev)
 		mal->features |= (MAL_FTR_CLEAR_ICINTSTAT |
 				MAL_FTR_COMMON_ERR_INT);
 #else
-		printk(KERN_ERR "%pOF: Support for 405EZ not enabled!\n",
-				ofdev->dev.of_node);
+		dev_err(&ofdev->dev, "Support for 405EZ not enabled\n");
 		err = -ENODEV;
 		goto fail_unmap;
 #endif
@@ -693,10 +682,8 @@ static int mal_probe(struct platform_device *ofdev)
 	/* Enable EOB interrupt */
 	mal_enable_eob_irq(mal);
 
-	printk(KERN_INFO
-	       "MAL v%d %pOF, %d TX channels, %d RX channels\n",
-	       mal->version, ofdev->dev.of_node,
-	       mal->num_tx_chans, mal->num_rx_chans);
+	dev_info(&ofdev->dev, "MAL v%d, %d TX channels, %d RX channels\n",
+		 mal->version, mal->num_tx_chans, mal->num_rx_chans);
 
 	/* Advertise this instance to the rest of the world */
 	smp_wmb();
@@ -729,9 +716,8 @@ static void mal_remove(struct platform_device *ofdev)
 	if (!list_empty(&mal->list)) {
 		napi_disable(&mal->napi);
 		/* This is *very* bad */
-		WARN(1, KERN_EMERG
-		       "mal%d: commac list is not empty on remove!\n",
-		       mal->index);
+		WARN(1, "%s: commac list is not empty on remove!\n",
+		     dev_name(&mal->ofdev->dev));
 	}
 
 	mal_reset(mal);

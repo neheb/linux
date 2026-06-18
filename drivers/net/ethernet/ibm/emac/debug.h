@@ -26,7 +26,7 @@
 #endif
 
 #define EMAC_DBG(d, name, fmt, arg...) \
-	printk(KERN_DEBUG #name "%pOF: " fmt, d->ofdev->dev.of_node, ## arg)
+	dev_dbg(&d->ofdev->dev, fmt, ## arg)
 
 #if DBG_LEVEL > 0
 #  define DBG(d,f,x...)		EMAC_DBG(d, emac, f, ##x)
