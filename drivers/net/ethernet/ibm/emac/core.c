@@ -3253,6 +3253,32 @@ static int emac_probe(struct platform_device *ofdev)
 	return err;
 }
 
+static int emac_suspend(struct device *dev)
+{
+	struct emac_instance *priv = dev_get_drvdata(dev);
+	struct net_device *ndev = priv->ndev;
+
+	if (!netif_running(ndev))
+		return 0;
+
+	netif_device_detach(ndev);
+	mal_poll_disable(priv->mal, &priv->commac);
+	return 0;
+}
+
+static int emac_resume(struct device *dev)
+{
+	struct emac_instance *priv = dev_get_drvdata(dev);
+	struct net_device *ndev = priv->ndev;
+
+	if (!netif_running(ndev))
+		return 0;
+
+	mal_poll_enable(priv->mal, &priv->commac);
+	netif_device_attach(ndev);
+	return 0;
+}
+
 static void emac_remove(struct platform_device *ofdev)
 {
 	struct emac_instance *dev = platform_get_drvdata(ofdev);
@@ -3301,10 +3327,13 @@ static const struct of_device_id emac_match[] =
 };
 MODULE_DEVICE_TABLE(of, emac_match);
 
+static DEFINE_SIMPLE_DEV_PM_OPS(emac_pm_ops, emac_suspend, emac_resume);
+
 static struct platform_driver emac_driver = {
 	.driver = {
 		.name = "emac",
 		.of_match_table = emac_match,
+		.pm = pm_sleep_ptr(&emac_pm_ops),
 	},
 	.probe = emac_probe,
 	.remove = emac_remove,
