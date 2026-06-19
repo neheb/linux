@@ -20,6 +20,7 @@
 #ifndef __IBM_NEWEMAC_CORE_H
 #define __IBM_NEWEMAC_CORE_H
 
+#include <linux/io.h>
 #include <linux/module.h>
 #include <linux/list.h>
 #include <linux/kernel.h>
@@ -29,7 +30,6 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 
-#include <asm/io.h>
 #include <asm/dcr.h>
 
 #include "emac.h"

@@ -21,7 +21,7 @@
 #include <linux/ethtool.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
-#include <asm/io.h>
+#include <linux/io.h>
 
 #include "emac.h"
 #include "core.h"
@@ -137,7 +137,7 @@ int zmii_attach(struct platform_device *ofdev, int input,
 	*mode = dev->mode;
 
 	/* Enable this input */
-	out_be32(&p->fer, in_be32(&p->fer) | zmii_mode_mask(dev->mode, input));
+	iowrite32be(ioread32be(&p->fer) | zmii_mode_mask(dev->mode, input), &p->fer);
 	++dev->users;
 
 	mutex_unlock(&dev->lock);
@@ -154,8 +154,8 @@ void zmii_get_mdio(struct platform_device *ofdev, int input)
 
 	mutex_lock(&dev->lock);
 
-	fer = in_be32(&dev->base->fer) & ~ZMII_FER_MDI_ALL;
-	out_be32(&dev->base->fer, fer | ZMII_FER_MDI(input));
+	fer = ioread32be(&dev->base->fer) & ~ZMII_FER_MDI_ALL;
+	iowrite32be(fer | ZMII_FER_MDI(input), &dev->base->fer);
 }
 
 void zmii_put_mdio(struct platform_device *ofdev, int input)
@@ -174,7 +174,7 @@ void zmii_set_speed(struct platform_device *ofdev, int input, int speed)
 
 	mutex_lock(&dev->lock);
 
-	ssr = in_be32(&dev->base->ssr);
+	ssr = ioread32be(&dev->base->ssr);
 
 	ZMII_DBG(dev, "speed(%d, %d)" NL, input, speed);
 
@@ -183,7 +183,7 @@ void zmii_set_speed(struct platform_device *ofdev, int input, int speed)
 	else
 		ssr &= ~ZMII_SSR_SP(input);
 
-	out_be32(&dev->base->ssr, ssr);
+	iowrite32be(ssr, &dev->base->ssr);
 
 	mutex_unlock(&dev->lock);
 }
@@ -199,8 +199,8 @@ void zmii_detach(struct platform_device *ofdev, int input)
 	ZMII_DBG(dev, "detach(%d)" NL, input);
 
 	/* Disable this input */
-	out_be32(&dev->base->fer,
-		 in_be32(&dev->base->fer) & ~zmii_mode_mask(dev->mode, input));
+	iowrite32be(ioread32be(&dev->base->fer) & ~zmii_mode_mask(dev->mode, input),
+		    &dev->base->fer);
 
 	--dev->users;
 
@@ -250,10 +250,10 @@ static int zmii_probe(struct platform_device *ofdev)
 		return PTR_ERR(dev->base);
 
 	/* We may need FER value for autodetection later */
-	dev->fer_save = in_be32(&dev->base->fer);
+	dev->fer_save = ioread32be(&dev->base->fer);
 
 	/* Disable all inputs by default */
-	out_be32(&dev->base->fer, 0);
+	iowrite32be(0, &dev->base->fer);
 
 	dev_info(&ofdev->dev, "ZMII initialized\n");
 	smp_wmb();
