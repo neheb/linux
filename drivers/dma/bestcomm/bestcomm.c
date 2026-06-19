@@ -49,10 +49,11 @@ bcom_task_alloc(int bd_count, int bd_size, int priv_size)
 	struct bcom_task *tsk;
 	size_t alloc_size;
 	int irq;
+	int ret;
 
 	/* Don't try to do anything if bestcomm init failed */
 	if (!bcom_eng)
-		return NULL;
+		return ERR_PTR(-ENODEV);
 
 	/* Get and reserve a task num */
 	spin_lock(&bcom_eng->lock);
@@ -67,17 +68,21 @@ bcom_task_alloc(int bd_count, int bd_size, int priv_size)
 	spin_unlock(&bcom_eng->lock);
 
 	if (tasknum < 0)
-		return NULL;
+		return ERR_PTR(-ENODEV);
 
 	irq = platform_get_irq(bcom_eng->pdev, tasknum);
-	if (irq < 0)
+	if (irq < 0) {
+		ret = irq;
 		goto err1;
+	}
 
 	alloc_size = struct_size(tsk, cookie, bd_count);
 	/* Allocate our structure */
 	tsk = kzalloc(alloc_size + priv_size, GFP_KERNEL);
-	if (!tsk)
+	if (!tsk) {
+		ret = -ENOMEM;
 		goto err1;
+	}
 
 	tsk->tasknum = tasknum;
 	if (priv_size)
@@ -89,8 +94,10 @@ bcom_task_alloc(int bd_count, int bd_size, int priv_size)
 	/* Init the BDs, if needed */
 	if (bd_count) {
 		tsk->bd = bcom_sram_alloc(bd_count * bd_size, 4, &tsk->bd_pa);
-		if (!tsk->bd)
+		if (!tsk->bd) {
+			ret = -ENOMEM;
 			goto err2;
+		}
 		memset_io(tsk->bd, 0x00, bd_count * bd_size);
 
 		tsk->num_bd = bd_count;
@@ -104,13 +111,16 @@ err2:
 err1:
 	bcom_eng->tdt[tasknum].stop = 0;
 
-	return NULL;
+	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL_GPL(bcom_task_alloc);
 
 void
 bcom_task_free(struct bcom_task *tsk)
 {
+	if (IS_ERR_OR_NULL(tsk))
+		return;
+
 	/* Stop the task */
 	bcom_disable_task(tsk->tasknum);
 

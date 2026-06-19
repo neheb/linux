@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/types.h>
+#include <linux/err.h>
 #include <asm/io.h>
 
 #include <linux/fsl/bestcomm/bestcomm.h>
@@ -85,8 +86,8 @@ bcom_fec_rx_init(int queue_len, phys_addr_t fifo, int maxbufsize)
 
 	tsk = bcom_task_alloc(queue_len, sizeof(struct bcom_fec_bd),
 				sizeof(struct bcom_fec_priv));
-	if (!tsk)
-		return NULL;
+	if (IS_ERR(tsk))
+		return tsk;
 
 	tsk->flags = BCOM_FLAGS_NONE;
 
@@ -187,8 +188,8 @@ bcom_fec_tx_init(int queue_len, phys_addr_t fifo)
 
 	tsk = bcom_task_alloc(queue_len, sizeof(struct bcom_fec_bd),
 				sizeof(struct bcom_fec_priv));
-	if (!tsk)
-		return NULL;
+	if (IS_ERR(tsk))
+		return tsk;
 
 	tsk->flags = BCOM_FLAGS_ENABLE_TASK;
 

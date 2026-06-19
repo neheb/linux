@@ -7,6 +7,7 @@
 // Copyright (C) 2009 Jon Smirl, Digispeaker
 
 #include <linux/module.h>
+#include <linux/err.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
@@ -355,12 +356,16 @@ int mpc5200_audio_dma_create(struct platform_device *op)
 	fifo = res->start + offsetof(struct mpc52xx_psc, buffer.buffer_32);
 	psc_dma->capture.bcom_task =
 		bcom_psc_gen_bd_rx_init(psc_dma->id, 10, fifo, 512);
+	if (IS_ERR(psc_dma->capture.bcom_task)) {
+		dev_err(&op->dev, "Could not allocate bestcomm rx task\n");
+		return PTR_ERR(psc_dma->capture.bcom_task);
+	}
+
 	psc_dma->playback.bcom_task =
 		bcom_psc_gen_bd_tx_init(psc_dma->id, 10, fifo);
-	if (!psc_dma->capture.bcom_task ||
-	    !psc_dma->playback.bcom_task) {
-		dev_err(&op->dev, "Could not allocate bestcomm tasks\n");
-		return -ENODEV;
+	if (IS_ERR(psc_dma->playback.bcom_task)) {
+		dev_err(&op->dev, "Could not allocate bestcomm tx task\n");
+		return PTR_ERR(psc_dma->playback.bcom_task);
 	}
 
 	/* Disable all interrupts and reset the PSC */

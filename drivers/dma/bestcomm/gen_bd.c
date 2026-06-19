@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/err.h>
 #include <asm/errno.h>
 #include <asm/io.h>
 
@@ -90,8 +91,8 @@ bcom_gen_bd_rx_init(int queue_len, phys_addr_t fifo,
 
 	tsk = bcom_task_alloc(queue_len, sizeof(struct bcom_gen_bd),
 			sizeof(struct bcom_gen_bd_priv));
-	if (!tsk)
-		return NULL;
+	if (IS_ERR(tsk))
+		return tsk;
 
 	tsk->flags = BCOM_FLAGS_NONE;
 
@@ -174,8 +175,8 @@ bcom_gen_bd_tx_init(int queue_len, phys_addr_t fifo,
 
 	tsk = bcom_task_alloc(queue_len, sizeof(struct bcom_gen_bd),
 			sizeof(struct bcom_gen_bd_priv));
-	if (!tsk)
-		return NULL;
+	if (IS_ERR(tsk))
+		return tsk;
 
 	tsk->flags = BCOM_FLAGS_NONE;
 
@@ -320,7 +321,7 @@ struct bcom_task * bcom_psc_gen_bd_rx_init(unsigned psc_num, int queue_len,
 					   phys_addr_t fifo, int maxbufsize)
 {
 	if (psc_num >= ARRAY_SIZE(bcom_psc_params))
-		return NULL;
+		return ERR_PTR(-EINVAL);
 
 	return bcom_gen_bd_rx_init(queue_len, fifo,
 				   bcom_psc_params[psc_num].rx_initiator,
