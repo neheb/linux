@@ -137,11 +137,9 @@ static int __init ath79_misc_intc_of_init(
 	void __iomem *base;
 	int irq;
 
-	irq = irq_of_parse_and_map(node, 0);
-	if (!irq) {
-		pr_err("Failed to get MISC IRQ\n");
-		return -EINVAL;
-	}
+	irq = of_irq_get(node, 0);
+	if (irq < 0)
+		return irq;
 
 	base = of_iomap(node, 0);
 	if (!base) {
