@@ -22,7 +22,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
-#include <asm/io.h>
+#include <linux/io.h>
 
 #include "emac.h"
 #include "debug.h"
@@ -93,7 +93,7 @@ int rgmii_attach(struct platform_device *ofdev, int input, int mode)
 	mutex_lock(&dev->lock);
 
 	/* Enable this input */
-	out_be32(&p->fer, in_be32(&p->fer) | rgmii_mode_mask(mode, input));
+	iowrite32be(ioread32be(&p->fer) | rgmii_mode_mask(mode, input), &p->fer);
 
 	dev_notice(&ofdev->dev, "input %d in %s mode\n",
 		   input, phy_modes(mode));
@@ -113,7 +113,7 @@ void rgmii_set_speed(struct platform_device *ofdev, int input, int speed)
 
 	mutex_lock(&dev->lock);
 
-	ssr = in_be32(&p->ssr) & ~RGMII_SSR_MASK(input);
+	ssr = ioread32be(&p->ssr) & ~RGMII_SSR_MASK(input);
 
 	RGMII_DBG(dev, "speed(%d, %d)" NL, input, speed);
 
@@ -124,7 +124,7 @@ void rgmii_set_speed(struct platform_device *ofdev, int input, int speed)
 	else if (speed == SPEED_10)
 		ssr |= RGMII_SSR_10(input);
 
-	out_be32(&p->ssr, ssr);
+	iowrite32be(ssr, &p->ssr);
 
 	mutex_unlock(&dev->lock);
 }
@@ -142,10 +142,10 @@ void rgmii_get_mdio(struct platform_device *ofdev, int input)
 
 	mutex_lock(&dev->lock);
 
-	fer = in_be32(&p->fer);
+	fer = ioread32be(&p->fer);
 	fer |= 0x00080000u >> input;
-	out_be32(&p->fer, fer);
-	(void)in_be32(&p->fer);
+	iowrite32be(fer, &p->fer);
+	(void)ioread32be(&p->fer);
 
 	DBG2(dev, " fer = 0x%08x\n", fer);
 }
@@ -161,10 +161,10 @@ void rgmii_put_mdio(struct platform_device *ofdev, int input)
 	if (!(dev->flags & EMAC_RGMII_FLAG_HAS_MDIO))
 		return;
 
-	fer = in_be32(&p->fer);
+	fer = ioread32be(&p->fer);
 	fer &= ~(0x00080000u >> input);
-	out_be32(&p->fer, fer);
-	(void)in_be32(&p->fer);
+	iowrite32be(fer, &p->fer);
+	(void)ioread32be(&p->fer);
 
 	DBG2(dev, " fer = 0x%08x\n", fer);
 
@@ -184,7 +184,7 @@ void rgmii_detach(struct platform_device *ofdev, int input)
 	RGMII_DBG(dev, "detach(%d)" NL, input);
 
 	/* Disable this input */
-	out_be32(&p->fer, in_be32(&p->fer) & ~RGMII_FER_MASK(input));
+	iowrite32be(ioread32be(&p->fer) & ~RGMII_FER_MASK(input), &p->fer);
 
 	--dev->users;
 
@@ -242,10 +242,10 @@ static int rgmii_probe(struct platform_device *ofdev)
 		dev->flags |= EMAC_RGMII_FLAG_HAS_MDIO;
 
 	DBG2(dev, " Boot FER = 0x%08x, SSR = 0x%08x\n",
-	     in_be32(&dev->base->fer), in_be32(&dev->base->ssr));
+	     ioread32be(&dev->base->fer), ioread32be(&dev->base->ssr));
 
 	/* Disable all inputs by default */
-	out_be32(&dev->base->fer, 0);
+	iowrite32be(0, &dev->base->fer);
 
 	dev_info(&ofdev->dev, "initialized with%s MDIO support\n",
 		 (dev->flags & EMAC_RGMII_FLAG_HAS_MDIO) ? "" : "out");

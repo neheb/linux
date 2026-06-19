@@ -16,7 +16,7 @@
  */
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
-#include <asm/io.h>
+#include <linux/io.h>
 
 #include "emac.h"
 #include "core.h"
@@ -49,18 +49,17 @@ void tah_reset(struct platform_device *ofdev)
 	int n;
 
 	/* Reset TAH */
-	out_be32(&p->mr, TAH_MR_SR);
+	iowrite32be(TAH_MR_SR, &p->mr);
 	n = 100;
-	while ((in_be32(&p->mr) & TAH_MR_SR) && n)
+	while ((ioread32be(&p->mr) & TAH_MR_SR) && n)
 		--n;
 
 	if (unlikely(!n))
 		dev_err(&ofdev->dev, "reset timeout\n");
 
 	/* 10KB TAH TX FIFO accommodates the max MTU of 9000 */
-	out_be32(&p->mr,
-		 TAH_MR_CVR | TAH_MR_ST_768 | TAH_MR_TFS_10KB | TAH_MR_DTFP |
-		 TAH_MR_DIG);
+	iowrite32be(TAH_MR_CVR | TAH_MR_ST_768 | TAH_MR_TFS_10KB | TAH_MR_DTFP |
+		 TAH_MR_DIG, &p->mr);
 }
 
 int tah_get_regs_len(struct platform_device *ofdev)

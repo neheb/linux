@@ -31,6 +31,7 @@
 #include <linux/crc32.h>
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
+#include <linux/io.h>
 #include <linux/mii.h>
 #include <linux/bitops.h>
 #include <linux/of.h>
@@ -41,11 +42,8 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
-
-#include <asm/processor.h>
-#include <asm/io.h>
-#include <asm/dma.h>
 #include <linux/uaccess.h>
+
 #include <asm/dcr.h>
 #include <asm/dcr-regs.h>
 
@@ -201,9 +199,9 @@ static inline void emac_tx_enable(struct emac_instance *dev)
 
 	DBG(dev, "tx_enable" NL);
 
-	r = in_be32(&p->mr0);
+	r = ioread32be(&p->mr0);
 	if (!(r & EMAC_MR0_TXE))
-		out_be32(&p->mr0, r | EMAC_MR0_TXE);
+		iowrite32be(r | EMAC_MR0_TXE, &p->mr0);
 }
 
 static void emac_tx_disable(struct emac_instance *dev)
@@ -213,11 +211,11 @@ static void emac_tx_disable(struct emac_instance *dev)
 
 	DBG(dev, "tx_disable" NL);
 
-	r = in_be32(&p->mr0);
+	r = ioread32be(&p->mr0);
 	if (r & EMAC_MR0_TXE) {
 		int n = dev->stop_timeout;
-		out_be32(&p->mr0, r & ~EMAC_MR0_TXE);
-		while (!(in_be32(&p->mr0) & EMAC_MR0_TXI) && n) {
+		iowrite32be(r & ~EMAC_MR0_TXE, &p->mr0);
+		while (!(ioread32be(&p->mr0) & EMAC_MR0_TXI) && n) {
 			udelay(1);
 			--n;
 		}
@@ -236,12 +234,12 @@ static void emac_rx_enable(struct emac_instance *dev)
 
 	DBG(dev, "rx_enable" NL);
 
-	r = in_be32(&p->mr0);
+	r = ioread32be(&p->mr0);
 	if (!(r & EMAC_MR0_RXE)) {
 		if (unlikely(!(r & EMAC_MR0_RXI))) {
 			/* Wait if previous async disable is still in progress */
 			int n = dev->stop_timeout;
-			while (!(r = in_be32(&p->mr0) & EMAC_MR0_RXI) && n) {
+			while (!(r = ioread32be(&p->mr0) & EMAC_MR0_RXI) && n) {
 				udelay(1);
 				--n;
 			}
@@ -249,7 +247,7 @@ static void emac_rx_enable(struct emac_instance *dev)
 				emac_report_timeout_error(dev,
 							  "RX disable timeout");
 		}
-		out_be32(&p->mr0, r | EMAC_MR0_RXE);
+		iowrite32be(r | EMAC_MR0_RXE, &p->mr0);
 	}
  out:
 	;
@@ -262,11 +260,11 @@ static void emac_rx_disable(struct emac_instance *dev)
 
 	DBG(dev, "rx_disable" NL);
 
-	r = in_be32(&p->mr0);
+	r = ioread32be(&p->mr0);
 	if (r & EMAC_MR0_RXE) {
 		int n = dev->stop_timeout;
-		out_be32(&p->mr0, r & ~EMAC_MR0_RXE);
-		while (!(in_be32(&p->mr0) & EMAC_MR0_RXI) && n) {
+		iowrite32be(r & ~EMAC_MR0_RXE, &p->mr0);
+		while (!(ioread32be(&p->mr0) & EMAC_MR0_RXI) && n) {
 			udelay(1);
 			--n;
 		}
@@ -318,9 +316,9 @@ static inline void emac_rx_disable_async(struct emac_instance *dev)
 
 	DBG(dev, "rx_disable_async" NL);
 
-	r = in_be32(&p->mr0);
+	r = ioread32be(&p->mr0);
 	if (r & EMAC_MR0_RXE)
-		out_be32(&p->mr0, r & ~EMAC_MR0_RXE);
+		iowrite32be(r & ~EMAC_MR0_RXE, &p->mr0);
 }
 
 static int emac_reset(struct emac_instance *dev)
@@ -371,8 +369,8 @@ retry:
 		}
 	}
 
-	out_be32(&p->mr0, EMAC_MR0_SRST);
-	while ((in_be32(&p->mr0) & EMAC_MR0_SRST) && n)
+	iowrite32be(EMAC_MR0_SRST, &p->mr0);
+	while ((ioread32be(&p->mr0) & EMAC_MR0_SRST) && n)
 		--n;
 
 	if (IS_ENABLED(CONFIG_PPC_DCR_NATIVE) &&
@@ -427,7 +425,7 @@ static void emac_hash_mc(struct emac_instance *dev)
 	}
 
 	for (i = 0; i < regs; i++)
-		out_be32(gaht_base + i, gaht_temp[i]);
+		iowrite32be(gaht_temp[i], gaht_base + i);
 }
 
 static inline u32 emac_iff2rmr(struct net_device *ndev)
@@ -564,8 +562,8 @@ static int emac_configure(struct emac_instance *dev)
 	DBG(dev, "configure" NL);
 
 	if (!link) {
-		out_be32(&p->mr1, in_be32(&p->mr1)
-			 | EMAC_MR1_FDE | EMAC_MR1_ILE);
+		iowrite32be(ioread32be(&p->mr1)
+			 | EMAC_MR1_FDE | EMAC_MR1_ILE, &p->mr1);
 		udelay(100);
 	} else if (emac_reset(dev) < 0)
 		return -ETIMEDOUT;
@@ -600,7 +598,7 @@ static int emac_configure(struct emac_instance *dev)
 			/* Put some arbitrary OUI, Manuf & Rev IDs so we can
 			 * identify this GPCS PHY later.
 			 */
-			out_be32(&p->u1.emac4.ipcr, 0xdeadbeef);
+			iowrite32be(0xdeadbeef, &p->u1.emac4.ipcr);
 		} else
 			mr1 |= EMAC_MR1_MF_1000;
 
@@ -644,22 +642,22 @@ static int emac_configure(struct emac_instance *dev)
 
 	/* Add base settings & fifo sizes & program MR1 */
 	mr1 |= emac_calc_base_mr1(dev, tx_size, rx_size);
-	out_be32(&p->mr1, mr1);
+	iowrite32be(mr1, &p->mr1);
 
 	/* Set individual MAC address */
-	out_be32(&p->iahr, (ndev->dev_addr[0] << 8) | ndev->dev_addr[1]);
-	out_be32(&p->ialr, (ndev->dev_addr[2] << 24) |
+	iowrite32be((ndev->dev_addr[0] << 8) | ndev->dev_addr[1], &p->iahr);
+	iowrite32be((ndev->dev_addr[2] << 24) |
 		 (ndev->dev_addr[3] << 16) | (ndev->dev_addr[4] << 8) |
-		 ndev->dev_addr[5]);
+		 ndev->dev_addr[5], &p->ialr);
 
 	/* VLAN Tag Protocol ID */
-	out_be32(&p->vtpid, 0x8100);
+	iowrite32be(0x8100, &p->vtpid);
 
 	/* Receive mode register */
 	r = emac_iff2rmr(ndev);
 	if (r & EMAC_RMR_MAE)
 		emac_hash_mc(dev);
-	out_be32(&p->rmr, r);
+	iowrite32be(r, &p->rmr);
 
 	/* FIFOs thresholds */
 	if (emac_has_feature(dev, EMAC_FTR_EMAC4))
@@ -668,8 +666,8 @@ static int emac_configure(struct emac_instance *dev)
 	else
 		r = EMAC_TMR1((dev->mal_burst_size / dev->fifo_entry_size) + 1,
 			      tx_size / 2 / dev->fifo_entry_size);
-	out_be32(&p->tmr1, r);
-	out_be32(&p->trtr, emac_calc_trtr(dev, tx_size / 2));
+	iowrite32be(r, &p->tmr1);
+	iowrite32be(emac_calc_trtr(dev, tx_size / 2), &p->trtr);
 
 	/* PAUSE frame is sent when RX FIFO reaches its high-water mark,
 	   there should be still enough space in FIFO to allow the our link
@@ -692,10 +690,10 @@ static int emac_configure(struct emac_instance *dev)
 	 */
 	r = emac_calc_rwmr(dev, rx_size / 8 / dev->fifo_entry_size,
 			   rx_size / 4 / dev->fifo_entry_size);
-	out_be32(&p->rwmr, r);
+	iowrite32be(r, &p->rwmr);
 
 	/* Set PAUSE timer to the maximum */
-	out_be32(&p->ptr, 0xffff);
+	iowrite32be(0xffff, &p->ptr);
 
 	/* IRQ sources */
 	r = EMAC_ISR_OVR | EMAC_ISR_BP | EMAC_ISR_SE |
@@ -704,7 +702,7 @@ static int emac_configure(struct emac_instance *dev)
 	if (emac_has_feature(dev, EMAC_FTR_EMAC4))
 	    r |= EMAC4_ISR_TXPE | EMAC4_ISR_RXPE /* | EMAC4_ISR_TXUE |
 						  EMAC4_ISR_RXOE | */;
-	out_be32(&p->iser,  r);
+	iowrite32be(r, &p->iser);
 
 	/* We need to take GPCS PHY out of isolate mode after EMAC reset */
 	if (emac_phy_gpcs(dev->phy.mode)) {
@@ -799,7 +797,7 @@ static int __emac_mdio_read(struct emac_instance *dev, u8 id, u8 reg)
 
 	/* Wait for management interface to become idle */
 	n = 20;
-	while (!emac_phy_done(dev, in_be32(&p->stacr))) {
+	while (!emac_phy_done(dev, ioread32be(&p->stacr))) {
 		udelay(1);
 		if (!--n) {
 			DBG2(dev, " -> timeout wait idle\n");
@@ -820,11 +818,11 @@ static int __emac_mdio_read(struct emac_instance *dev, u8 id, u8 reg)
 		r |= EMAC_STACR_STAC_READ;
 	r |= (reg & EMAC_STACR_PRA_MASK)
 		| ((id & EMAC_STACR_PCDA_MASK) << EMAC_STACR_PCDA_SHIFT);
-	out_be32(&p->stacr, r);
+	iowrite32be(r, &p->stacr);
 
 	/* Wait for read to complete */
 	n = 200;
-	while (!emac_phy_done(dev, (r = in_be32(&p->stacr)))) {
+	while (!emac_phy_done(dev, (r = ioread32be(&p->stacr)))) {
 		udelay(1);
 		if (!--n) {
 			DBG2(dev, " -> timeout wait complete\n");
@@ -871,7 +869,7 @@ static void __emac_mdio_write(struct emac_instance *dev, u8 id, u8 reg,
 
 	/* Wait for management interface to be idle */
 	n = 20;
-	while (!emac_phy_done(dev, in_be32(&p->stacr))) {
+	while (!emac_phy_done(dev, ioread32be(&p->stacr))) {
 		udelay(1);
 		if (!--n) {
 			DBG2(dev, " -> timeout wait idle\n");
@@ -893,11 +891,11 @@ static void __emac_mdio_write(struct emac_instance *dev, u8 id, u8 reg,
 	r |= (reg & EMAC_STACR_PRA_MASK) |
 		((id & EMAC_STACR_PCDA_MASK) << EMAC_STACR_PCDA_SHIFT) |
 		(val << EMAC_STACR_PHYD_SHIFT);
-	out_be32(&p->stacr, r);
+	iowrite32be(r, &p->stacr);
 
 	/* Wait for write to complete */
 	n = 200;
-	while (!emac_phy_done(dev, in_be32(&p->stacr))) {
+	while (!emac_phy_done(dev, ioread32be(&p->stacr))) {
 		udelay(1);
 		if (!--n) {
 			DBG2(dev, " -> timeout wait complete\n");
@@ -961,7 +959,7 @@ static void __emac_set_multicast_list(struct emac_instance *dev)
 	emac_rx_disable(dev);
 	if (rmr & EMAC_RMR_MAE)
 		emac_hash_mc(dev);
-	out_be32(&p->rmr, rmr);
+	iowrite32be(rmr, &p->rmr);
 	emac_rx_enable(dev);
 }
 
@@ -999,10 +997,10 @@ static int emac_set_mac_address(struct net_device *ndev, void *sa)
 
 	emac_rx_disable(dev);
 	emac_tx_disable(dev);
-	out_be32(&p->iahr, (ndev->dev_addr[0] << 8) | ndev->dev_addr[1]);
-	out_be32(&p->ialr, (ndev->dev_addr[2] << 24) |
+	iowrite32be((ndev->dev_addr[0] << 8) | ndev->dev_addr[1], &p->iahr);
+	iowrite32be((ndev->dev_addr[2] << 24) |
 		(ndev->dev_addr[3] << 16) | (ndev->dev_addr[4] << 8) |
-		ndev->dev_addr[5]);
+		ndev->dev_addr[5], &p->ialr);
 	emac_tx_enable(dev);
 	emac_rx_enable(dev);
 
@@ -1308,7 +1306,7 @@ static int emac_open(struct net_device *ndev)
 #if 0
 static int emac_link_differs(struct emac_instance *dev)
 {
-	u32 r = in_be32(&dev->emacp->mr1);
+	u32 r = ioread32be(&dev->emacp->mr1);
 
 	int duplex = r & EMAC_MR1_FDE ? DUPLEX_FULL : DUPLEX_HALF;
 	int speed, pause, asym_pause;
@@ -1444,9 +1442,9 @@ static inline netdev_tx_t emac_xmit_finish(struct emac_instance *dev, int len)
 	 * instead
 	 */
 	if (emac_has_feature(dev, EMAC_FTR_EMAC4))
-		out_be32(&p->tmr0, EMAC4_TMR0_XMIT);
+		iowrite32be(EMAC4_TMR0_XMIT, &p->tmr0);
 	else
-		out_be32(&p->tmr0, EMAC_TMR0_XMIT);
+		iowrite32be(EMAC_TMR0_XMIT, &p->tmr0);
 
 	if (unlikely(++dev->tx_cnt == NUM_TX_BUFF)) {
 		netif_stop_queue(ndev);
@@ -1987,7 +1985,7 @@ static irqreturn_t emac_wol_irq(int irq, void *dev_instance)
 	struct emac_regs __iomem *p = dev->emacp;
 
 	/* Clear interrupt status */
-	out_be32(&p->isr, in_be32(&p->isr));
+	iowrite32be(ioread32be(&p->isr), &p->isr);
 
 	pm_wakeup_event(&dev->ofdev->dev, 0);
 
@@ -2004,8 +2002,8 @@ static irqreturn_t emac_irq(int irq, void *dev_instance)
 
 	spin_lock(&dev->lock);
 
-	isr = in_be32(&p->isr);
-	out_be32(&p->isr, isr);
+	isr = ioread32be(&p->isr);
+	iowrite32be(isr, &p->isr);
 
 	DBG(dev, "isr = %08x" NL, isr);
 
@@ -2377,7 +2375,7 @@ static void emac_ethtool_get_wol(struct net_device *ndev,
 	wol->supported = WAKE_MAGIC;
 	wol->wolopts = 0;
 
-	if (in_be32(&p->mr0) & EMAC_MR0_WKE)
+	if (ioread32be(&p->mr0) & EMAC_MR0_WKE)
 		wol->wolopts |= WAKE_MAGIC;
 }
 
@@ -2391,12 +2389,12 @@ static int emac_ethtool_set_wol(struct net_device *ndev,
 	if (wol->wolopts & ~WAKE_MAGIC)
 		return -EOPNOTSUPP;
 
-	mr0 = in_be32(&p->mr0);
+	mr0 = ioread32be(&p->mr0);
 	if (wol->wolopts & WAKE_MAGIC)
 		mr0 |= EMAC_MR0_WKE;
 	else
 		mr0 &= ~EMAC_MR0_WKE;
-	out_be32(&p->mr0, mr0);
+	iowrite32be(mr0, &p->mr0);
 
 	device_set_wakeup_enable(&dev->ofdev->dev, wol->wolopts & WAKE_MAGIC);
 
@@ -3338,7 +3336,7 @@ static int emac_suspend(struct device *dev)
 		struct emac_regs __iomem *p = priv->emacp;
 
 		/* Enable wake-on-LAN in hardware */
-		out_be32(&p->mr0, in_be32(&p->mr0) | EMAC_MR0_WKE);
+		iowrite32be(ioread32be(&p->mr0) | EMAC_MR0_WKE, &p->mr0);
 
 		enable_irq_wake(priv->wol_irq);
 	}
@@ -3360,7 +3358,7 @@ static int emac_resume(struct device *dev)
 		disable_irq_wake(priv->wol_irq);
 
 		/* Disable wake-on-LAN in hardware */
-		out_be32(&p->mr0, in_be32(&p->mr0) & ~EMAC_MR0_WKE);
+		iowrite32be(ioread32be(&p->mr0) & ~EMAC_MR0_WKE, &p->mr0);
 	}
 
 	mal_poll_enable(priv->mal, &priv->commac);
