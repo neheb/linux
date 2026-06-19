@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/types.h>
+#include <linux/err.h>
 #include <asm/io.h>
 
 #include <linux/fsl/bestcomm/bestcomm.h>
@@ -60,8 +61,8 @@ bcom_ata_init(int queue_len, int maxbufsize)
 	bcom_disable_prefetch();
 
 	tsk = bcom_task_alloc(queue_len, sizeof(struct bcom_ata_bd), 0);
-	if (!tsk)
-		return NULL;
+	if (IS_ERR(tsk))
+		return tsk;
 
 	tsk->flags = BCOM_FLAGS_NONE;
 

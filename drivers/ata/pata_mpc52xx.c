@@ -745,9 +745,9 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 
 	/* Allocate a BestComm task for DMA */
 	dmatsk = bcom_ata_init(MAX_DMA_BUFFERS, MAX_DMA_BUFFER_SIZE);
-	if (!dmatsk) {
+	if (IS_ERR(dmatsk)) {
 		dev_err(&op->dev, "bestcomm initialization failed\n");
-		return -ENOMEM;
+		return PTR_ERR(dmatsk);
 	}
 
 	rv = devm_add_action_or_reset(&op->dev, mpc52xx_ata_release_dmatsk,

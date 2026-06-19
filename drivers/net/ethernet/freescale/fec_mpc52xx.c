@@ -872,9 +872,14 @@ static int mpc52xx_fec_probe(struct platform_device *op)
 	priv->rx_dmatsk = bcom_fec_rx_init(FEC_RX_NUM_BD, rx_fifo, FEC_RX_BUFFER_SIZE);
 	priv->tx_dmatsk = bcom_fec_tx_init(FEC_TX_NUM_BD, tx_fifo);
 
-	if (!priv->rx_dmatsk || !priv->tx_dmatsk) {
-		pr_err("Can not init SDMA tasks\n");
-		rv = -ENOMEM;
+	if (IS_ERR(priv->rx_dmatsk)) {
+		pr_err("Can not init SDMA rx task\n");
+		rv = PTR_ERR(priv->rx_dmatsk);
+		goto err_rx_tx_dmatsk;
+	}
+	if (IS_ERR(priv->tx_dmatsk)) {
+		pr_err("Can not init SDMA tx task\n");
+		rv = PTR_ERR(priv->tx_dmatsk);
 		goto err_rx_tx_dmatsk;
 	}
 
@@ -962,9 +967,9 @@ err_node:
 	of_node_put(priv->phy_node);
 	irq_dispose_mapping(ndev->irq);
 err_rx_tx_dmatsk:
-	if (priv->rx_dmatsk)
+	if (!IS_ERR_OR_NULL(priv->rx_dmatsk))
 		bcom_fec_rx_release(priv->rx_dmatsk);
-	if (priv->tx_dmatsk)
+	if (!IS_ERR_OR_NULL(priv->tx_dmatsk))
 		bcom_fec_tx_release(priv->tx_dmatsk);
 	iounmap(priv->fec);
 err_mem_region:
