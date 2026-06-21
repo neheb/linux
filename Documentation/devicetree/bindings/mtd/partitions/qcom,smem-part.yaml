@@ -23,7 +23,7 @@ properties:
 
 patternProperties:
   "^partition-[0-9a-z]+$":
-    $ref: nvmem-layout.yaml
+    $ref: /schemas/nvmem/layouts/nvmem-layout.yaml#
 
 required:
   - compatible
