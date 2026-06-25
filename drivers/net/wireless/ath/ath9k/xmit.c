@@ -658,6 +658,8 @@ static void ath_tx_complete_aggr(struct ath_softc *sc, struct ath_txq *txq,
 				}
 
 				fi->bf = tbf;
+				bf_last->bf_mpdu = NULL;
+				bf_last->bf_buf_addr = 0;
 			}
 
 			/*
