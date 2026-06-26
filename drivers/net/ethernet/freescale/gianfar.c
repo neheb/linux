@@ -442,15 +442,6 @@ static int gfar_alloc_rx_queues(struct gfar_private *priv)
 	return 0;
 }
 
-static void unmap_group_regs(struct gfar_private *priv)
-{
-	int i;
-
-	for (i = 0; i < MAXGROUPS; i++)
-		if (priv->gfargrp[i].regs)
-			iounmap(priv->gfargrp[i].regs);
-}
-
 static void free_gfar_dev(struct gfar_private *priv)
 {
 	int i, j;
@@ -484,11 +475,12 @@ static int gfar_parse_group(struct device_node *np,
 			    struct gfar_private *priv, const char *model)
 {
 	struct gfar_priv_grp *grp = &priv->gfargrp[priv->num_grps];
+	struct device *dev = &priv->ofdev->dev;
 	int i;
 
-	grp->regs = of_iomap(np, 0);
-	if (!grp->regs)
-		return -ENOMEM;
+	grp->regs = devm_of_iomap(dev, np, 0, NULL);
+	if (IS_ERR(grp->regs))
+		return PTR_ERR(grp->regs);
 
 	gfar_irq(grp, TX)->irq = irq_of_parse_and_map(np, 0);
 
@@ -778,7 +770,6 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	return 0;
 
 err_grp_init:
-	unmap_group_regs(priv);
 	free_gfar_dev(priv);
 	return err;
 }
@@ -3324,7 +3315,6 @@ static int gfar_probe(struct platform_device *ofdev)
 register_fail:
 	if (of_phy_is_fixed_link(np))
 		of_phy_deregister_fixed_link(np);
-	unmap_group_regs(priv);
 	of_node_put(priv->phy_node);
 	of_node_put(priv->tbi_node);
 	free_gfar_dev(priv);
@@ -3344,7 +3334,6 @@ static void gfar_remove(struct platform_device *ofdev)
 	if (of_phy_is_fixed_link(np))
 		of_phy_deregister_fixed_link(np);
 
-	unmap_group_regs(priv);
 	free_gfar_dev(priv);
 }
 
