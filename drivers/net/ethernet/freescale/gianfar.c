@@ -470,13 +470,8 @@ static void free_gfar_dev(struct gfar_private *priv)
 	int i, j;
 
 	for (i = 0; i < MAXGROUPS; i++)
-		for (j = 0; j < GFAR_NUM_IRQS; j++) {
-			if (priv->gfargrp[i].irqinfo[j]) {
-				irq_dispose_mapping(priv->gfargrp[i].irqinfo[j]->irq);
-				kfree(priv->gfargrp[i].irqinfo[j]);
-				priv->gfargrp[i].irqinfo[j] = NULL;
-			}
-		}
+		for (j = 0; j < GFAR_NUM_IRQS; j++)
+			irq_dispose_mapping(priv->gfargrp[i].irqinfo[j].irq);
 }
 
 static void disable_napi(struct gfar_private *priv)
@@ -504,12 +499,6 @@ static int gfar_parse_group(struct device_node *np,
 {
 	struct gfar_priv_grp *grp = &priv->gfargrp[priv->num_grps];
 	int i;
-
-	for (i = 0; i < GFAR_NUM_IRQS; i++) {
-		grp->irqinfo[i] = kzalloc_obj(struct gfar_irqinfo);
-		if (!grp->irqinfo[i])
-			return -ENOMEM;
-	}
 
 	grp->regs = of_iomap(np, 0);
 	if (!grp->regs)
@@ -617,7 +606,7 @@ static phy_interface_t gfar_get_interface(struct net_device *dev)
 static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 {
 	const char *model;
-	int err = 0, i, j;
+	int err = 0, i;
 	phy_interface_t interface;
 	struct net_device *dev = NULL;
 	struct gfar_private *priv = NULL;
@@ -703,11 +692,8 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	priv->rx_list.count = 0;
 	mutex_init(&priv->rx_queue_access);
 
-	for (i = 0; i < MAXGROUPS; i++) {
+	for (i = 0; i < MAXGROUPS; i++)
 		priv->gfargrp[i].regs = NULL;
-		for (j = 0; j < GFAR_NUM_IRQS; j++)
-			priv->gfargrp[i].irqinfo[j] = NULL;
-	}
 
 	/* Parse and initialize group specific information */
 	if (priv->mode == MQ_MG_MODE) {

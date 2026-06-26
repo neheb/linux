@@ -1102,11 +1102,11 @@ struct gfar_priv_grp {
 	unsigned long num_rx_queues;
 	unsigned long rx_bit_map;
 
-	struct gfar_irqinfo *irqinfo[GFAR_NUM_IRQS];
+	struct gfar_irqinfo irqinfo[GFAR_NUM_IRQS];
 };
 
 #define gfar_irq(grp, ID) \
-	((grp)->irqinfo[GFAR_##ID])
+	(&(grp)->irqinfo[GFAR_##ID])
 
 enum gfar_errata {
 	GFAR_ERRATA_74		= 0x01,
