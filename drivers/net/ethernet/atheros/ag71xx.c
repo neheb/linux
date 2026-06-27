@@ -303,6 +303,8 @@ struct ag71xx_buf {
 		struct {
 			struct sk_buff *skb;
 			unsigned int len;
+			dma_addr_t dma_addr;
+			unsigned int dma_len;
 		} tx;
 		struct {
 			void *buf;
@@ -796,7 +798,7 @@ static int ag71xx_tx_packets(struct ag71xx *ag, bool flush, int budget)
 
 		n++;
 		if (!skb)
-			continue;
+			goto skip;
 
 		napi_consume_skb(skb, budget);
 		ring->buf[i].tx.skb = NULL;
@@ -809,6 +811,16 @@ static int ag71xx_tx_packets(struct ag71xx *ag, bool flush, int budget)
 		while (n > 0) {
 			ag71xx_wr(ag, AG71XX_REG_TX_STATUS, TX_STATUS_PS);
 			n--;
+		}
+
+skip:
+		if (ring->buf[i].tx.dma_addr && ring->buf[i].tx.dma_len) {
+			dma_unmap_page(&ag->pdev->dev,
+				       ring->buf[i].tx.dma_addr,
+				       ring->buf[i].tx.dma_len,
+				       DMA_TO_DEVICE);
+			ring->buf[i].tx.dma_addr = 0;
+			ring->buf[i].tx.dma_len = 0;
 		}
 	}
 
@@ -1125,6 +1137,15 @@ static void ag71xx_ring_tx_clean(struct ag71xx *ag)
 			ndev->stats.tx_errors++;
 		}
 
+		if (ring->buf[i].tx.dma_addr && ring->buf[i].tx.dma_len) {
+			dma_unmap_page(&ag->pdev->dev,
+				       ring->buf[i].tx.dma_addr,
+				       ring->buf[i].tx.dma_len,
+				       DMA_TO_DEVICE);
+			ring->buf[i].tx.dma_addr = 0;
+			ring->buf[i].tx.dma_len = 0;
+		}
+
 		if (ring->buf[i].tx.skb) {
 			bytes_compl += ring->buf[i].tx.len;
 			pkts_compl++;
@@ -1155,6 +1176,8 @@ static void ag71xx_ring_tx_init(struct ag71xx *ag)
 
 		desc->ctrl = DESC_EMPTY;
 		ring->buf[i].tx.skb = NULL;
+		ring->buf[i].tx.dma_addr = 0;
+		ring->buf[i].tx.dma_len = 0;
 	}
 
 	/* flush descriptors */
@@ -1222,7 +1245,7 @@ static int ag71xx_rx_page_pool_create(struct ag71xx *ag)
 		.napi = &ag->napi,
 		.dma_dir = DMA_FROM_DEVICE,
 		.max_len = PAGE_SIZE << order,
-		.offset = ag->rx_buf_offset,
+		.offset = 0,
 		.netdev = ag->ndev,
 	};
 	struct page_pool *page_pool;
@@ -1478,7 +1501,8 @@ static int ag71xx_stop(struct net_device *ndev)
 	return 0;
 }
 
-static int ag71xx_fill_dma_desc(struct ag71xx_ring *ring, u32 addr, int len)
+static int ag71xx_fill_dma_desc(struct ag71xx_ring *ring, int start, dma_addr_t addr,
+				int len)
 {
 	int i, ring_mask, ndesc, split;
 	struct ag71xx_desc *desc;
@@ -1493,7 +1517,7 @@ static int ag71xx_fill_dma_desc(struct ag71xx_ring *ring, u32 addr, int len)
 	while (len > 0) {
 		unsigned int cur_len = len;
 
-		i = (ring->curr + ndesc) & ring_mask;
+		i = (start + ndesc) & ring_mask;
 		desc = ag71xx_ring_desc(ring, i);
 
 		if (!ag71xx_desc_empty(desc))
@@ -1513,13 +1537,6 @@ static int ag71xx_fill_dma_desc(struct ag71xx_ring *ring, u32 addr, int len)
 		addr += cur_len;
 		len -= cur_len;
 
-		if (len > 0)
-			cur_len |= DESC_MORE;
-
-		/* prevent early tx attempt of this descriptor */
-		if (!ndesc)
-			cur_len |= DESC_EMPTY;
-
 		desc->ctrl = cur_len;
 		ndesc++;
 	}
@@ -1530,69 +1547,127 @@ static int ag71xx_fill_dma_desc(struct ag71xx_ring *ring, u32 addr, int len)
 static netdev_tx_t ag71xx_hard_start_xmit(struct sk_buff *skb,
 					  struct net_device *ndev)
 {
-	int i, n, ring_min, ring_mask, ring_size;
 	struct ag71xx *ag = netdev_priv(ndev);
-	struct ag71xx_ring *ring;
+	struct ag71xx_ring *ring = &ag->tx_ring;
+	int ring_mask = BIT(ring->order) - 1;
+	int ring_size = BIT(ring->order);
+	int nfrags, total_ndesc, n, ring_min;
 	struct ag71xx_desc *desc;
 	dma_addr_t dma_addr;
+	int i, j, f;
+	unsigned int head_len;
 
-	ring = &ag->tx_ring;
-	ring_mask = BIT(ring->order) - 1;
-	ring_size = BIT(ring->order);
-
-	if (skb->len <= 4) {
-		netif_dbg(ag, tx_err, ndev, "packet len is too small\n");
+	if (skb->len <= 4)
 		goto err_drop;
+
+	nfrags = skb_shinfo(skb)->nr_frags;
+
+	if (ring->desc_split)
+		ring_min = (2 + nfrags) * AG71XX_TX_RING_DS_PER_PKT;
+	else
+		ring_min = 2 + nfrags;
+
+	if (ring->curr - ring->dirty >= ring_size - ring_min) {
+		netif_dbg(ag, tx_err, ndev, "tx queue full\n");
+		netif_stop_queue(ndev);
+		return NETDEV_TX_BUSY;
 	}
 
-	dma_addr = dma_map_single(&ag->pdev->dev, skb->data, skb->len,
-				  DMA_TO_DEVICE);
-	if (dma_mapping_error(&ag->pdev->dev, dma_addr)) {
-		netif_dbg(ag, tx_err, ndev, "DMA mapping error\n");
-		goto err_drop;
+	total_ndesc = 0;
+
+	/* Map and fill linear data */
+	head_len = skb_headlen(skb);
+	if (head_len) {
+		dma_addr = dma_map_page(&ag->pdev->dev, virt_to_page(skb->data),
+					offset_in_page(skb->data), head_len,
+					DMA_TO_DEVICE);
+		if (dma_mapping_error(&ag->pdev->dev, dma_addr))
+			goto err_drop;
+
+		n = ag71xx_fill_dma_desc(ring, ring->curr + total_ndesc,
+					 dma_addr,
+					 head_len & ag->dcfg->desc_pktlen_mask);
+		if (n <= 0) {
+			dma_unmap_page(&ag->pdev->dev, dma_addr, head_len,
+				       DMA_TO_DEVICE);
+			goto err_drop;
+		}
+
+		ring->buf[(ring->curr + total_ndesc) & ring_mask].tx.dma_addr = dma_addr;
+		ring->buf[(ring->curr + total_ndesc) & ring_mask].tx.dma_len = head_len;
+		total_ndesc += n;
 	}
 
-	i = ring->curr & ring_mask;
-	desc = ag71xx_ring_desc(ring, i);
+	/* Map and fill fragments */
+	for (f = 0; f < nfrags; f++) {
+		const skb_frag_t *frag = &skb_shinfo(skb)->frags[f];
+		unsigned int frag_len = skb_frag_size(frag);
 
-	/* setup descriptor fields */
-	n = ag71xx_fill_dma_desc(ring, (u32)dma_addr,
-				 skb->len & ag->dcfg->desc_pktlen_mask);
-	if (n < 0)
-		goto err_drop_unmap;
+		dma_addr = skb_frag_dma_map(&ag->pdev->dev, frag, 0,
+					    frag_len, DMA_TO_DEVICE);
+		if (dma_mapping_error(&ag->pdev->dev, dma_addr))
+			goto err_unmap;
 
-	i = (ring->curr + n - 1) & ring_mask;
-	ring->buf[i].tx.len = skb->len;
+		n = ag71xx_fill_dma_desc(ring, ring->curr + total_ndesc,
+					 dma_addr,
+					 frag_len & ag->dcfg->desc_pktlen_mask);
+		if (n <= 0) {
+			dma_unmap_page(&ag->pdev->dev, dma_addr,
+				       frag_len, DMA_TO_DEVICE);
+			goto err_unmap;
+		}
+
+		ring->buf[(ring->curr + total_ndesc) & ring_mask].tx.dma_addr = dma_addr;
+		ring->buf[(ring->curr + total_ndesc) & ring_mask].tx.dma_len = frag_len;
+		total_ndesc += n;
+	}
+
+	if (!total_ndesc)
+		goto err_drop;
+
+	/* Set DESC_EMPTY on first descriptor, DESC_MORE on all but last */
+	for (j = 0; j < total_ndesc; j++) {
+		unsigned int idx = (ring->curr + j) & ring_mask;
+
+		desc = ag71xx_ring_desc(ring, idx);
+		desc->ctrl |= DESC_EMPTY;
+		desc->ctrl |= DESC_MORE;
+	}
+	desc->ctrl &= ~DESC_MORE;
+
+	i = (ring->curr + total_ndesc - 1) & ring_mask;
 	ring->buf[i].tx.skb = skb;
+	ring->buf[i].tx.len = skb->len;
 
 	netdev_sent_queue(ndev, skb->len);
 
 	skb_tx_timestamp(skb);
 
+	desc = ag71xx_ring_desc(ring, ring->curr & ring_mask);
 	desc->ctrl &= ~DESC_EMPTY;
-	ring->curr += n;
+	ring->curr += total_ndesc;
 
-	/* flush descriptor */
 	wmb();
-
-	ring_min = 2;
-	if (ring->desc_split)
-		ring_min *= AG71XX_TX_RING_DS_PER_PKT;
-
-	if (ring->curr - ring->dirty >= ring_size - ring_min) {
-		netif_dbg(ag, tx_err, ndev, "tx queue full\n");
-		netif_stop_queue(ndev);
-	}
 
 	netif_dbg(ag, tx_queued, ndev, "packet injected into TX queue\n");
 
-	/* enable TX engine */
 	ag71xx_wr(ag, AG71XX_REG_TX_CTRL, TX_CTRL_TXE);
 
 	return NETDEV_TX_OK;
 
-err_drop_unmap:
-	dma_unmap_single(&ag->pdev->dev, dma_addr, skb->len, DMA_TO_DEVICE);
+err_unmap:
+	for (j = 0; j < total_ndesc; j++) {
+		unsigned int idx = (ring->curr + j) & ring_mask;
+
+		dma_addr = ring->buf[idx].tx.dma_addr;
+		if (dma_addr && ring->buf[idx].tx.dma_len) {
+			dma_unmap_page(&ag->pdev->dev, dma_addr,
+				       ring->buf[idx].tx.dma_len,
+				       DMA_TO_DEVICE);
+			ring->buf[idx].tx.dma_addr = 0;
+			ring->buf[idx].tx.dma_len = 0;
+		}
+	}
 
 err_drop:
 	ndev->stats.tx_dropped++;
@@ -1905,6 +1980,8 @@ static int ag71xx_probe(struct platform_device *pdev)
 
 	ndev->netdev_ops = &ag71xx_netdev_ops;
 	ndev->ethtool_ops = &ag71xx_ethtool_ops;
+	ndev->hw_features |= NETIF_F_SG;
+	ndev->features |= NETIF_F_SG;
 
 	INIT_DELAYED_WORK(&ag->restart_work, ag71xx_restart_work_func);
 	timer_setup(&ag->oom_timer, ag71xx_oom_timer_handler, 0);
