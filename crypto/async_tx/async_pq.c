@@ -10,6 +10,7 @@
 #include <linux/raid/pq.h>
 #include <linux/raid/pq_tables.h>
 #include <linux/async_tx.h>
+#include <linux/highmem.h>
 #include <linux/gfp.h>
 
 /*
@@ -122,7 +123,7 @@ do_sync_gen_syndrome(struct page **blocks, unsigned int *offsets, int disks,
 			BUG_ON(i > disks - 3); /* P or Q can't be zero */
 			srcs[i] = page_address(ZERO_PAGE(0));
 		} else {
-			srcs[i] = page_address(blocks[i]) + offsets[i];
+			srcs[i] = kmap_local_page(blocks[i]) + offsets[i];
 
 			if (i < disks - 2) {
 				stop = i;
@@ -137,6 +138,12 @@ do_sync_gen_syndrome(struct page **blocks, unsigned int *offsets, int disks,
 			raid6_xor_syndrome(disks, start, stop, len, srcs);
 	} else
 		raid6_gen_syndrome(disks, len, srcs);
+
+	for (i = disks - 1; i >= 0; i--) {
+		if (srcs[i] != page_address(ZERO_PAGE(0)))
+			kunmap_local(srcs[i]);
+	}
+
 	async_tx_sync_epilog(submit);
 }
 

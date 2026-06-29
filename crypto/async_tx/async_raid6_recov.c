@@ -13,6 +13,7 @@
 #include <linux/raid/pq.h>
 #include <linux/raid/pq_tables.h>
 #include <linux/async_tx.h>
+#include <linux/highmem.h>
 #include <linux/dmaengine.h>
 
 static struct dma_async_tx_descriptor *
@@ -417,9 +418,14 @@ async_raid6_2data_recov(int disks, size_t bytes, int faila, int failb,
 			if (blocks[i] == NULL)
 				ptrs[i] = page_address(ZERO_PAGE(0));
 			else
-				ptrs[i] = page_address(blocks[i]) + offs[i];
+				ptrs[i] = kmap_local_page(blocks[i]) + offs[i];
 
 		raid6_recov_2data(disks, bytes, faila, failb, ptrs);
+
+		for (i = disks - 1; i >= 0; i--) {
+			if (ptrs[i] != page_address(ZERO_PAGE(0)))
+				kunmap_local(ptrs[i]);
+		}
 
 		async_tx_sync_epilog(submit);
 
@@ -500,9 +506,14 @@ async_raid6_datap_recov(int disks, size_t bytes, int faila,
 			if (blocks[i] == NULL)
 				ptrs[i] = page_address(ZERO_PAGE(0));
 			else
-				ptrs[i] = page_address(blocks[i]) + offs[i];
+				ptrs[i] = kmap_local_page(blocks[i]) + offs[i];
 
 		raid6_recov_datap(disks, bytes, faila, ptrs);
+
+		for (i = disks - 1; i >= 0; i--) {
+			if (ptrs[i] != page_address(ZERO_PAGE(0)))
+				kunmap_local(ptrs[i]);
+		}
 
 		async_tx_sync_epilog(submit);
 
