@@ -231,10 +231,18 @@ static int sata_dwc_dma_get_channel_old(struct sata_dwc_device_port *hsdevp)
 	return 0;
 }
 
+static void sata_dwc_dma_exit_old(void *data)
+{
+	struct sata_dwc_device *hsdev = data;
+
+	dw_dma_remove(hsdev->dma);
+}
+
 static int sata_dwc_dma_init_old(struct platform_device *pdev,
 				 struct sata_dwc_device *hsdev)
 {
 	struct device *dev = &pdev->dev;
+	int err;
 
 	hsdev->dma = devm_kzalloc(dev, sizeof(*hsdev->dma), GFP_KERNEL);
 	if (!hsdev->dma)
@@ -254,15 +262,11 @@ static int sata_dwc_dma_init_old(struct platform_device *pdev,
 		return PTR_ERR(hsdev->dma->regs);
 
 	/* Initialize AHB DMAC */
-	return dw_dma_probe(hsdev->dma);
-}
+	err = dw_dma_probe(hsdev->dma);
+	if (err)
+		return err;
 
-static void sata_dwc_dma_exit_old(struct sata_dwc_device *hsdev)
-{
-	if (!hsdev->dma)
-		return;
-
-	dw_dma_remove(hsdev->dma);
+	return devm_add_action_or_reset(dev, sata_dwc_dma_exit_old, hsdev);
 }
 
 #endif
@@ -1219,34 +1223,21 @@ static int sata_dwc_probe(struct platform_device *ofdev)
 	err = ata_host_activate(host, irq, sata_dwc_isr, 0, &sata_dwc_sht);
 	if (err) {
 		dev_err(dev, "failed to activate host");
-		goto error_out;
+		return err;
 	}
 
 	/* Enable SATA Interrupts */
 	sata_dwc_enable_interrupts(hsdev);
 
 	return 0;
-
-error_out:
-#ifdef CONFIG_SATA_DWC_OLD_DMA
-	if (!device_property_present(dev, "dmas"))
-		sata_dwc_dma_exit_old(hsdev);
-#endif
-	return err;
 }
 
 static void sata_dwc_remove(struct platform_device *ofdev)
 {
 	struct device *dev = &ofdev->dev;
 	struct ata_host *host = dev_get_drvdata(dev);
-	struct sata_dwc_device *hsdev = host->private_data;
 
 	ata_host_detach(host);
-
-#ifdef CONFIG_SATA_DWC_OLD_DMA
-	/* Free SATA DMA resources */
-	sata_dwc_dma_exit_old(hsdev);
-#endif
 
 	dev_dbg(dev, "done\n");
 }
