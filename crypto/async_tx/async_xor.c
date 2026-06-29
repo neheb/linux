@@ -14,6 +14,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/mm.h>
+#include <linux/highmem.h>
 #include <linux/dma-mapping.h>
 #include <linux/raid/xor.h>
 #include <linux/async_tx.h>
@@ -114,14 +115,19 @@ do_sync_xor_offs(struct page *dest, unsigned int offset,
 	/* convert to buffer pointers */
 	for (i = 0; i < src_cnt; i++)
 		if (src_list[i])
-			srcs[xor_src_cnt++] = page_address(src_list[i]) +
+			srcs[xor_src_cnt++] = kmap_local_page(src_list[i]) +
 				(src_offs ? src_offs[i] : offset);
 
 	/* set destination address */
-	dest_buf = page_address(dest) + offset;
+	dest_buf = kmap_local_page(dest) + offset;
 	if (submit->flags & ASYNC_TX_XOR_ZERO_DST)
 		memset(dest_buf, 0, len);
 	xor_gen(dest_buf, srcs, xor_src_cnt, len);
+
+	kunmap_local(dest_buf);
+	for (i = xor_src_cnt - 1; i >= 0; i--)
+		kunmap_local(srcs[i]);
+
 	async_tx_sync_epilog(submit);
 }
 
