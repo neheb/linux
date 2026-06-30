@@ -20,6 +20,7 @@
 #include <linux/dmaengine.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/phy/phy.h>
 #include <linux/libata.h>
 #include <linux/slab.h>
@@ -820,7 +821,7 @@ static int sata_dwc_dma_get_channel(struct sata_dwc_device_port *hsdevp)
 	struct device *dev = hsdev->dev;
 
 #ifdef CONFIG_SATA_DWC_OLD_DMA
-	if (!of_property_present(dev->of_node, "dmas"))
+	if (!device_property_present(dev, "dmas"))
 		return sata_dwc_dma_get_channel_old(hsdevp);
 #endif
 
@@ -1203,7 +1204,7 @@ static int sata_dwc_probe(struct platform_device *ofdev)
 		return PTR_ERR(hsdev->phy);
 
 #ifdef CONFIG_SATA_DWC_OLD_DMA
-	if (!of_property_present(dev->of_node, "dmas")) {
+	if (!device_property_present(dev, "dmas")) {
 		err = sata_dwc_dma_init_old(ofdev, hsdev);
 		if (err)
 			return err;
