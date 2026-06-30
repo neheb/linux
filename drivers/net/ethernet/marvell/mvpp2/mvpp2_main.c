@@ -2910,7 +2910,7 @@ static int mvpp2_aggr_txq_init(struct platform_device *pdev,
 	u32 txq_dma;
 
 	/* Allocate memory for TX descriptors */
-	aggr_txq->descs = dma_alloc_coherent(&pdev->dev,
+	aggr_txq->descs = dmam_alloc_coherent(&pdev->dev,
 					     MVPP2_AGGR_TXQ_SIZE * MVPP2_DESC_ALIGNED_SIZE,
 					     &aggr_txq->descs_dma, GFP_KERNEL);
 	if (!aggr_txq->descs)
@@ -7809,15 +7809,6 @@ static void mvpp2_remove(struct platform_device *pdev)
 		struct mvpp2_bm_pool *bm_pool = &priv->bm_pools[i];
 
 		mvpp2_bm_pool_destroy(&pdev->dev, priv, bm_pool);
-	}
-
-	for (i = 0; i < MVPP2_MAX_THREADS; i++) {
-		struct mvpp2_tx_queue *aggr_txq = &priv->aggr_txqs[i];
-
-		dma_free_coherent(&pdev->dev,
-				  MVPP2_AGGR_TXQ_SIZE * MVPP2_DESC_ALIGNED_SIZE,
-				  aggr_txq->descs,
-				  aggr_txq->descs_dma);
 	}
 }
 
