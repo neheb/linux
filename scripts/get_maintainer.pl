@@ -1305,6 +1305,7 @@ sub get_subsystem_name {
 	$subsystem = substr($subsystem, 0, $output_section_maxlen - 3);
 	$subsystem =~ s/\s*$//;
 	$subsystem = $subsystem . "...";
+	$subsystem .= ')' x ($subsystem =~ tr/\(// - $subsystem =~ tr/\)//);
     }
     return $subsystem;
 }
