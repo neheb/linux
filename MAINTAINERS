@@ -8467,7 +8467,7 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/display/mayqueen,pixpaper.yaml
 F:	drivers/gpu/drm/tiny/pixpaper.c
 
-DRM DRIVER FOR QEMU'S CIRRUS DEVICE
+DRM DRIVER FOR QEMU CIRRUS DEVICE
 M:	Dave Airlie <airlied@redhat.com>
 M:	Gerd Hoffmann <kraxel@redhat.com>
 L:	virtualization@lists.linux.dev
@@ -27271,14 +27271,14 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/leds/ti,tps61310.yaml
 F:	drivers/leds/flash/leds-tps6131x.c
 
-TEXAS INSTRUMENTS' DAC7612 DAC DRIVER
+TEXAS INSTRUMENTS DAC7612 DAC DRIVER
 M:	Ricardo Ribalda <ribalda@kernel.org>
 L:	linux-iio@vger.kernel.org
 S:	Supported
 F:	Documentation/devicetree/bindings/iio/dac/ti,dac7612.yaml
 F:	drivers/iio/dac/ti-dac7612.c
 
-TEXAS INSTRUMENTS' LP5812 RGB LED DRIVER
+TEXAS INSTRUMENTS LP5812 RGB LED DRIVER
 M:	Nam Tran <trannamatk@gmail.com>
 L:	linux-leds@vger.kernel.org
 S:	Maintained
@@ -27289,7 +27289,7 @@ F:	drivers/leds/rgb/Makefile
 F:	drivers/leds/rgb/leds-lp5812.c
 F:	drivers/leds/rgb/leds-lp5812.h
 
-TEXAS INSTRUMENTS' LB8864 LED BACKLIGHT DRIVER
+TEXAS INSTRUMENTS LB8864 LED BACKLIGHT DRIVER
 M:	Alexander Sverdlin <alexander.sverdlin@siemens.com>
 L:	linux-leds@vger.kernel.org
 S:	Maintained
@@ -27320,14 +27320,14 @@ F:	include/dt-bindings/soc/ti,sci_pm_domain.h
 F:	include/linux/soc/ti/ti_sci_inta_msi.h
 F:	include/linux/soc/ti/ti_sci_protocol.h
 
-TEXAS INSTRUMENTS' TMP117 TEMPERATURE SENSOR DRIVER
+TEXAS INSTRUMENTS TMP117 TEMPERATURE SENSOR DRIVER
 M:	Puranjay Mohan <puranjay@kernel.org>
 L:	linux-iio@vger.kernel.org
 S:	Supported
 F:	Documentation/devicetree/bindings/iio/temperature/ti,tmp117.yaml
 F:	drivers/iio/temperature/tmp117.c
 
-THANKO'S RAREMONO AM/FM/SW RADIO RECEIVER USB DRIVER
+THANKO RAREMONO AM/FM/SW RADIO RECEIVER USB DRIVER
 M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
@@ -29539,6 +29539,11 @@ M:	Roger Lucas <vt8231@hiddenengine.co.uk>
 L:	linux-hwmon@vger.kernel.org
 S:	Maintained
 F:	drivers/hwmon/vt8231.c
+
+VUB300 USB to SDIO/SD/MMC bridge chip
+L:	linux-mmc@vger.kernel.org
+S:	Orphan
+F:	drivers/mmc/host/vub300.c
 
 W1 DALLAS'S 1-WIRE BUS
 M:	Krzysztof Kozlowski <krzk@kernel.org>
