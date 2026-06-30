@@ -27296,7 +27296,7 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/leds/backlight/ti,lp8864.yaml
 F:	drivers/leds/leds-lp8864.c
 
-TEXAS INSTRUMENTS' SYSTEM CONTROL INTERFACE (TISCI) PROTOCOL DRIVER
+TEXAS INSTRUMENTS SYSTEM CONTROL INTERFACE (TISCI) PROTOCOL DRIVER
 M:	Nishanth Menon <nm@ti.com>
 M:	Tero Kristo <kristo@kernel.org>
 M:	Santosh Shilimkar <ssantosh@kernel.org>
