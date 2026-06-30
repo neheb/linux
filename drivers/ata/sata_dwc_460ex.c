@@ -1159,8 +1159,8 @@ static int sata_dwc_probe(struct platform_device *ofdev)
 	int err = 0;
 	int irq;
 	struct ata_host *host;
-	struct ata_port_info pi = sata_dwc_port_info[0];
-	const struct ata_port_info *ppi[] = { &pi, NULL };
+	const struct ata_port_info *pi = &sata_dwc_port_info[0];
+	const struct ata_port_info *ppi[] = { pi, NULL };
 	struct resource *res;
 
 	/* Allocate DWC SATA device */
