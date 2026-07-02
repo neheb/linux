@@ -171,6 +171,7 @@ struct mal_commac {
 	struct mal_commac_ops	*ops;
 	void			*dev;
 	struct list_head	poll_list;
+	struct mutex		poll_lock;
 	long       		flags;
 #define MAL_COMMAC_RX_STOPPED		0
 #define MAL_COMMAC_POLL_DISABLED	1
