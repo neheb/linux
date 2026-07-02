@@ -179,6 +179,12 @@ void mal_poll_add(struct mal_instance *mal, struct mal_commac *commac)
 {
 	unsigned long flags;
 
+	mutex_init(&commac->poll_lock);
+	/* Acquire the lock so the first mal_poll_enable() can release it.
+	 * The channel starts disabled (POLL_DISABLED set below).
+	 */
+	mutex_lock(&commac->poll_lock);
+
 	spin_lock_irqsave(&mal->lock, flags);
 
 	MAL_DBG(mal, "poll_add(%p)" NL, commac);
@@ -375,9 +381,8 @@ static irqreturn_t mal_int(int irq, void *dev_instance)
 
 void mal_poll_disable(struct mal_instance *mal, struct mal_commac *commac)
 {
-	/* Spinlock-type semantics: only one caller disable poll at a time */
-	while (test_and_set_bit(MAL_COMMAC_POLL_DISABLED, &commac->flags))
-		msleep(1);
+	mutex_lock(&commac->poll_lock);
+	set_bit(MAL_COMMAC_POLL_DISABLED, &commac->flags);
 
 	/* Synchronize with the MAL NAPI poller */
 	napi_synchronize(&mal->napi);
@@ -385,8 +390,8 @@ void mal_poll_disable(struct mal_instance *mal, struct mal_commac *commac)
 
 void mal_poll_enable(struct mal_instance *mal, struct mal_commac *commac)
 {
-	smp_wmb();
 	clear_bit(MAL_COMMAC_POLL_DISABLED, &commac->flags);
+	mutex_unlock(&commac->poll_lock);
 
 	/* Feels better to trigger a poll here to catch up with events that
 	 * may have happened on this channel while disabled. It will most
