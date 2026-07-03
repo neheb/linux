@@ -62,7 +62,7 @@
 			color = <LED_COLOR_ID_AMBER>;
 			function = LED_FUNCTION_WLAN;
 			gpios = <&chipcommon 0 GPIO_ACTIVE_LOW>;
-			linux,default-trigger = "rfkill-none";
+			linux,default-trigger = "none";
 		};
 
 		led-1 {
