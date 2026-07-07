@@ -13,8 +13,36 @@
 #include <asm/hpet.h>
 #include <asm/pci_x86.h>
 
-/* Non-static helpers from drivers/pci/quirks.c */
-extern void quirk_io_region(struct pci_dev *dev, int port, unsigned int size, int nr, const char *name);
+static void quirk_io_region(struct pci_dev *dev, int port,
+			    unsigned int size, int nr, const char *name)
+{
+	u16 region;
+	struct pci_bus_region bus_region;
+	struct resource *res = pci_resource_n(dev, nr);
+
+	pci_read_config_word(dev, port, &region);
+	region &= ~(size - 1);
+
+	if (!region)
+		return;
+
+	res->name = pci_name(dev);
+	res->flags = IORESOURCE_IO;
+
+	/* Convert from PCI bus to resource space */
+	bus_region.start = region;
+	bus_region.end = region + size - 1;
+	pcibios_bus_to_resource(dev->bus, res, &bus_region);
+
+	/*
+	 * "res" is typically a bridge window resource that's not being
+	 * used for a bridge window, so it's just a place to stash this
+	 * non-standard resource.  Printing "nr" or pci_resource_name() of
+	 * it doesn't really make sense.
+	 */
+	if (!pci_claim_resource(dev, nr))
+		pci_info(dev, "quirk: %pR claimed by %s\n", res, name);
+}
 
 static void piix4_io_quirk(struct pci_dev *dev, const char *name, unsigned int port, unsigned int enable)
 {
@@ -2055,3 +2083,35 @@ static void quirk_sis_503(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_503,		quirk_sis_503);
 DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_503,		quirk_sis_503);
+
+/*
+ * ALi Magik requires workarounds to be used by the drivers that DMA to AGP
+ * space. Latency must be set to 0xA and Triton workaround applied too.
+ * [Info kindly provided by ALi]
+ */
+static void quirk_alimagik(struct pci_dev *dev)
+{
+	if ((pci_pci_problems&PCIPCI_ALIMAGIK) == 0) {
+		pci_info(dev, "Limiting direct PCI/PCI transfers\n");
+		pci_pci_problems |= PCIPCI_ALIMAGIK|PCIPCI_TRITON;
+	}
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M1647,		quirk_alimagik);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M1651,		quirk_alimagik);
+
+/*
+ * Let's make the southbridge information explicit instead of having to
+ * worry about people probing the ACPI areas, for example.. (Yes, it
+ * happens, and if you read the wrong ACPI register it will put the machine
+ * to sleep with no way of waking it up again. Bummer).
+ *
+ * ALI M7101: Two IO regions pointed to by words at
+ *	0xE0 (64 bytes of ACPI registers)
+ *	0xE2 (32 bytes of SMB registers)
+ */
+static void quirk_ali7101_acpi(struct pci_dev *dev)
+{
+	quirk_io_region(dev, 0xE0, 64, PCI_BRIDGE_RESOURCES, "ali7101 ACPI");
+	quirk_io_region(dev, 0xE2, 32, PCI_BRIDGE_RESOURCES+1, "ali7101 SMB");
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M7101,		quirk_ali7101_acpi);
