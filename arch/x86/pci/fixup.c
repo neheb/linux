@@ -1658,3 +1658,336 @@ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1533, rom_bar_overlap_defect);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1536, rom_bar_overlap_defect);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1537, rom_bar_overlap_defect);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1538, rom_bar_overlap_defect);
+
+/*
+ * VIA Apollo KT133 needs PCI latency patch
+ * Made according to a Windows driver-based patch by George E. Breese;
+ * see PCI Latency Adjust on http://www.viahardware.com/download/viatweak.shtm
+ * Also see http://www.au-ja.org/review-kt133a-1-en.phtml for the info on
+ * which Mr Breese based his work.
+ *
+ * Updated based on further information from the site and also on
+ * information provided by VIA
+ */
+static void quirk_vialatency(struct pci_dev *dev)
+{
+	struct pci_dev *p;
+	u8 busarb;
+
+	/*
+	 * Ok, we have a potential problem chipset here. Now see if we have
+	 * a buggy southbridge.
+	 */
+	p = pci_get_device(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C686, NULL);
+	if (p != NULL) {
+
+		/*
+		 * 0x40 - 0x4f == 686B, 0x10 - 0x2f == 686A;
+		 * thanks Dan Hollis.
+		 * Check for buggy part revisions
+		 */
+		if (p->revision < 0x40 || p->revision > 0x42)
+			goto exit;
+	} else {
+		p = pci_get_device(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8231, NULL);
+		if (p == NULL)	/* No problem parts */
+			goto exit;
+
+		/* Check for buggy part revisions */
+		if (p->revision < 0x10 || p->revision > 0x12)
+			goto exit;
+	}
+
+	/*
+	 * Ok we have the problem. Now set the PCI master grant to occur
+	 * every master grant. The apparent bug is that under high PCI load
+	 * (quite common in Linux of course) you can get data loss when the
+	 * CPU is held off the bus for 3 bus master requests.  This happens
+	 * to include the IDE controllers....
+	 *
+	 * VIA only apply this fix when an SB Live! is present but under
+	 * both Linux and Windows this isn't enough, and we have seen
+	 * corruption without SB Live! but with things like 3 UDMA IDE
+	 * controllers. So we ignore that bit of the VIA recommendation..
+	 */
+	pci_read_config_byte(dev, 0x76, &busarb);
+
+	/*
+	 * Set bit 4 and bit 5 of byte 76 to 0x01
+	 * "Master priority rotation on every PCI master grant"
+	 */
+	busarb &= ~(1<<5);
+	busarb |= (1<<4);
+	pci_write_config_byte(dev, 0x76, busarb);
+	pci_info(dev, "Applying VIA southbridge workaround\n");
+exit:
+	pci_dev_put(p);
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8363_0,	quirk_vialatency);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8371_1,	quirk_vialatency);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8361,		quirk_vialatency);
+/* Must restore this on a resume from RAM */
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8363_0,	quirk_vialatency);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8371_1,	quirk_vialatency);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8361,		quirk_vialatency);
+
+/* VIA Apollo VP3 needs ETBF on BT848/878 */
+static void quirk_viaetbf(struct pci_dev *dev)
+{
+	if ((pci_pci_problems&PCIPCI_VIAETBF) == 0) {
+		pci_info(dev, "Limiting direct PCI/PCI transfers\n");
+		pci_pci_problems |= PCIPCI_VIAETBF;
+	}
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C597_0,	quirk_viaetbf);
+
+static void quirk_vsfx(struct pci_dev *dev)
+{
+	if ((pci_pci_problems&PCIPCI_VSFX) == 0) {
+		pci_info(dev, "Limiting direct PCI/PCI transfers\n");
+		pci_pci_problems |= PCIPCI_VSFX;
+	}
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C576,	quirk_vsfx);
+
+/*
+ * VIA ACPI: One IO region pointed to by longword at
+ *	0x48 or 0x20 (256 bytes of ACPI registers)
+ */
+static void quirk_vt82c586_acpi(struct pci_dev *dev)
+{
+	if (dev->revision & 0x10)
+		quirk_io_region(dev, 0x48, 256, PCI_BRIDGE_RESOURCES,
+				"vt82c586 ACPI");
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_3,	quirk_vt82c586_acpi);
+
+/*
+ * VIA VT82C686 ACPI: Three IO region pointed to by (long)words at
+ *	0x48 (256 bytes of ACPI registers)
+ *	0x70 (128 bytes of hardware monitoring register)
+ *	0x90 (16 bytes of SMB registers)
+ */
+static void quirk_vt82c686_acpi(struct pci_dev *dev)
+{
+	quirk_vt82c586_acpi(dev);
+
+	quirk_io_region(dev, 0x70, 128, PCI_BRIDGE_RESOURCES+1,
+				 "vt82c686 HW-mon");
+
+	quirk_io_region(dev, 0x90, 16, PCI_BRIDGE_RESOURCES+2, "vt82c686 SMB");
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C686_4,	quirk_vt82c686_acpi);
+
+/*
+ * VIA VT8235 ISA Bridge: Two IO regions pointed to by words at
+ *	0x88 (128 bytes of power management registers)
+ *	0xd0 (16 bytes of SMB registers)
+ */
+static void quirk_vt8235_acpi(struct pci_dev *dev)
+{
+	quirk_io_region(dev, 0x88, 128, PCI_BRIDGE_RESOURCES, "vt8235 PM");
+	quirk_io_region(dev, 0xd0, 16, PCI_BRIDGE_RESOURCES+1, "vt8235 SMB");
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8235,	quirk_vt8235_acpi);
+
+/*
+ * FIXME: it is questionable that quirk_via_acpi() is needed.  It shows up
+ * as an ISA bridge, and does not support the PCI_INTERRUPT_LINE register
+ * at all.  Therefore it seems like setting the pci_dev's IRQ to the value
+ * of the ACPI SCI interrupt is only done for convenience.
+ *	-jgarzik
+ */
+static void quirk_via_acpi(struct pci_dev *d)
+{
+	u8 irq;
+
+	/* VIA ACPI device: SCI IRQ line in PCI config byte 0x42 */
+	pci_read_config_byte(d, 0x42, &irq);
+	irq &= 0xf;
+	if (irq && (irq != 2))
+		d->irq = irq;
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_3,	quirk_via_acpi);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C686_4,	quirk_via_acpi);
+
+/* VIA bridges which have VLink */
+static int via_vlink_dev_lo = -1, via_vlink_dev_hi = 18;
+
+static void quirk_via_bridge(struct pci_dev *dev)
+{
+	/* See what bridge we have and find the device ranges */
+	switch (dev->device) {
+	case PCI_DEVICE_ID_VIA_82C686:
+		/*
+		 * The VT82C686 is special; it attaches to PCI and can have
+		 * any device number. All its subdevices are functions of
+		 * that single device.
+		 */
+		via_vlink_dev_lo = PCI_SLOT(dev->devfn);
+		via_vlink_dev_hi = PCI_SLOT(dev->devfn);
+		break;
+	case PCI_DEVICE_ID_VIA_8237:
+	case PCI_DEVICE_ID_VIA_8237A:
+		via_vlink_dev_lo = 15;
+		break;
+	case PCI_DEVICE_ID_VIA_8235:
+		via_vlink_dev_lo = 16;
+		break;
+	case PCI_DEVICE_ID_VIA_8231:
+	case PCI_DEVICE_ID_VIA_8233_0:
+	case PCI_DEVICE_ID_VIA_8233A:
+	case PCI_DEVICE_ID_VIA_8233C_0:
+		via_vlink_dev_lo = 17;
+		break;
+	}
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C686,	quirk_via_bridge);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8231,		quirk_via_bridge);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8233_0,	quirk_via_bridge);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8233A,	quirk_via_bridge);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8233C_0,	quirk_via_bridge);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8235,		quirk_via_bridge);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8237,		quirk_via_bridge);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8237A,	quirk_via_bridge);
+
+/*
+ * quirk_via_vlink		-	VIA VLink IRQ number update
+ * @dev: PCI device
+ *
+ * If the device we are dealing with is on a PIC IRQ we need to ensure that
+ * the IRQ line register which usually is not relevant for PCI cards, is
+ * actually written so that interrupts get sent to the right place.
+ *
+ * We only do this on systems where a VIA south bridge was detected, and
+ * only for VIA devices on the motherboard (see quirk_via_bridge above).
+ */
+static void quirk_via_vlink(struct pci_dev *dev)
+{
+	u8 irq, new_irq;
+
+	/* Check if we have VLink at all */
+	if (via_vlink_dev_lo == -1)
+		return;
+
+	new_irq = dev->irq;
+
+	/* Don't quirk interrupts outside the legacy IRQ range */
+	if (!new_irq || new_irq > 15)
+		return;
+
+	/* Internal device ? */
+	if (dev->bus->number != 0 || PCI_SLOT(dev->devfn) > via_vlink_dev_hi ||
+	    PCI_SLOT(dev->devfn) < via_vlink_dev_lo)
+		return;
+
+	/*
+	 * This is an internal VLink device on a PIC interrupt. The BIOS
+	 * ought to have set this but may not have, so we redo it.
+	 */
+	pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq);
+	if (new_irq != irq) {
+		pci_info(dev, "VIA VLink IRQ fixup, from %d to %d\n",
+			irq, new_irq);
+		udelay(15);	/* unknown if delay really needed */
+		pci_write_config_byte(dev, PCI_INTERRUPT_LINE, new_irq);
+	}
+}
+DECLARE_PCI_FIXUP_ENABLE(PCI_VENDOR_ID_VIA, PCI_ANY_ID, quirk_via_vlink);
+
+/*
+ * VIA VT82C598 has its device ID settable and many BIOSes set it to the ID
+ * of VT82C597 for backward compatibility.  We need to switch it off to be
+ * able to recognize the real type of the chip.
+ */
+static void quirk_vt82c598_id(struct pci_dev *dev)
+{
+	pci_write_config_byte(dev, 0xfc, 0);
+	pci_read_config_word(dev, PCI_DEVICE_ID, &dev->device);
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C597_0,	quirk_vt82c598_id);
+
+/*
+ * On ASUS A8V and A8V Deluxe boards, the onboard AC97 audio controller
+ * and MC97 modem controller are disabled when a second PCI soundcard is
+ * present. This patch, tweaking the VT8237 ISA bridge, enables them.
+ * -- bjd
+ */
+static void asus_hides_ac97_lpc(struct pci_dev *dev)
+{
+	u8 val;
+	int asus_hides_ac97 = 0;
+
+	if (likely(dev->subsystem_vendor == PCI_VENDOR_ID_ASUSTEK)) {
+		if (dev->device == PCI_DEVICE_ID_VIA_8237)
+			asus_hides_ac97 = 1;
+	}
+
+	if (!asus_hides_ac97)
+		return;
+
+	pci_read_config_byte(dev, 0x50, &val);
+	if (val & 0xc0) {
+		pci_write_config_byte(dev, 0x50, val & (~0xc0));
+		pci_read_config_byte(dev, 0x50, &val);
+		if (val & 0xc0)
+			pci_info(dev, "Onboard AC97/MC97 devices continue to play 'hide and seek'! 0x%x\n",
+				 val);
+		else
+			pci_info(dev, "Enabled onboard AC97/MC97 devices\n");
+	}
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8237, asus_hides_ac97_lpc);
+DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8237, asus_hides_ac97_lpc);
+
+static void quirk_via_cx700_pci_parking_caching(struct pci_dev *dev)
+{
+	/*
+	 * Disable PCI Bus Parking and PCI Master read caching on CX700
+	 * which causes unspecified timing errors with a VT6212L on the PCI
+	 * bus leading to USB2.0 packet loss.
+	 *
+	 * This quirk is only enabled if a second (on the external PCI bus)
+	 * VT6212L is found -- the CX700 core itself also contains a USB
+	 * host controller with the same PCI ID as the VT6212L.
+	 */
+
+	/* Count VT6212L instances */
+	struct pci_dev *p = pci_get_device(PCI_VENDOR_ID_VIA,
+		PCI_DEVICE_ID_VIA_8235_USB_2, NULL);
+	uint8_t b;
+
+	/*
+	 * p should contain the first (internal) VT6212L -- see if we have
+	 * an external one by searching again.
+	 */
+	p = pci_get_device(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8235_USB_2, p);
+	if (!p)
+		return;
+	pci_dev_put(p);
+
+	if (pci_read_config_byte(dev, 0x76, &b) == 0) {
+		if (b & 0x40) {
+			/* Turn off PCI Bus Parking */
+			pci_write_config_byte(dev, 0x76, b ^ 0x40);
+
+			pci_info(dev, "Disabling VIA CX700 PCI parking\n");
+		}
+	}
+
+	if (pci_read_config_byte(dev, 0x72, &b) == 0) {
+		if (b != 0) {
+			/* Turn off PCI Master read caching */
+			pci_write_config_byte(dev, 0x72, 0x0);
+
+			/* Set PCI Master Bus time-out to "1x16 PCLK" */
+			pci_write_config_byte(dev, 0x75, 0x1);
+
+			/* Disable "Read FIFO Timer" */
+			pci_write_config_byte(dev, 0x77, 0x0);
+
+			pci_info(dev, "Disabling VIA CX700 PCI caching\n");
+		}
+	}
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_VIA, 0x324e, quirk_via_cx700_pci_parking_caching);
