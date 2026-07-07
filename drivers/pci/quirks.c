@@ -38,8 +38,6 @@
 #include <linux/switchtec.h>
 #include "pci.h"
 
-void quirk_io_region(struct pci_dev *dev, int port, unsigned int size, int nr, const char *name);
-
 static bool pcie_lbms_seen(struct pci_dev *dev, u16 lnksta)
 {
 	if (test_bit(PCI_LINK_LBMS_SEEN, &dev->priv_flags))
@@ -382,21 +380,6 @@ static void quirk_nopciamd(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AMD,	PCI_DEVICE_ID_AMD_8151_0,	quirk_nopciamd);
 
 /*
- * ALi Magik requires workarounds to be used by the drivers that DMA to AGP
- * space. Latency must be set to 0xA and Triton workaround applied too.
- * [Info kindly provided by ALi]
- */
-static void quirk_alimagik(struct pci_dev *dev)
-{
-	if ((pci_pci_problems&PCIPCI_ALIMAGIK) == 0) {
-		pci_info(dev, "Limiting direct PCI/PCI transfers\n");
-		pci_pci_problems |= PCIPCI_ALIMAGIK|PCIPCI_TRITON;
-	}
-}
-DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M1647,		quirk_alimagik);
-DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M1651,		quirk_alimagik);
-
-/*
  * This chip can cause PCI parity errors if config register 0xA0 is read
  * while DMAs are occurring.
  */
@@ -504,37 +487,6 @@ static void quirk_cs5536_vsa(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_CS5536_ISA, quirk_cs5536_vsa);
 
-void quirk_io_region(struct pci_dev *dev, int port,
-			    unsigned int size, int nr, const char *name)
-{
-	u16 region;
-	struct pci_bus_region bus_region;
-	struct resource *res = pci_resource_n(dev, nr);
-
-	pci_read_config_word(dev, port, &region);
-	region &= ~(size - 1);
-
-	if (!region)
-		return;
-
-	res->name = pci_name(dev);
-	res->flags = IORESOURCE_IO;
-
-	/* Convert from PCI bus to resource space */
-	bus_region.start = region;
-	bus_region.end = region + size - 1;
-	pcibios_bus_to_resource(dev->bus, res, &bus_region);
-
-	/*
-	 * "res" is typically a bridge window resource that's not being
-	 * used for a bridge window, so it's just a place to stash this
-	 * non-standard resource.  Printing "nr" or pci_resource_name() of
-	 * it doesn't really make sense.
-	 */
-	if (!pci_claim_resource(dev, nr))
-		pci_info(dev, "quirk: %pR claimed by %s\n", res, name);
-}
-
 /*
  * ATI Northbridge setups MCE the processor if you even read somewhere
  * between 0x3b0->0x3bb or read 0x3d3
@@ -600,23 +552,6 @@ static void quirk_synopsys_haps(struct pci_dev *pdev)
 DECLARE_PCI_FIXUP_CLASS_HEADER(PCI_VENDOR_ID_SYNOPSYS, PCI_ANY_ID,
 			       PCI_CLASS_SERIAL_USB_XHCI, 0,
 			       quirk_synopsys_haps);
-
-/*
- * Let's make the southbridge information explicit instead of having to
- * worry about people probing the ACPI areas, for example.. (Yes, it
- * happens, and if you read the wrong ACPI register it will put the machine
- * to sleep with no way of waking it up again. Bummer).
- *
- * ALI M7101: Two IO regions pointed to by words at
- *	0xE0 (64 bytes of ACPI registers)
- *	0xE2 (32 bytes of SMB registers)
- */
-static void quirk_ali7101_acpi(struct pci_dev *dev)
-{
-	quirk_io_region(dev, 0xE0, 64, PCI_BRIDGE_RESOURCES, "ali7101 ACPI");
-	quirk_io_region(dev, 0xE2, 32, PCI_BRIDGE_RESOURCES+1, "ali7101 SMB");
-}
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M7101,		quirk_ali7101_acpi);
 
 /*
  * TI XIO2000a PCIe-PCI Bridge erroneously reports it supports fast
