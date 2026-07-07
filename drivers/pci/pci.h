@@ -18,6 +18,9 @@ struct pcie_tlp_log;
 
 #define PCI_FIND_CAP_TTL	48
 
+/* Non-static helpers shared with arch/x86/pci/fixup.c */
+void quirk_disable_msi(struct pci_dev *dev);
+
 #define PCI_VSEC_ID_INTEL_TBT	0x1234	/* Thunderbolt */
 
 #define PCIE_LINK_RETRAIN_TIMEOUT_MS	1000
