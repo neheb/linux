@@ -367,18 +367,6 @@ static void quirk_tigerpoint_bm_sts(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_TGP_LPC, quirk_tigerpoint_bm_sts);
 #endif
 
-static void quirk_nopciamd(struct pci_dev *dev)
-{
-	u8 rev;
-	pci_read_config_byte(dev, 0x08, &rev);
-	if (rev == 0x13) {
-		/* Erratum 24 */
-		pci_info(dev, "Chipset erratum: Disabling direct PCI/AGP transfers\n");
-		pci_pci_problems |= PCIAGP_FAIL;
-	}
-}
-DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AMD,	PCI_DEVICE_ID_AMD_8151_0,	quirk_nopciamd);
-
 /*
  * This chip can cause PCI parity errors if config register 0xA0 is read
  * while DMAs are occurring.
@@ -436,56 +424,6 @@ static void quirk_s3_64M(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_868,		quirk_s3_64M);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_968,		quirk_s3_64M);
-
-static void quirk_io(struct pci_dev *dev, int pos, unsigned int size,
-		     const char *name)
-{
-	u32 region;
-	struct pci_bus_region bus_region;
-	struct resource *res = pci_resource_n(dev, pos);
-	const char *res_name = pci_resource_name(dev, pos);
-
-	pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (pos << 2), &region);
-
-	if (!region)
-		return;
-
-	res->name = pci_name(dev);
-	res->flags = region & ~PCI_BASE_ADDRESS_IO_MASK;
-	res->flags |=
-		(IORESOURCE_IO | IORESOURCE_PCI_FIXED | IORESOURCE_SIZEALIGN);
-	region &= ~(size - 1);
-
-	/* Convert from PCI bus to resource space */
-	bus_region.start = region;
-	bus_region.end = region + size - 1;
-	pcibios_bus_to_resource(dev->bus, res, &bus_region);
-
-	pci_info(dev, FW_BUG "%s %pR: %s quirk\n", res_name, res, name);
-}
-
-/*
- * Some CS5536 BIOSes (for example, the Soekris NET5501 board w/ comBIOS
- * ver. 1.33  20070103) don't set the correct ISA PCI region header info.
- * BAR0 should be 8 bytes; instead, it may be set to something like 8k
- * (which conflicts w/ BAR1's memory range).
- *
- * CS553x's ISA PCI BARs may also be read-only (ref:
- * https://bugzilla.kernel.org/show_bug.cgi?id=85991 - Comment #4 forward).
- */
-static void quirk_cs5536_vsa(struct pci_dev *dev)
-{
-	static char *name = "CS5536 ISA bridge";
-
-	if (pci_resource_len(dev, 0) != 8) {
-		quirk_io(dev, 0,   8, name);	/* SMB */
-		quirk_io(dev, 1, 256, name);	/* GPIO */
-		quirk_io(dev, 2,  64, name);	/* MFGPT */
-		pci_info(dev, "%s bug detected (incorrect header); workaround applied\n",
-			 name);
-	}
-}
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_CS5536_ISA, quirk_cs5536_vsa);
 
 /*
  * ATI Northbridge setups MCE the processor if you even read somewhere
@@ -679,29 +617,6 @@ DECLARE_PCI_FIXUP_CLASS_RESUME_EARLY(PCI_ANY_ID, PCI_ANY_ID,
 			PCI_CLASS_BRIDGE_CARDBUS, 8, quirk_cardbus_legacy);
 
 /*
- * Following the PCI ordering rules is optional on the AMD762. I'm not sure
- * what the designers were smoking but let's not inhale...
- *
- * To be fair to AMD, it follows the spec by default, it's BIOS people who
- * turn it off!
- */
-static void quirk_amd_ordering(struct pci_dev *dev)
-{
-	u32 pcic;
-	pci_read_config_dword(dev, 0x4C, &pcic);
-	if ((pcic & 6) != 6) {
-		pcic |= 6;
-		pci_warn(dev, "BIOS failed to enable PCI standards compliance; fixing this error\n");
-		pci_write_config_dword(dev, 0x4C, pcic);
-		pci_read_config_dword(dev, 0x84, &pcic);
-		pcic |= (1 << 23);	/* Required in this mode */
-		pci_write_config_dword(dev, 0x84, pcic);
-	}
-}
-DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AMD,	PCI_DEVICE_ID_AMD_FE_GATE_700C, quirk_amd_ordering);
-DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_AMD,	PCI_DEVICE_ID_AMD_FE_GATE_700C, quirk_amd_ordering);
-
-/*
  * DreamWorks-provided workaround for Dunord I-3000 problem
  *
  * This card decodes and responds to addresses not apparently assigned to
@@ -742,32 +657,6 @@ static void quirk_mediagx_master(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CYRIX,	PCI_DEVICE_ID_CYRIX_PCI_MASTER, quirk_mediagx_master);
 DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_CYRIX,	PCI_DEVICE_ID_CYRIX_PCI_MASTER, quirk_mediagx_master);
-
-static void quirk_amd_ide_mode(struct pci_dev *pdev)
-{
-	/* set SBX00/Hudson-2 SATA in IDE mode to AHCI mode */
-	u8 tmp;
-
-	pci_read_config_byte(pdev, PCI_CLASS_DEVICE, &tmp);
-	if (tmp == 0x01) {
-		pci_read_config_byte(pdev, 0x40, &tmp);
-		pci_write_config_byte(pdev, 0x40, tmp|1);
-		pci_write_config_byte(pdev, 0x9, 1);
-		pci_write_config_byte(pdev, 0xa, 6);
-		pci_write_config_byte(pdev, 0x40, tmp);
-
-		pdev->class = PCI_CLASS_STORAGE_SATA_AHCI;
-		pci_info(pdev, "set SATA to AHCI mode\n");
-	}
-}
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_IXP600_SATA, quirk_amd_ide_mode);
-DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_IXP600_SATA, quirk_amd_ide_mode);
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_IXP700_SATA, quirk_amd_ide_mode);
-DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_IXP700_SATA, quirk_amd_ide_mode);
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_HUDSON2_SATA_IDE, quirk_amd_ide_mode);
-DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_HUDSON2_SATA_IDE, quirk_amd_ide_mode);
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_AMD, 0x7900, quirk_amd_ide_mode);
-DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_AMD, 0x7900, quirk_amd_ide_mode);
 
 /* Serverworks CSB5 IDE does not fully support native mode */
 static void quirk_svwks_csb5ide(struct pci_dev *pdev)
