@@ -1991,3 +1991,67 @@ static void quirk_via_cx700_pci_parking_caching(struct pci_dev *dev)
 	}
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_VIA, 0x324e, quirk_via_cx700_pci_parking_caching);
+
+/* Chipsets where PCI->PCI transfers vanish or hang */
+static void quirk_nopcipci(struct pci_dev *dev)
+{
+	if ((pci_pci_problems & PCIPCI_FAIL) == 0) {
+		pci_info(dev, "Disabling direct PCI/PCI transfers\n");
+		pci_pci_problems |= PCIPCI_FAIL;
+	}
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_5597,		quirk_nopcipci);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_496,		quirk_nopcipci);
+
+/* SiS 96x south bridge: BIOS typically hides SMBus device...  */
+static void quirk_sis_96x_smbus(struct pci_dev *dev)
+{
+	u8 val = 0;
+	pci_read_config_byte(dev, 0x77, &val);
+	if (val & 0x10) {
+		pci_info(dev, "Enabling SiS 96x SMBus\n");
+		pci_write_config_byte(dev, 0x77, val & ~0x10);
+	}
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_961,		quirk_sis_96x_smbus);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_962,		quirk_sis_96x_smbus);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_963,		quirk_sis_96x_smbus);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_LPC,		quirk_sis_96x_smbus);
+DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_961,		quirk_sis_96x_smbus);
+DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_962,		quirk_sis_96x_smbus);
+DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_963,		quirk_sis_96x_smbus);
+DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_LPC,		quirk_sis_96x_smbus);
+
+/*
+ * ... This is further complicated by the fact that some SiS96x south
+ * bridges pretend to be 85C503/5513 instead.  In that case see if we
+ * spotted a compatible north bridge to make sure.
+ * (pci_find_device() doesn't work yet)
+ *
+ * We can also enable the sis96x bit in the discovery register..
+ */
+#define SIS_DETECT_REGISTER 0x40
+
+static void quirk_sis_503(struct pci_dev *dev)
+{
+	u8 reg;
+	u16 devid;
+
+	pci_read_config_byte(dev, SIS_DETECT_REGISTER, &reg);
+	pci_write_config_byte(dev, SIS_DETECT_REGISTER, reg | (1 << 6));
+	pci_read_config_word(dev, PCI_DEVICE_ID, &devid);
+	if (((devid & 0xfff0) != 0x0960) && (devid != 0x0018)) {
+		pci_write_config_byte(dev, SIS_DETECT_REGISTER, reg);
+		return;
+	}
+
+	/*
+	 * Ok, it now shows up as a 96x.  Run the 96x quirk by hand in case
+	 * it has already been processed.  (Depends on link order, which is
+	 * apparently not guaranteed)
+	 */
+	dev->device = devid;
+	quirk_sis_96x_smbus(dev);
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_503,		quirk_sis_503);
+DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_503,		quirk_sis_503);
