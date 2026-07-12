@@ -360,7 +360,6 @@ static int qca807x_led_blink_set(struct phy_device *phydev, u8 index,
 	return qca808x_led_reg_blink_set(phydev, reg, delay_on, delay_off);
 }
 
-#ifdef CONFIG_GPIOLIB
 static int qca807x_gpio_get_direction(struct gpio_chip *gc, unsigned int offset)
 {
 	return GPIO_LINE_DIRECTION_OUT;
@@ -431,7 +430,6 @@ static int qca807x_gpio(struct phy_device *phydev)
 
 	return devm_gpiochip_add_data(dev, gc, priv);
 }
-#endif
 
 static int qca807x_read_fiber_status(struct phy_device *phydev)
 {
@@ -720,14 +718,12 @@ static int qca807x_probe(struct phy_device *phydev)
 	priv->dac_disable_bias_current_tweak = of_property_read_bool(node,
 								     "qcom,dac-disable-bias-current-tweak");
 
-#if IS_ENABLED(CONFIG_GPIOLIB)
 	/* Do not register a GPIO controller unless flagged for it */
-	if (of_property_read_bool(node, "gpio-controller")) {
+	if (IS_ENABLED(CONFIG_GPIOLIB) && of_property_read_bool(node, "gpio-controller")) {
 		ret = qca807x_gpio(phydev);
 		if (ret)
 			return ret;
 	}
-#endif
 
 	/* Attach SFP bus on combo port*/
 	if (phy_read(phydev, QCA807X_CHIP_CONFIGURATION)) {
