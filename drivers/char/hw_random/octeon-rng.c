@@ -57,8 +57,6 @@ static int octeon_rng_data_read(struct hwrng *rng, u32 *data)
 
 static int octeon_rng_probe(struct platform_device *pdev)
 {
-	struct resource *res_ports;
-	struct resource *res_result;
 	struct octeon_rng *rng;
 	int ret;
 	struct hwrng ops = {
@@ -72,26 +70,13 @@ static int octeon_rng_probe(struct platform_device *pdev)
 	if (!rng)
 		return -ENOMEM;
 
-	res_ports = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res_ports)
-		return -ENOENT;
+	rng->control_status = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(rng->control_status))
+		return PTR_ERR(rng->control_status);
 
-	res_result = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (!res_result)
-		return -ENOENT;
-
-
-	rng->control_status = devm_ioremap(&pdev->dev,
-						   res_ports->start,
-						   sizeof(u64));
-	if (!rng->control_status)
-		return -ENOENT;
-
-	rng->result = devm_ioremap(&pdev->dev,
-					   res_result->start,
-					   sizeof(u64));
-	if (!rng->result)
-		return -ENOENT;
+	rng->result = devm_platform_ioremap_resource(pdev, 1);
+	if (IS_ERR(rng->result))
+		return PTR_ERR(rng->result);
 
 	rng->ops = ops;
 
