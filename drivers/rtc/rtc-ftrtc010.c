@@ -110,7 +110,6 @@ static int ftrtc010_rtc_probe(struct platform_device *pdev)
 	u32 days, hour, min, sec;
 	struct ftrtc010_rtc *rtc;
 	struct device *dev = &pdev->dev;
-	struct resource *res;
 	struct rtc_device *rtc_dev;
 	int ret;
 
@@ -146,16 +145,9 @@ static int ftrtc010_rtc_probe(struct platform_device *pdev)
 		goto err_disable_extclk;
 	}
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		ret = -ENODEV;
-		goto err_disable_extclk;
-	}
-
-	rtc->rtc_base = devm_ioremap(dev, res->start,
-				     resource_size(res));
-	if (!rtc->rtc_base) {
-		ret = -ENOMEM;
+	rtc->rtc_base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(rtc->rtc_base)) {
+		ret = PTR_ERR(rtc->rtc_base);
 		goto err_disable_extclk;
 	}
 
