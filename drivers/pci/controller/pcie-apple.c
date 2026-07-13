@@ -400,14 +400,13 @@ static int apple_pcie_port_setup_irq(struct apple_pcie_port *port)
 {
 	struct fwnode_handle *fwnode = &port->np->fwnode;
 	struct apple_pcie *pcie = port->pcie;
-	unsigned int irq;
+	int irq;
 	u32 val = 0;
 
 	/* FIXME: consider moving each interrupt under each port */
-	irq = irq_of_parse_and_map(to_of_node(dev_fwnode(port->pcie->dev)),
-				   port->idx);
-	if (!irq)
-		return -ENXIO;
+	irq = fwnode_irq_get(dev_fwnode(pcie->dev), port->idx);
+	if (irq < 0)
+		return irq;
 
 	port->domain = irq_domain_create_linear(fwnode, 32,
 						&apple_port_irq_domain_ops,
