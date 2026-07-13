@@ -19,9 +19,7 @@
  */
 
 #include <linux/device.h>
-#include <linux/of_irq.h>
-#include <linux/of_address.h>
-#include <linux/of_platform.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 
 static int uhci_grlib_init(struct usb_hcd *hcd)
@@ -90,10 +88,10 @@ static const struct hc_driver uhci_grlib_hc_driver = {
 
 static int uhci_hcd_grlib_probe(struct platform_device *op)
 {
-	struct device_node *dn = op->dev.of_node;
 	struct usb_hcd *hcd;
 	struct uhci_hcd	*uhci = NULL;
-	struct resource res;
+	struct resource *res;
+	void __iomem *regs;
 	int irq;
 	int rv;
 
@@ -102,9 +100,13 @@ static int uhci_hcd_grlib_probe(struct platform_device *op)
 
 	dev_dbg(&op->dev, "initializing GRUSBHC UHCI USB Controller\n");
 
-	rv = of_address_to_resource(dn, 0, &res);
-	if (rv)
-		return rv;
+	regs = devm_platform_get_and_ioremap_resource(op, 0, &res);
+	if (IS_ERR(regs))
+		return PTR_ERR(regs);
+
+	irq = platform_get_irq(op, 0);
+	if (irq < 0)
+		return irq;
 
 	/* usb_create_hcd requires dma_mask != NULL */
 	op->dev.dma_mask = &op->dev.coherent_dma_mask;
@@ -113,21 +115,9 @@ static int uhci_hcd_grlib_probe(struct platform_device *op)
 	if (!hcd)
 		return -ENOMEM;
 
-	hcd->rsrc_start = res.start;
-	hcd->rsrc_len = resource_size(&res);
-
-	irq = irq_of_parse_and_map(dn, 0);
-	if (!irq) {
-		printk(KERN_ERR "%s: irq_of_parse_and_map failed\n", __FILE__);
-		rv = -EBUSY;
-		goto err_usb;
-	}
-
-	hcd->regs = devm_ioremap_resource(&op->dev, &res);
-	if (IS_ERR(hcd->regs)) {
-		rv = PTR_ERR(hcd->regs);
-		goto err_irq;
-	}
+	hcd->rsrc_start = res->start;
+	hcd->rsrc_len = resource_size(res);
+	hcd->regs = regs;
 
 	uhci = hcd_to_uhci(hcd);
 
@@ -135,13 +125,11 @@ static int uhci_hcd_grlib_probe(struct platform_device *op)
 
 	rv = usb_add_hcd(hcd, irq, 0);
 	if (rv)
-		goto err_irq;
+		goto err_usb;
 
 	device_wakeup_enable(hcd->self.controller);
 	return 0;
 
-err_irq:
-	irq_dispose_mapping(irq);
 err_usb:
 	usb_put_hcd(hcd);
 
@@ -156,7 +144,6 @@ static void uhci_hcd_grlib_remove(struct platform_device *op)
 
 	usb_remove_hcd(hcd);
 
-	irq_dispose_mapping(hcd->irq);
 	usb_put_hcd(hcd);
 }
 
