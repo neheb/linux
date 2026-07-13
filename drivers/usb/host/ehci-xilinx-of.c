@@ -15,9 +15,6 @@
 #include <linux/signal.h>
 
 #include <linux/of.h>
-#include <linux/of_platform.h>
-#include <linux/of_address.h>
-#include <linux/of_irq.h>
 
 /**
  * ehci_xilinx_port_handed_over - hand the port out if failed to enable it
@@ -120,7 +117,8 @@ static int ehci_hcd_xilinx_of_probe(struct platform_device *op)
 	struct device_node *dn = op->dev.of_node;
 	struct usb_hcd *hcd;
 	struct ehci_hcd	*ehci;
-	struct resource res;
+	struct resource *res;
+	void __iomem *regs;
 	int irq;
 	int rv;
 	int *value;
@@ -130,31 +128,22 @@ static int ehci_hcd_xilinx_of_probe(struct platform_device *op)
 
 	dev_dbg(&op->dev, "initializing XILINX-OF USB Controller\n");
 
-	rv = of_address_to_resource(dn, 0, &res);
-	if (rv)
-		return rv;
+	regs = devm_platform_get_and_ioremap_resource(op, 0, &res);
+	if (IS_ERR(regs))
+		return PTR_ERR(regs);
+
+	irq = platform_get_irq(op, 0);
+	if (irq < 0)
+		return irq;
 
 	hcd = usb_create_hcd(&ehci_xilinx_of_hc_driver, &op->dev,
 				"XILINX-OF USB");
 	if (!hcd)
 		return -ENOMEM;
 
-	hcd->rsrc_start = res.start;
-	hcd->rsrc_len = resource_size(&res);
-
-	irq = irq_of_parse_and_map(dn, 0);
-	if (!irq) {
-		dev_err(&op->dev, "%s: irq_of_parse_and_map failed\n",
-			__FILE__);
-		rv = -EBUSY;
-		goto err_irq;
-	}
-
-	hcd->regs = devm_ioremap_resource(&op->dev, &res);
-	if (IS_ERR(hcd->regs)) {
-		rv = PTR_ERR(hcd->regs);
-		goto err_irq;
-	}
+	hcd->rsrc_start = res->start;
+	hcd->rsrc_len = resource_size(res);
+	hcd->regs = regs;
 
 	ehci = hcd_to_ehci(hcd);
 
@@ -186,7 +175,6 @@ static int ehci_hcd_xilinx_of_probe(struct platform_device *op)
 		return 0;
 	}
 
-err_irq:
 	usb_put_hcd(hcd);
 
 	return rv;
