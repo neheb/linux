@@ -169,7 +169,7 @@ static int bt8xxgpio_probe(struct pci_dev *dev,
 	bg->pdev = dev;
 	spin_lock_init(&bg->lock);
 
-	err = pci_enable_device(dev);
+	err = pcim_enable_device(dev);
 	if (err) {
 		dev_err(&dev->dev, "can't enable device.\n");
 		return err;
@@ -189,15 +189,10 @@ static int bt8xxgpio_probe(struct pci_dev *dev,
 	err = gpiochip_add_data(&bg->gpio, bg);
 	if (err) {
 		dev_err(&dev->dev, "failed to register GPIOs\n");
-		goto err_disable;
+		return err;
 	}
 
 	return 0;
-
-err_disable:
-	pci_disable_device(dev);
-
-	return err;
 }
 
 static void bt8xxgpio_remove(struct pci_dev *pdev)
@@ -209,8 +204,6 @@ static void bt8xxgpio_remove(struct pci_dev *pdev)
 	bgwrite(0, BT848_INT_MASK);
 	bgwrite(~0x0, BT848_INT_STAT);
 	bgwrite(0x0, BT848_GPIO_OUT_EN);
-
-	pci_disable_device(pdev);
 }
 
 
