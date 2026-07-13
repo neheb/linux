@@ -480,8 +480,6 @@ MODULE_DEVICE_TABLE(of, qcom_ipq806x_usb_phy_table);
 
 static int qcom_ipq806x_usb_phy_probe(struct platform_device *pdev)
 {
-	struct resource *res;
-	resource_size_t size;
 	struct phy *generic_phy;
 	struct usb_phy *phy_dwc3;
 	const struct phy_drvdata *data;
@@ -495,15 +493,10 @@ static int qcom_ipq806x_usb_phy_probe(struct platform_device *pdev)
 
 	phy_dwc3->dev = &pdev->dev;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return -EINVAL;
-	size = resource_size(res);
-	phy_dwc3->base = devm_ioremap(phy_dwc3->dev, res->start, size);
-
-	if (!phy_dwc3->base) {
+	phy_dwc3->base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(phy_dwc3->base)) {
 		dev_err(phy_dwc3->dev, "failed to map reg\n");
-		return -ENOMEM;
+		return PTR_ERR(phy_dwc3->base);
 	}
 
 	phy_dwc3->ref_clk = devm_clk_get(phy_dwc3->dev, "ref");
