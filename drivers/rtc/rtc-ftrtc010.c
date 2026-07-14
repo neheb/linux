@@ -28,9 +28,6 @@ MODULE_ALIAS("platform:" DRV_NAME);
 
 struct ftrtc010_rtc {
 	void __iomem		*rtc_base;
-	int			rtc_irq;
-	struct clk		*pclk;
-	struct clk		*extclk;
 };
 
 enum ftrtc010_rtc_offsets {
@@ -111,51 +108,35 @@ static int ftrtc010_rtc_probe(struct platform_device *pdev)
 	struct ftrtc010_rtc *rtc;
 	struct device *dev = &pdev->dev;
 	struct rtc_device *rtc_dev;
+	struct clk *extclk;
+	struct clk *pclk;
+	int rtc_irq;
 	int ret;
+
+	rtc_irq = platform_get_irq(pdev, 0);
+	if (rtc_irq < 0)
+		return rtc_irq;
+
+	pclk = devm_clk_get_optional_enabled(dev, "PCLK");
+	if (IS_ERR(pclk))
+		return PTR_ERR(pclk);
+
+	extclk = devm_clk_get_optional_enabled(dev, "EXTCLK");
+	if (IS_ERR(extclk))
+		return PTR_ERR(extclk);
 
 	rtc = devm_kzalloc(&pdev->dev, sizeof(*rtc), GFP_KERNEL);
 	if (unlikely(!rtc))
 		return -ENOMEM;
 	platform_set_drvdata(pdev, rtc);
 
-	rtc->pclk = devm_clk_get(dev, "PCLK");
-	if (IS_ERR(rtc->pclk)) {
-		dev_err(dev, "could not get PCLK\n");
-	} else {
-		ret = clk_prepare_enable(rtc->pclk);
-		if (ret) {
-			dev_err(dev, "failed to enable PCLK\n");
-			return ret;
-		}
-	}
-	rtc->extclk = devm_clk_get(dev, "EXTCLK");
-	if (IS_ERR(rtc->extclk)) {
-		dev_err(dev, "could not get EXTCLK\n");
-	} else {
-		ret = clk_prepare_enable(rtc->extclk);
-		if (ret) {
-			dev_err(dev, "failed to enable EXTCLK\n");
-			goto err_disable_pclk;
-		}
-	}
-
-	rtc->rtc_irq = platform_get_irq(pdev, 0);
-	if (rtc->rtc_irq < 0) {
-		ret = rtc->rtc_irq;
-		goto err_disable_extclk;
-	}
-
 	rtc->rtc_base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(rtc->rtc_base)) {
-		ret = PTR_ERR(rtc->rtc_base);
-		goto err_disable_extclk;
-	}
+	if (IS_ERR(rtc->rtc_base))
+		return PTR_ERR(rtc->rtc_base);
 
 	rtc_dev = devm_rtc_allocate_device(dev);
-	if (IS_ERR(rtc_dev)) {
-		ret = PTR_ERR(rtc_dev);
-		goto err_disable_extclk;
-	}
+	if (IS_ERR(rtc_dev))
+		return PTR_ERR(rtc_dev);
 
 	rtc_dev->ops = &ftrtc010_rtc_ops;
 
@@ -167,28 +148,12 @@ static int ftrtc010_rtc_probe(struct platform_device *pdev)
 	rtc_dev->range_min = (u64)days * 86400 + hour * 3600 + min * 60 + sec;
 	rtc_dev->range_max = U32_MAX + rtc_dev->range_min;
 
-	ret = devm_request_irq(dev, rtc->rtc_irq, ftrtc010_rtc_interrupt,
+	ret = devm_request_irq(dev, rtc_irq, ftrtc010_rtc_interrupt,
 			       IRQF_SHARED, pdev->name, dev);
 	if (unlikely(ret))
-		goto err_disable_extclk;
+		return ret;
 
 	return devm_rtc_register_device(rtc_dev);
-
-err_disable_extclk:
-	clk_disable_unprepare(rtc->extclk);
-err_disable_pclk:
-	clk_disable_unprepare(rtc->pclk);
-	return ret;
-}
-
-static void ftrtc010_rtc_remove(struct platform_device *pdev)
-{
-	struct ftrtc010_rtc *rtc = platform_get_drvdata(pdev);
-
-	if (!IS_ERR(rtc->extclk))
-		clk_disable_unprepare(rtc->extclk);
-	if (!IS_ERR(rtc->pclk))
-		clk_disable_unprepare(rtc->pclk);
 }
 
 static const struct of_device_id ftrtc010_rtc_dt_match[] = {
@@ -204,7 +169,6 @@ static struct platform_driver ftrtc010_rtc_driver = {
 		.of_match_table = ftrtc010_rtc_dt_match,
 	},
 	.probe		= ftrtc010_rtc_probe,
-	.remove		= ftrtc010_rtc_remove,
 };
 
 module_platform_driver_probe(ftrtc010_rtc_driver, ftrtc010_rtc_probe);
