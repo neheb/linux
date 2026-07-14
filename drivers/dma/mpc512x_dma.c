@@ -902,54 +902,33 @@ static int mpc_dma_probe(struct platform_device *op)
 	struct dma_device *dma;
 	struct mpc_dma *mdma;
 	struct mpc_dma_chan *mchan;
-	struct resource res;
-	ulong regs_start, regs_size;
+	void __iomem *regs;
 	int retval, i;
 	u8 chancnt;
+	int irq;
+
+	irq = platform_get_irq(op, 0);
+	if (irq < 0)
+		return irq;
+
+	regs = devm_platform_ioremap_resource(op, 0);
+	if (IS_ERR(regs))
+		return PTR_ERR(regs);
 
 	mdma = devm_kzalloc(dev, sizeof(struct mpc_dma), GFP_KERNEL);
-	if (!mdma) {
-		retval = -ENOMEM;
-		goto err;
-	}
+	if (!mdma)
+		return -ENOMEM;
 
-	mdma->irq = irq_of_parse_and_map(dn, 0);
-	if (!mdma->irq) {
-		dev_err(dev, "Error mapping IRQ!\n");
-		retval = -EINVAL;
-		goto err;
-	}
+	mdma->irq = irq;
+	mdma->regs = regs;
 
 	if (of_device_is_compatible(dn, "fsl,mpc8308-dma")) {
 		mdma->is_mpc8308 = 1;
 		mdma->irq2 = irq_of_parse_and_map(dn, 1);
 		if (!mdma->irq2) {
 			dev_err(dev, "Error mapping IRQ!\n");
-			retval = -EINVAL;
-			goto err_dispose1;
+			return -EINVAL;
 		}
-	}
-
-	retval = of_address_to_resource(dn, 0, &res);
-	if (retval) {
-		dev_err(dev, "Error parsing memory region!\n");
-		goto err_dispose2;
-	}
-
-	regs_start = res.start;
-	regs_size = resource_size(&res);
-
-	if (!devm_request_mem_region(dev, regs_start, regs_size, DRV_NAME)) {
-		dev_err(dev, "Error requesting memory region!\n");
-		retval = -EBUSY;
-		goto err_dispose2;
-	}
-
-	mdma->regs = devm_ioremap(dev, regs_start, regs_size);
-	if (!mdma->regs) {
-		dev_err(dev, "Error mapping memory region!\n");
-		retval = -ENOMEM;
-		goto err_dispose2;
 	}
 
 	mdma->tcd = (struct mpc_dma_tcd *)((u8 *)(mdma->regs)
@@ -959,7 +938,7 @@ static int mpc_dma_probe(struct platform_device *op)
 	if (retval) {
 		dev_err(dev, "Error requesting IRQ!\n");
 		retval = -EINVAL;
-		goto err_dispose2;
+		goto err_dispose;
 	}
 
 	if (mdma->is_mpc8308) {
@@ -1075,12 +1054,9 @@ err_free2:
 		free_irq(mdma->irq2, mdma);
 err_free1:
 	free_irq(mdma->irq, mdma);
-err_dispose2:
+err_dispose:
 	if (mdma->is_mpc8308)
 		irq_dispose_mapping(mdma->irq2);
-err_dispose1:
-	irq_dispose_mapping(mdma->irq);
-err:
 	return retval;
 }
 
@@ -1097,7 +1073,6 @@ static void mpc_dma_remove(struct platform_device *op)
 		irq_dispose_mapping(mdma->irq2);
 	}
 	free_irq(mdma->irq, mdma);
-	irq_dispose_mapping(mdma->irq);
 	tasklet_kill(&mdma->tasklet);
 }
 
