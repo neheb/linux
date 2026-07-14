@@ -676,10 +676,9 @@ int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
 
 		wed->wlan.platform_dev = plat_dev;
 		wed->wlan.bus_type = MTK_WED_BUS_AXI;
-		wed->wlan.base = devm_ioremap(dev->mt76.dev, res->start,
-					      resource_size(res));
-		if (!wed->wlan.base)
-			return -ENOMEM;
+		wed->wlan.base = devm_platform_get_and_ioremap_resource(pdev_ptr, 0, &res);
+		if (IS_ERR(wed->wlan.base))
+			return PTR_ERR(wed->wlan.base);
 
 		wed->wlan.phy_base = res->start;
 		wed->wlan.wpdma_int = res->start + MT_INT_SOURCE_CSR;
