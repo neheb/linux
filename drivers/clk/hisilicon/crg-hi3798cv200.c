@@ -200,8 +200,8 @@ static struct hisi_clock_data *hi3798cv200_clk_register(
 	int ret;
 
 	clk_data = hisi_clk_alloc(pdev, HI3798CV200_CRG_NR_CLKS);
-	if (!clk_data)
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(clk_data))
+		return clk_data;
 
 	/* hisi_phase_clock is resource managed */
 	ret = hisi_clk_register_phase(&pdev->dev,
@@ -293,8 +293,8 @@ static struct hisi_clock_data *hi3798cv200_sysctrl_clk_register(
 	int ret;
 
 	clk_data = hisi_clk_alloc(pdev, HI3798CV200_SYSCTRL_NR_CLKS);
-	if (!clk_data)
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(clk_data))
+		return clk_data;
 
 	ret = hisi_clk_register_gate(hi3798cv200_sysctrl_gate_clks,
 				ARRAY_SIZE(hi3798cv200_sysctrl_gate_clks),

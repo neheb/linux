@@ -79,8 +79,8 @@ static struct hisi_clock_data *hi3519_clk_register(struct platform_device *pdev)
 	int ret;
 
 	clk_data = hisi_clk_alloc(pdev, HI3519_NR_CLKS);
-	if (!clk_data)
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(clk_data))
+		return clk_data;
 
 	ret = hisi_clk_register_fixed_rate(hi3519_fixed_rate_clks,
 				     ARRAY_SIZE(hi3519_fixed_rate_clks),

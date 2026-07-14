@@ -133,8 +133,8 @@ static struct hisi_clock_data *hi3516cv300_clk_register(
 	int ret;
 
 	clk_data = hisi_clk_alloc(pdev, HI3516CV300_CRG_NR_CLKS);
-	if (!clk_data)
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(clk_data))
+		return clk_data;
 
 	ret = hisi_clk_register_fixed_rate(hi3516cv300_fixed_rate_clks,
 			ARRAY_SIZE(hi3516cv300_fixed_rate_clks), clk_data);
@@ -207,8 +207,8 @@ static struct hisi_clock_data *hi3516cv300_sysctrl_clk_register(
 	int ret;
 
 	clk_data = hisi_clk_alloc(pdev, HI3516CV300_SYSCTRL_NR_CLKS);
-	if (!clk_data)
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(clk_data))
+		return clk_data;
 
 	ret = hisi_clk_register_mux(hi3516cv300_sysctrl_mux_clks,
 			ARRAY_SIZE(hi3516cv300_sysctrl_mux_clks), clk_data);

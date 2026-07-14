@@ -506,8 +506,8 @@ static struct hisi_clock_data *hi3559av100_clk_register(
 	int ret;
 
 	clk_data = hisi_clk_alloc(pdev, HI3559AV100_CRG_NR_CLKS);
-	if (!clk_data)
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(clk_data))
+		return clk_data;
 
 	ret = hisi_clk_register_fixed_rate(hi3559av100_fixed_rate_clks_crg,
 					   ARRAY_SIZE(hi3559av100_fixed_rate_clks_crg), clk_data);
@@ -702,8 +702,8 @@ static struct hisi_clock_data *hi3559av100_shub_clk_register(
 	hi3559av100_shub_default_clk_set();
 
 	clk_data = hisi_clk_alloc(pdev, HI3559AV100_SHUB_NR_CLKS);
-	if (!clk_data)
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(clk_data))
+		return clk_data;
 
 	ret = hisi_clk_register_fixed_rate(hi3559av100_shub_fixed_rate_clks,
 					   ARRAY_SIZE(hi3559av100_shub_fixed_rate_clks), clk_data);

@@ -27,26 +27,24 @@ struct hisi_clock_data *hisi_clk_alloc(struct platform_device *pdev,
 						int nr_clks)
 {
 	struct hisi_clock_data *clk_data;
-	struct resource *res;
 	struct clk **clk_table;
+	void __iomem *base;
+
+	base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(base))
+		return base;
 
 	clk_data = devm_kmalloc(&pdev->dev, sizeof(*clk_data), GFP_KERNEL);
 	if (!clk_data)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return NULL;
-	clk_data->base = devm_ioremap(&pdev->dev,
-				res->start, resource_size(res));
-	if (!clk_data->base)
-		return NULL;
+	clk_data->base = base;
 
 	clk_table = devm_kmalloc_array(&pdev->dev, nr_clks,
 				       sizeof(*clk_table),
 				       GFP_KERNEL);
 	if (!clk_table)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	clk_data->clk_data.clks = clk_table;
 	clk_data->clk_data.clk_num = nr_clks;
