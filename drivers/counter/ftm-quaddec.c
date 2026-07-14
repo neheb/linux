@@ -262,28 +262,22 @@ static int ftm_quaddec_probe(struct platform_device *pdev)
 	struct ftm_quaddec *ftm;
 
 	struct device_node *node = pdev->dev.of_node;
-	struct resource *io;
+	void __iomem *ftm_base;
 	int ret;
+
+	ftm_base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(ftm_base))
+		return PTR_ERR(ftm_base);
 
 	counter = devm_counter_alloc(&pdev->dev, sizeof(*ftm));
 	if (!counter)
 		return -ENOMEM;
 	ftm = counter_priv(counter);
 
-	io = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!io) {
-		dev_err(&pdev->dev, "Failed to get memory region\n");
-		return -ENODEV;
-	}
-
 	ftm->pdev = pdev;
 	ftm->big_endian = of_property_read_bool(node, "big-endian");
-	ftm->ftm_base = devm_ioremap(&pdev->dev, io->start, resource_size(io));
+	ftm->ftm_base = ftm_base;
 
-	if (!ftm->ftm_base) {
-		dev_err(&pdev->dev, "Failed to map memory region\n");
-		return -EINVAL;
-	}
 	counter->name = dev_name(&pdev->dev);
 	counter->parent = &pdev->dev;
 	counter->ops = &ftm_quaddec_cnt_ops;
