@@ -789,8 +789,17 @@ static int fimc_is_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct fimc_is *is;
-	struct resource res;
+	void __iomem *regs;
+	int irq;
 	int ret;
+
+	regs = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(regs))
+		return PTR_ERR(regs);
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
 
 	is = devm_kzalloc(&pdev->dev, sizeof(*is), GFP_KERNEL);
 	if (!is)
@@ -803,24 +812,11 @@ static int fimc_is_probe(struct platform_device *pdev)
 	spin_lock_init(&is->slock);
 	mutex_init(&is->lock);
 
-	ret = of_address_to_resource(dev->of_node, 0, &res);
-	if (ret < 0)
-		return ret;
-
-	is->regs = devm_ioremap_resource(dev, &res);
-	if (IS_ERR(is->regs))
-		return PTR_ERR(is->regs);
-
+	is->irq = irq;
+	is->regs = regs;
 	is->pmu_regs = fimc_is_get_pmu_regs(dev);
 	if (IS_ERR(is->pmu_regs))
 		return PTR_ERR(is->pmu_regs);
-
-	is->irq = irq_of_parse_and_map(dev->of_node, 0);
-	if (!is->irq) {
-		dev_err(dev, "no irq found\n");
-		ret = -EINVAL;
-		goto err_iounmap;
-	}
 
 	ret = fimc_is_get_clocks(is);
 	if (ret < 0)
