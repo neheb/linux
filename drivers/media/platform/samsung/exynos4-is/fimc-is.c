@@ -62,39 +62,20 @@ static char *fimc_is_clocks[ISS_CLKS_MAX] = {
 	[ISS_CLK_ACLK400MCUISP_DIV]	= "div_aclk400mcuisp",
 };
 
-static void fimc_is_put_clocks(struct fimc_is *is)
-{
-	int i;
-
-	for (i = 0; i < ISS_CLKS_MAX; i++) {
-		if (IS_ERR(is->clocks[i]))
-			continue;
-		clk_put(is->clocks[i]);
-		is->clocks[i] = ERR_PTR(-EINVAL);
-	}
-}
-
 static int fimc_is_get_clocks(struct fimc_is *is)
 {
-	int i, ret;
+	int i;
 
 	for (i = 0; i < ISS_CLKS_MAX; i++)
 		is->clocks[i] = ERR_PTR(-EINVAL);
 
 	for (i = 0; i < ISS_CLKS_MAX; i++) {
-		is->clocks[i] = clk_get(&is->pdev->dev, fimc_is_clocks[i]);
-		if (IS_ERR(is->clocks[i])) {
-			ret = PTR_ERR(is->clocks[i]);
-			goto err;
-		}
+		is->clocks[i] = devm_clk_get(&is->pdev->dev, fimc_is_clocks[i]);
+		if (IS_ERR(is->clocks[i]))
+			return PTR_ERR(is->clocks[i]);
 	}
 
 	return 0;
-err:
-	fimc_is_put_clocks(is);
-	dev_err(&is->pdev->dev, "failed to get clock: %s\n",
-		fimc_is_clocks[i]);
-	return ret;
 }
 
 static int fimc_is_setup_clocks(struct fimc_is *is)
@@ -777,7 +758,7 @@ static void __iomem *fimc_is_get_pmu_regs(struct device *dev)
 		dev_warn(dev, "Found PMU node via deprecated method, update your DTB\n");
 	}
 
-	regs = of_iomap(node, 0);
+	regs = devm_of_iomap(dev, node, 0, NULL);
 	of_node_put(node);
 	if (!regs)
 		return IOMEM_ERR_PTR(-ENOMEM);
@@ -819,22 +800,20 @@ static int fimc_is_probe(struct platform_device *pdev)
 		return PTR_ERR(is->pmu_regs);
 
 	ret = fimc_is_get_clocks(is);
-	if (ret < 0)
-		goto err_iounmap;
+	if (ret)
+		return ret;
 
 	platform_set_drvdata(pdev, is);
 
-	ret = request_irq(is->irq, fimc_is_irq_handler, 0, dev_name(dev), is);
-	if (ret < 0) {
-		dev_err(dev, "irq request failed\n");
-		goto err_clk;
-	}
-	pm_runtime_enable(dev);
+	ret = devm_request_irq(dev, is->irq, fimc_is_irq_handler, 0, dev_name(dev), is);
+	if (ret)
+		return dev_err_probe(dev, ret, "irq request failed\n");
 
+	pm_runtime_enable(dev);
 	if (!pm_runtime_enabled(dev)) {
 		ret = fimc_is_runtime_resume(dev);
 		if (ret < 0)
-			goto err_irq;
+			return ret;
 	}
 
 	ret = pm_runtime_resume_and_get(dev);
@@ -875,12 +854,6 @@ err_pm:
 		fimc_is_runtime_suspend(dev);
 err_pm_disable:
 	pm_runtime_disable(dev);
-err_irq:
-	free_irq(is->irq, is);
-err_clk:
-	fimc_is_put_clocks(is);
-err_iounmap:
-	iounmap(is->pmu_regs);
 	return ret;
 }
 
@@ -932,11 +905,8 @@ static void fimc_is_remove(struct platform_device *pdev)
 	pm_runtime_set_suspended(dev);
 	if (!pm_runtime_status_suspended(dev))
 		fimc_is_runtime_suspend(dev);
-	free_irq(is->irq, is);
 	fimc_is_unregister_subdevs(is);
 	vb2_dma_contig_clear_max_seg_size(dev);
-	fimc_is_put_clocks(is);
-	iounmap(is->pmu_regs);
 	fimc_is_debugfs_remove(is);
 	release_firmware(is->fw.f_w);
 	fimc_is_free_cpu_memory(is);
