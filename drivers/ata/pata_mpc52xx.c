@@ -666,6 +666,11 @@ static int mpc52xx_ata_init_one(struct device *dev,
 				 &mpc52xx_ata_sht);
 }
 
+static void mpc52xx_ata_release_dmatsk(void *tsk)
+{
+	bcom_ata_release(tsk);
+}
+
 /* ======================================================================== */
 /* OF Platform driver                                                       */
 /* ======================================================================== */
@@ -745,19 +750,24 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 		return -ENOMEM;
 	}
 
+	rv = devm_add_action_or_reset(&op->dev, mpc52xx_ata_release_dmatsk,
+				      dmatsk);
+	if (rv)
+		return rv;
+
 	task_irq = bcom_get_task_irq(dmatsk);
 	priv->task_irq = task_irq;
 	rv = devm_request_irq(&op->dev, task_irq, &mpc52xx_ata_task_irq, 0,
 				"ATA task", priv);
 	if (rv)
-		goto err2;
+		return rv;
 	priv->dmatsk = dmatsk;
 
 	/* Init the hw */
 	rv = mpc52xx_ata_hw_init(priv);
 	if (rv) {
 		dev_err(&op->dev, "error initializing hardware\n");
-		goto err2;
+		return rv;
 	}
 
 	/* Register ourselves to libata */
@@ -765,26 +775,16 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 				  mwdma_mask, udma_mask);
 	if (rv) {
 		dev_err(&op->dev, "error registering with ATA layer\n");
-		goto err2;
+		return rv;
 	}
 
 	return 0;
-
- err2:
-	bcom_ata_release(dmatsk);
-	return rv;
 }
 
 static void mpc52xx_ata_remove(struct platform_device *op)
 {
-	struct ata_host *host = platform_get_drvdata(op);
-	struct mpc52xx_ata_priv *priv = host->private_data;
-
 	/* Deregister the ATA interface */
 	ata_platform_remove_one(op);
-
-	/* Clean up DMA */
-	bcom_ata_release(priv->dmatsk);
 }
 
 #ifdef CONFIG_PM_SLEEP
