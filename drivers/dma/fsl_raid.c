@@ -898,13 +898,17 @@ static void fsl_re_remove(struct platform_device *ofdev)
 	dev = &ofdev->dev;
 	re_priv = dev_get_drvdata(dev);
 
+	/* Unregister the DMA device first so no client can still hold a
+	 * channel and submit new work while the channel rings are torn
+	 * down below. Otherwise fsl_re_issue_pending() could memcpy into
+	 * the freed inbound ring buffer.
+	 */
+	dma_async_device_unregister(&re_priv->dma_dev);
+
 	/* Cleanup chan related memory areas */
 	for (i = 0; i < re_priv->total_chans; i++)
 		if (re_priv->re_jrs[i])
 			fsl_re_remove_chan(re_priv->re_jrs[i]);
-
-	/* Unregister the driver */
-	dma_async_device_unregister(&re_priv->dma_dev);
 }
 
 static const struct of_device_id fsl_re_ids[] = {
