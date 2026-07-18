@@ -135,8 +135,15 @@ static void fsl_re_issue_pending(struct dma_chan *chan)
 
 static void fsl_re_desc_done(struct fsl_re_desc *desc)
 {
-	dma_cookie_complete(&desc->async_tx);
+	/*
+	 * Unmap (which performs the cache invalidation / bounce buffer sync
+	 * for DMA_DEV_TO_MEM) before marking the cookie complete. Otherwise a
+	 * client polling dma_async_is_complete() on another CPU may observe
+	 * the completed cookie and access the destination buffer before the
+	 * data is coherent.
+	 */
 	dma_descriptor_unmap(&desc->async_tx);
+	dma_cookie_complete(&desc->async_tx);
 	dmaengine_desc_get_callback_invoke(&desc->async_tx, NULL);
 }
 
