@@ -687,7 +687,6 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 		goto err_free;
 	}
 
-	re_priv->re_jrs[q] = chan;
 	chan->chan.device = dma_dev;
 	chan->chan.private = chan;
 	chan->dev = chandev;
@@ -741,6 +740,11 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	/* Enable RE/CHAN */
 	out_be32(&chan->jrregs->jr_command, FSL_RE_ENABLE);
 
+	/* Only record the channel once it is fully initialized, so the
+	 * cleanup paths never touch a partially-probed ring.
+	 */
+	re_priv->re_jrs[q] = chan;
+
 	return 0;
 
 err_free_1:
@@ -748,6 +752,17 @@ err_free_1:
 		      chan->inb_phys_addr);
 err_free:
 	return ret;
+}
+
+static void fsl_re_remove_chan(struct fsl_re_chan *chan)
+{
+	tasklet_kill(&chan->irqtask);
+
+	dma_pool_free(chan->re_dev->hw_desc_pool, chan->inb_ring_virt_addr,
+		      chan->inb_phys_addr);
+
+	dma_pool_free(chan->re_dev->hw_desc_pool, chan->oub_ring_virt_addr,
+		      chan->oub_phys_addr);
 }
 
 /* Probe function for RAID Engine */
@@ -759,7 +774,7 @@ static int fsl_re_probe(struct platform_device *ofdev)
 	u32 off;
 	u8 ridx = 0;
 	struct dma_device *dma_dev;
-	int rc;
+	int rc, i;
 	struct device *dev = &ofdev->dev;
 
 	/* IOMAP the entire RAID Engine region */
@@ -832,33 +847,46 @@ static int fsl_re_probe(struct platform_device *ofdev)
 		rc = of_property_read_u32(np, "reg", &off);
 		if (rc) {
 			dev_err(dev, "Reg property not found in JQ node\n");
-			return -ENODEV;
+			rc = -ENODEV;
+			goto err_unwind;
 		}
 		/* Find out the Job Rings present under each JQ */
 		for_each_child_of_node(np, child) {
-			rc = of_device_is_compatible(child,
-					     "fsl,raideng-v1.0-job-ring");
-			if (rc) {
-				fsl_re_chan_probe(ofdev, child, ridx++, off);
-				re_priv->total_chans++;
+			if (!of_device_is_compatible(child, "fsl,raideng-v1.0-job-ring"))
+				continue;
+
+			if (ridx >= FSL_RE_MAX_CHANS) {
+				dev_warn(dev, "too many job rings, max %d\n", FSL_RE_MAX_CHANS);
+				of_node_put(child);
+				break;
 			}
+
+			rc = fsl_re_chan_probe(ofdev, child, ridx, off);
+			if (rc)
+				dev_err(dev, "job ring %d probe failed: %d\n", ridx, rc);
+			re_priv->total_chans++;
+			ridx++;
 		}
 	}
 
-	dma_async_device_register(dma_dev);
+	rc = dma_async_device_register(dma_dev);
+	if (rc)
+		goto err_unwind;
 
 	return 0;
-}
 
-static void fsl_re_remove_chan(struct fsl_re_chan *chan)
-{
-	tasklet_kill(&chan->irqtask);
+err_unwind:
+	/*
+	 * Tear down any channels that were successfully probed before the
+	 * error. fsl_re_chan_probe() already frees its own resources on
+	 * failure, so only fully-initialized channels in re_jrs[] need
+	 * cleanup here; otherwise their IRQs and DMA ring memory leak.
+	 */
+	for (i = 0; i < re_priv->total_chans; i++)
+		if (re_priv->re_jrs[i])
+			fsl_re_remove_chan(re_priv->re_jrs[i]);
 
-	dma_pool_free(chan->re_dev->hw_desc_pool, chan->inb_ring_virt_addr,
-		      chan->inb_phys_addr);
-
-	dma_pool_free(chan->re_dev->hw_desc_pool, chan->oub_ring_virt_addr,
-		      chan->oub_phys_addr);
+	return rc;
 }
 
 static void fsl_re_remove(struct platform_device *ofdev)
@@ -872,7 +900,8 @@ static void fsl_re_remove(struct platform_device *ofdev)
 
 	/* Cleanup chan related memory areas */
 	for (i = 0; i < re_priv->total_chans; i++)
-		fsl_re_remove_chan(re_priv->re_jrs[i]);
+		if (re_priv->re_jrs[i])
+			fsl_re_remove_chan(re_priv->re_jrs[i]);
 
 	/* Unregister the driver */
 	dma_async_device_unregister(&re_priv->dma_dev);
