@@ -769,6 +769,8 @@ err_free:
 }
 
 /* Probe function for RAID Engine */
+static void fsl_re_remove_chan(struct fsl_re_chan *chan);
+
 static int fsl_re_probe(struct platform_device *ofdev)
 {
 	struct fsl_re_ctrl __iomem *re_regs;
@@ -777,7 +779,7 @@ static int fsl_re_probe(struct platform_device *ofdev)
 	u32 off;
 	u8 ridx = 0;
 	struct dma_device *dma_dev;
-	int rc;
+	int rc, i;
 	struct device *dev = &ofdev->dev;
 
 	/* IOMAP the entire RAID Engine region */
@@ -850,7 +852,8 @@ static int fsl_re_probe(struct platform_device *ofdev)
 		rc = of_property_read_u32(np, "reg", &off);
 		if (rc) {
 			dev_err(dev, "Reg property not found in JQ node\n");
-			return -ENODEV;
+			rc = -ENODEV;
+			goto err_unwind;
 		}
 		/* Find out the Job Rings present under each JQ */
 		for_each_child_of_node(np, child) {
@@ -872,6 +875,19 @@ static int fsl_re_probe(struct platform_device *ofdev)
 	}
 
 	return dma_async_device_register(dma_dev);
+
+err_unwind:
+	/*
+	 * Tear down any channels that were successfully probed before the
+	 * error. fsl_re_chan_probe() already frees its own resources on
+	 * failure, so only fully-initialized channels in re_jrs[] need
+	 * cleanup here; otherwise their IRQs and DMA ring memory leak.
+	 */
+	for (i = 0; i < re_priv->total_chans; i++)
+		if (re_priv->re_jrs[i])
+			fsl_re_remove_chan(re_priv->re_jrs[i]);
+
+	return rc;
 }
 
 static void fsl_re_remove_chan(struct fsl_re_chan *chan)
