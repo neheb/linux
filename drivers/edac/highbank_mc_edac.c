@@ -142,6 +142,13 @@ static const struct of_device_id hb_ddr_ctrl_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, hb_ddr_ctrl_of_match);
 
+static void highbank_mc_edac_free(void *data)
+{
+	struct mem_ctl_info *mci = data;
+
+	edac_mc_free(mci);
+}
+
 static int highbank_mc_probe(struct platform_device *pdev)
 {
 	const struct of_device_id *id;
@@ -150,15 +157,22 @@ static int highbank_mc_probe(struct platform_device *pdev)
 	struct mem_ctl_info *mci;
 	struct hb_mc_drvdata *drvdata;
 	struct dimm_info *dimm;
-	struct resource *r;
 	void __iomem *base;
 	u32 control;
 	int irq;
-	int res = 0;
+	int res;
 
 	id = of_match_device(hb_ddr_ctrl_of_match, &pdev->dev);
 	if (!id)
 		return -ENODEV;
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
+
+	base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
 
 	layers[0].type = EDAC_MC_LAYER_CHIP_SELECT;
 	layers[0].size = 1;
@@ -171,35 +185,12 @@ static int highbank_mc_probe(struct platform_device *pdev)
 	if (!mci)
 		return -ENOMEM;
 
+	if (devm_add_action_or_reset(&pdev->dev, highbank_mc_edac_free, mci))
+		return -ENOMEM;
+
 	mci->pdev = &pdev->dev;
 	drvdata = mci->pvt_info;
 	platform_set_drvdata(pdev, mci);
-
-	if (!devres_open_group(&pdev->dev, NULL, GFP_KERNEL)) {
-		res = -ENOMEM;
-		goto free;
-	}
-
-	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!r) {
-		dev_err(&pdev->dev, "Unable to get mem resource\n");
-		res = -ENODEV;
-		goto err;
-	}
-
-	if (!devm_request_mem_region(&pdev->dev, r->start,
-				     resource_size(r), dev_name(&pdev->dev))) {
-		dev_err(&pdev->dev, "Error while requesting mem region\n");
-		res = -EBUSY;
-		goto err;
-	}
-
-	base = devm_ioremap(&pdev->dev, r->start, resource_size(r));
-	if (!base) {
-		dev_err(&pdev->dev, "Unable to map regs\n");
-		res = -ENOMEM;
-		goto err;
-	}
 
 	settings = of_device_get_match_data(&pdev->dev);
 	drvdata->mc_err_base = base + settings->err_offset;
@@ -208,8 +199,7 @@ static int highbank_mc_probe(struct platform_device *pdev)
 	control = readl(drvdata->mc_err_base + HB_DDR_ECC_OPT) & 0x3;
 	if (!control || (control == 0x2)) {
 		dev_err(&pdev->dev, "No ECC present, or ECC disabled\n");
-		res = -ENODEV;
-		goto err;
+		return -ENODEV;
 	}
 
 	mci->mtype_cap = MEM_FLAG_DDR3;
@@ -230,31 +220,22 @@ static int highbank_mc_probe(struct platform_device *pdev)
 
 	res = edac_mc_add_mc_with_groups(mci, highbank_dev_groups);
 	if (res < 0)
-		goto err;
+		return res;
 
-	irq = platform_get_irq(pdev, 0);
 	res = devm_request_irq(&pdev->dev, irq, highbank_mc_err_handler,
 			       0, dev_name(&pdev->dev), mci);
 	if (res < 0)
-		goto err2;
+		goto err;
 
-	devres_close_group(&pdev->dev, NULL);
 	return 0;
-err2:
-	edac_mc_del_mc(&pdev->dev);
 err:
-	devres_release_group(&pdev->dev, NULL);
-free:
-	edac_mc_free(mci);
+	edac_mc_del_mc(&pdev->dev);
 	return res;
 }
 
 static void highbank_mc_remove(struct platform_device *pdev)
 {
-	struct mem_ctl_info *mci = platform_get_drvdata(pdev);
-
 	edac_mc_del_mc(&pdev->dev);
-	edac_mc_free(mci);
 }
 
 static struct platform_driver highbank_mc_edac_driver = {
