@@ -205,17 +205,10 @@ static int mpc85xx_pci_err_probe(struct platform_device *op)
 	/* we only need the error registers */
 	r.start += 0xe00;
 
-	if (!devm_request_mem_region(&op->dev, r.start, resource_size(&r),
-					pdata->name)) {
-		pr_err("%s: Error while requesting mem region\n", __func__);
-		res = -EBUSY;
-		goto err;
-	}
-
-	pdata->pci_vbase = devm_ioremap(&op->dev, r.start, resource_size(&r));
-	if (!pdata->pci_vbase) {
+	pdata->pci_vbase = devm_ioremap_resource(&op->dev, &r);
+	if (IS_ERR(pdata->pci_vbase)) {
 		pr_err("%s: Unable to setup PCI err regs\n", __func__);
-		res = -ENOMEM;
+		res = PTR_ERR(pdata->pci_vbase);
 		goto err;
 	}
 
@@ -518,17 +511,10 @@ static int mpc85xx_l2_err_probe(struct platform_device *op)
 	/* we only need the error registers */
 	r.start += 0xe00;
 
-	if (!devm_request_mem_region(&op->dev, r.start, resource_size(&r),
-				     pdata->name)) {
-		pr_err("%s: Error while requesting mem region\n", __func__);
-		res = -EBUSY;
-		goto err;
-	}
-
-	pdata->l2_vbase = devm_ioremap(&op->dev, r.start, resource_size(&r));
-	if (!pdata->l2_vbase) {
+	pdata->l2_vbase = devm_ioremap_resource(&op->dev, &r);
+	if (IS_ERR(pdata->l2_vbase)) {
 		pr_err("%s: Unable to setup L2 err regs\n", __func__);
-		res = -ENOMEM;
+		res = PTR_ERR(pdata->l2_vbase);
 		goto err;
 	}
 
