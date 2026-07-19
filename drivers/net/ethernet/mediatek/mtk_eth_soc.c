@@ -3359,8 +3359,28 @@ static void mtk_tx_timeout(struct net_device *dev, unsigned int txqueue)
 	if (test_bit(MTK_RESETTING, &eth->state))
 		return;
 
-	if (!mtk_hw_reset_check(eth))
+	if (!mtk_hw_reset_check(eth)) {
+		struct netdev_queue *txq;
+
+		/*
+		 * No FQ/TSO/FIFO HW error: a single TX queue got stuck
+		 * stopped (its BQL inflight wedged) while the shared ring
+		 * keeps draining. Recover the queue instead of resetting
+		 * the whole MAC.
+		 */
+		txq = netdev_get_tx_queue(dev, txqueue);
+		if (netif_tx_queue_stopped(txq)) {
+			__netif_tx_lock(txq, smp_processor_id());
+			netdev_tx_reset_queue(txq);
+			netif_tx_wake_queue(txq);
+			__netif_tx_unlock(txq);
+			netif_err(eth, tx_err, dev,
+				  "transmit queue %u timed out (no HW error), recovering\n",
+				  txqueue);
+		}
+
 		return;
+	}
 
 	eth->netdev[mac->id]->stats.tx_errors++;
 	netif_err(eth, tx_err, dev, "transmit timed out\n");
