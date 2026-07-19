@@ -45,46 +45,46 @@ static const struct of_device_id hb_l2_err_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, hb_l2_err_of_match);
 
+static void highbank_l2_edac_free(void *data)
+{
+	struct edac_device_ctl_info *dci = data;
+
+	edac_device_free_ctl_info(dci);
+}
+
 static int highbank_l2_err_probe(struct platform_device *pdev)
 {
 	const struct of_device_id *id;
 	struct edac_device_ctl_info *dci;
 	struct hb_l2_drvdata *drvdata;
-	struct resource *r;
-	int res = 0;
+	void __iomem *base;
+	int db_irq;
+	int sb_irq;
+	int res;
+
+	base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
+
+	db_irq = platform_get_irq(pdev, 0);
+	if (db_irq < 0)
+		return db_irq;
+
+	sb_irq = platform_get_irq(pdev, 1);
+	if (sb_irq < 0)
+		return sb_irq;
 
 	dci = edac_device_alloc_ctl_info(sizeof(*drvdata), "cpu",
 					 1, "L", 1, 2, 0);
 	if (!dci)
 		return -ENOMEM;
 
+	if (devm_add_action_or_reset(&pdev->dev, highbank_l2_edac_free, dci))
+		return -ENOMEM;
+
 	drvdata = dci->pvt_info;
 	dci->dev = &pdev->dev;
 	platform_set_drvdata(pdev, dci);
-
-	if (!devres_open_group(&pdev->dev, NULL, GFP_KERNEL))
-		return -ENOMEM;
-
-	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!r) {
-		dev_err(&pdev->dev, "Unable to get mem resource\n");
-		res = -ENODEV;
-		goto err;
-	}
-
-	if (!devm_request_mem_region(&pdev->dev, r->start,
-				     resource_size(r), dev_name(&pdev->dev))) {
-		dev_err(&pdev->dev, "Error while requesting mem region\n");
-		res = -EBUSY;
-		goto err;
-	}
-
-	drvdata->base = devm_ioremap(&pdev->dev, r->start, resource_size(r));
-	if (!drvdata->base) {
-		dev_err(&pdev->dev, "Unable to map regs\n");
-		res = -ENOMEM;
-		goto err;
-	}
 
 	id = of_match_device(hb_l2_err_of_match, &pdev->dev);
 	dci->mod_name = pdev->dev.driver->name;
@@ -92,38 +92,33 @@ static int highbank_l2_err_probe(struct platform_device *pdev)
 	dci->dev_name = dev_name(&pdev->dev);
 
 	if (edac_device_add_device(dci))
-		goto err;
+		return 0;
 
-	drvdata->db_irq = platform_get_irq(pdev, 0);
+	drvdata->base = base;
+	drvdata->db_irq = db_irq;
+	drvdata->sb_irq = sb_irq;
+
 	res = devm_request_irq(&pdev->dev, drvdata->db_irq,
 			       highbank_l2_err_handler,
 			       0, dev_name(&pdev->dev), dci);
 	if (res < 0)
 		goto err2;
 
-	drvdata->sb_irq = platform_get_irq(pdev, 1);
 	res = devm_request_irq(&pdev->dev, drvdata->sb_irq,
 			       highbank_l2_err_handler,
 			       0, dev_name(&pdev->dev), dci);
 	if (res < 0)
 		goto err2;
 
-	devres_close_group(&pdev->dev, NULL);
 	return 0;
 err2:
 	edac_device_del_device(&pdev->dev);
-err:
-	devres_release_group(&pdev->dev, NULL);
-	edac_device_free_ctl_info(dci);
 	return res;
 }
 
 static void highbank_l2_err_remove(struct platform_device *pdev)
 {
-	struct edac_device_ctl_info *dci = platform_get_drvdata(pdev);
-
 	edac_device_del_device(&pdev->dev);
-	edac_device_free_ctl_info(dci);
 }
 
 static struct platform_driver highbank_l2_edac_driver = {
