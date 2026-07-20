@@ -1320,7 +1320,7 @@ struct bch_control *bch_init(int m, int t, unsigned int prim_poly,
 	if (prim_poly == 0)
 		prim_poly = prim_poly_tab[m-min_m];
 
-	bch = kzalloc_obj(*bch);
+	bch = kzalloc_flex(*bch, xi_tab, m);
 	if (bch == NULL)
 		goto fail;
 
@@ -1334,7 +1334,6 @@ struct bch_control *bch_init(int m, int t, unsigned int prim_poly,
 	bch->mod8_tab  = bch_alloc(words*1024*sizeof(*bch->mod8_tab), &err);
 	bch->ecc_buf   = bch_alloc(words*sizeof(*bch->ecc_buf), &err);
 	bch->ecc_buf2  = bch_alloc(words*sizeof(*bch->ecc_buf2), &err);
-	bch->xi_tab    = bch_alloc(m*sizeof(*bch->xi_tab), &err);
 	bch->syn       = bch_alloc(2*t*sizeof(*bch->syn), &err);
 	bch->cache     = bch_alloc(2*t*sizeof(*bch->cache), &err);
 	bch->elp       = bch_alloc((t+1)*sizeof(struct gf_poly_deg1), &err);
@@ -1384,7 +1383,6 @@ void bch_free(struct bch_control *bch)
 		kfree(bch->mod8_tab);
 		kfree(bch->ecc_buf);
 		kfree(bch->ecc_buf2);
-		kfree(bch->xi_tab);
 		kfree(bch->syn);
 		kfree(bch->cache);
 		kfree(bch->elp);
