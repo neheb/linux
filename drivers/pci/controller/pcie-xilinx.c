@@ -93,7 +93,7 @@
 
 /**
  * struct xilinx_pcie - PCIe port information
- * @dev: Device pointer
+ * @pdev: Platform Device pointer
  * @reg_base: IO Mapped Register Base
  * @msi_map: Bitmap of allocated MSIs
  * @map_lock: Mutex protecting the MSI allocation
@@ -102,7 +102,7 @@
  * @resources: Bus Resources
  */
 struct xilinx_pcie {
-	struct device *dev;
+	struct platform_device *pdev;
 	void __iomem *reg_base;
 	unsigned long msi_map[BITS_TO_LONGS(XILINX_NUM_MSI_IRQS)];
 	struct mutex map_lock;
@@ -133,7 +133,7 @@ static inline bool xilinx_pcie_link_up(struct xilinx_pcie *pcie)
  */
 static void xilinx_pcie_clear_err_interrupts(struct xilinx_pcie *pcie)
 {
-	struct device *dev = pcie->dev;
+	struct device *dev = &pcie->pdev->dev;
 	unsigned long val = pcie_read(pcie, XILINX_PCIE_REG_RPEFR);
 
 	if (val & XILINX_PCIE_RPEFR_ERR_VALID) {
@@ -287,7 +287,7 @@ static const struct msi_parent_ops xilinx_msi_parent_ops = {
 static int xilinx_allocate_msi_domains(struct xilinx_pcie *pcie)
 {
 	struct irq_domain_info info = {
-		.fwnode		= dev_fwnode(pcie->dev),
+		.fwnode		= dev_fwnode(&pcie->pdev->dev),
 		.ops		= &xilinx_msi_domain_ops,
 		.host_data	= pcie,
 		.size		= XILINX_NUM_MSI_IRQS,
@@ -295,7 +295,7 @@ static int xilinx_allocate_msi_domains(struct xilinx_pcie *pcie)
 
 	pcie->msi_domain = msi_create_parent_irq_domain(&info, &xilinx_msi_parent_ops);
 	if (!pcie->msi_domain) {
-		dev_err(pcie->dev, "failed to create MSI domain\n");
+		dev_err(&pcie->pdev->dev, "failed to create MSI domain\n");
 		return -ENOMEM;
 	}
 
@@ -345,7 +345,7 @@ static const struct irq_domain_ops intx_domain_ops = {
 static irqreturn_t xilinx_pcie_intr_handler(int irq, void *data)
 {
 	struct xilinx_pcie *pcie = (struct xilinx_pcie *)data;
-	struct device *dev = pcie->dev;
+	struct device *dev = &pcie->pdev->dev;
 	u32 val, mask, status;
 
 	/* Read interrupt decode and mask registers */
@@ -457,20 +457,20 @@ error:
  */
 static int xilinx_pcie_init_irq_domain(struct xilinx_pcie *pcie)
 {
-	struct device *dev = pcie->dev;
-	struct device_node *pcie_intc_node;
+	struct device *dev = &pcie->pdev->dev;
+	struct fwnode_handle *pcie_intc_node;
 	int ret;
 
 	/* Setup INTx */
-	pcie_intc_node = of_get_next_child(dev->of_node, NULL);
+	pcie_intc_node = device_get_next_child_node(dev, NULL);
 	if (!pcie_intc_node) {
 		dev_err(dev, "No PCIe Intc node found\n");
 		return -ENODEV;
 	}
 
-	pcie->leg_domain = irq_domain_create_linear(of_fwnode_handle(pcie_intc_node), PCI_NUM_INTX,
+	pcie->leg_domain = irq_domain_create_linear(pcie_intc_node, PCI_NUM_INTX,
 						    &intx_domain_ops, pcie);
-	of_node_put(pcie_intc_node);
+	fwnode_handle_put(pcie_intc_node);
 	if (!pcie->leg_domain) {
 		dev_err(dev, "Failed to get a INTx IRQ domain\n");
 		return -ENODEV;
@@ -499,7 +499,7 @@ static int xilinx_pcie_init_irq_domain(struct xilinx_pcie *pcie)
  */
 static void xilinx_pcie_init_port(struct xilinx_pcie *pcie)
 {
-	struct device *dev = pcie->dev;
+	struct device *dev = &pcie->pdev->dev;
 
 	if (xilinx_pcie_link_up(pcie))
 		dev_info(dev, "PCIe Link is UP\n");
@@ -532,23 +532,23 @@ static void xilinx_pcie_init_port(struct xilinx_pcie *pcie)
  */
 static int xilinx_pcie_parse_dt(struct xilinx_pcie *pcie)
 {
-	struct device *dev = pcie->dev;
-	struct device_node *node = dev->of_node;
-	struct resource regs;
+	struct platform_device *pdev = pcie->pdev;
+	struct device *dev = &pdev->dev;
+	struct resource *regs;
 	int irq;
 	int err;
 
-	err = of_address_to_resource(node, 0, &regs);
-	if (err) {
+	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!regs) {
 		dev_err(dev, "missing \"reg\" property\n");
-		return err;
+		return -ENODEV;
 	}
 
-	pcie->reg_base = devm_pci_remap_cfg_resource(dev, &regs);
+	pcie->reg_base = devm_pci_remap_cfg_resource(dev, regs);
 	if (IS_ERR(pcie->reg_base))
 		return PTR_ERR(pcie->reg_base);
 
-	irq = fwnode_irq_get(dev_fwnode(dev), 0);
+	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
 		return irq;
 
@@ -576,16 +576,13 @@ static int xilinx_pcie_probe(struct platform_device *pdev)
 	struct pci_host_bridge *bridge;
 	int err;
 
-	if (!dev->of_node)
-		return -ENODEV;
-
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*pcie));
 	if (!bridge)
 		return -ENODEV;
 
 	pcie = pci_host_bridge_priv(bridge);
 	mutex_init(&pcie->map_lock);
-	pcie->dev = dev;
+	pcie->pdev = pdev;
 
 	err = xilinx_pcie_parse_dt(pcie);
 	if (err)
