@@ -843,25 +843,16 @@ static int aaci_probe_ac97(struct aaci *aaci)
 	return ret;
 }
 
-static void aaci_free_card(struct snd_card *card)
-{
-	struct aaci *aaci = card->private_data;
-
-	iounmap(aaci->base);
-}
-
 static struct aaci *aaci_init_card(struct amba_device *dev)
 {
 	struct aaci *aaci;
 	struct snd_card *card;
 	int err;
 
-	err = snd_card_new(&dev->dev, SNDRV_DEFAULT_IDX1, SNDRV_DEFAULT_STR1,
+	err = snd_devm_card_new(&dev->dev, SNDRV_DEFAULT_IDX1, SNDRV_DEFAULT_STR1,
 			   THIS_MODULE, sizeof(struct aaci), &card);
 	if (err < 0)
 		return NULL;
-
-	card->private_free = aaci_free_card;
 
 	strscpy(card->driver, DRIVER_NAME, sizeof(card->driver));
 	strscpy(card->shortname, "ARM AC'97 Interface", sizeof(card->shortname));
@@ -958,9 +949,9 @@ static int aaci_probe(struct amba_device *dev,
 		goto out;
 	}
 
-	aaci->base = ioremap(dev->res.start, resource_size(&dev->res));
-	if (!aaci->base) {
-		ret = -ENOMEM;
+	aaci->base = devm_ioremap_resource(&dev->dev, &dev->res);
+	if (IS_ERR(aaci->base)) {
+		ret = PTR_ERR(aaci->base);
 		goto out;
 	}
 
@@ -1022,8 +1013,6 @@ static int aaci_probe(struct amba_device *dev,
 	}
 
  out:
-	if (aaci)
-		snd_card_free(aaci->card);
 	amba_release_regions(dev);
 	return ret;
 }
@@ -1036,7 +1025,6 @@ static void aaci_remove(struct amba_device *dev)
 		struct aaci *aaci = card->private_data;
 		writel(0, aaci->base + AACI_MAINCR);
 
-		snd_card_free(card);
 		amba_release_regions(dev);
 	}
 }
