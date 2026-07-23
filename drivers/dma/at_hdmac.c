@@ -1958,10 +1958,19 @@ static void at_dma_cleanup_channels(struct at_dma *atdma)
 static int __init at_dma_probe(struct platform_device *pdev)
 {
 	struct at_dma		*atdma;
+	void __iomem		*regs;
 	int			irq;
 	int			err;
 	int			i;
 	const struct at_dma_platform_data *plat_dat;
+
+	regs = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(regs))
+		return PTR_ERR(regs);
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
 
 	/* setup platform data for each SoC */
 	dma_cap_set(DMA_MEMCPY, at91sam9rl_config.cap_mask);
@@ -1983,13 +1992,7 @@ static int __init at_dma_probe(struct platform_device *pdev)
 	if (!atdma)
 		return -ENOMEM;
 
-	atdma->regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(atdma->regs))
-		return PTR_ERR(atdma->regs);
-
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return irq;
+	atdma->regs = regs;
 
 	/* discover transaction capabilities */
 	atdma->dma_device.cap_mask = plat_dat->cap_mask;
