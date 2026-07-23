@@ -321,7 +321,7 @@
 #define BGMAC_MAX_TX_RINGS			4
 #define BGMAC_MAX_RX_RINGS			1
 
-#define BGMAC_TX_RING_SLOTS			128
+#define BGMAC_TX_RING_SLOTS			256
 #define BGMAC_RX_RING_SLOTS			512
 
 #define BGMAC_RX_HEADER_LEN			28		/* Last 24 bytes are unused. Well... */
