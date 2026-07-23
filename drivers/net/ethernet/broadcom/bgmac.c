@@ -1101,8 +1101,11 @@ static void bgmac_chip_init(struct bgmac *bgmac)
 	/* Clear any erroneously pending interrupts */
 	bgmac_write(bgmac, BGMAC_INT_STATUS, ~0);
 
-	/* 1 interrupt per received frame */
-	bgmac_write(bgmac, BGMAC_INT_RECV_LAZY, 1 << BGMAC_IRL_FC_SHIFT);
+	/* Batch 16 frames per interrupt with a 1 ms timeout to reduce
+	 * interrupt overhead on slow CPUs.
+	 */
+	bgmac_write(bgmac, BGMAC_INT_RECV_LAZY,
+		    (16 << BGMAC_IRL_FC_SHIFT) | 1000);
 
 	/* Enable 802.3x tx flow control (honor received PAUSE frames) */
 	bgmac_umac_cmd_maskset(bgmac, ~CMD_RX_PAUSE_IGNORE, 0, true);
