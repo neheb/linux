@@ -1644,13 +1644,19 @@ static int atc_terminate_all(struct dma_chan *chan)
 
 	vchan_get_all_descriptors(&atchan->vc, &list);
 
+	/*
+	 * Move all descriptors to desc_terminated so that vchan_synchronize()
+	 * can free them after tasklet_kill() ensures the completion tasklet
+	 * has finished. Freeing here would race with the tasklet which may
+	 * still be invoking callbacks on descriptors it already captured.
+	 */
+	list_splice_tail_init(&list, &atchan->vc.desc_terminated);
+
 	clear_bit(ATC_IS_PAUSED, &atchan->status);
 	/* if channel dedicated to cyclic operations, free it */
 	clear_bit(ATC_IS_CYCLIC, &atchan->status);
 
 	spin_unlock_irqrestore(&atchan->vc.lock, flags);
-
-	vchan_dma_desc_free_list(&atchan->vc, &list);
 
 	return 0;
 }
