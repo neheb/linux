@@ -1038,7 +1038,12 @@ atc_prep_dma_memcpy(struct dma_chan *chan, dma_addr_t dest, dma_addr_t src,
 	return vchan_tx_prep(&atchan->vc, &desc->vd, flags);
 
 err_desc_get:
-	atdma_desc_free(&desc->vd);
+	for (i = 0; i < sg_len; i++) {
+		if (desc->sg[i].lli)
+			dma_pool_free(atdma->lli_pool, desc->sg[i].lli,
+				      desc->sg[i].lli_phys);
+	}
+	kfree(desc);
 	return NULL;
 }
 
@@ -1184,7 +1189,16 @@ atc_prep_dma_memset_sg(struct dma_chan *chan,
 			__func__);
 		return NULL;
 	}
-	*vaddr = value;
+
+	/* Only the first byte of value is to be used according to dmaengine */
+	{
+		char fill_pattern = (char)value;
+
+		*vaddr = (fill_pattern << 24) |
+			 (fill_pattern << 16) |
+			 (fill_pattern << 8) |
+			  fill_pattern;
+	}
 
 	desc = kzalloc_flex(*desc, sg, sg_len, GFP_ATOMIC);
 	if (!desc)
@@ -1225,7 +1239,12 @@ atc_prep_dma_memset_sg(struct dma_chan *chan,
 	return vchan_tx_prep(&atchan->vc, &desc->vd, flags);
 
 err_free_desc:
-	atdma_desc_free(&desc->vd);
+	for (i = 0; i < sg_len; i++) {
+		if (desc->sg[i].lli)
+			dma_pool_free(atdma->lli_pool, desc->sg[i].lli,
+				      desc->sg[i].lli_phys);
+	}
+	kfree(desc);
 err_free_dma_buf:
 	dma_pool_free(atdma->memset_pool, vaddr, paddr);
 	return NULL;
