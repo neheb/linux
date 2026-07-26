@@ -104,18 +104,10 @@
 };
 
 &gmac0 {
+	status = "enabled";
+
 	nvmem-cell-names = "mac-address";
 	nvmem-cells = <&mac_address>;
-};
-
-&gmac1 {
-	status = "disabled";
-};
-&gmac2 {
-	status = "disabled";
-};
-&gmac3 {
-	status = "disabled";
 };
 
 &pwm {

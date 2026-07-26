@@ -69,6 +69,8 @@
 };
 
 &gmac0 {
+	status = "enabled";
+
 	nvmem-cells = <&et0macaddr>;
 	nvmem-cell-names = "mac-address";
 };

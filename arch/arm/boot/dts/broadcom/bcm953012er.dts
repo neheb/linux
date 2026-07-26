@@ -65,6 +65,10 @@
 	status = "okay";
 };
 
+&gmac0 {
+	status = "enabled";
+};
+
 &srab {
 	status = "okay";
 

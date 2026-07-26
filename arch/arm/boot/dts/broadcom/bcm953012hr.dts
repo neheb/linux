@@ -51,6 +51,18 @@
 	};
 };
 
+&gmac0 {
+	status = "enabled";
+};
+
+&gmac1 {
+	status = "enabled";
+};
+
+&gmac2 {
+	status = "enabled";
+};
+
 &nandcs {
 	partition@0 {
 		label = "nboot";
