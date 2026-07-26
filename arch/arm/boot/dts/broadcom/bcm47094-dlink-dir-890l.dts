@@ -120,6 +120,8 @@
 };
 
 &gmac2 {
+	status = "enabled";
+
 	/*
 	 * The NVRAM curiously does not contain a MAC address
 	 * for et2 so since that is the only ethernet interface

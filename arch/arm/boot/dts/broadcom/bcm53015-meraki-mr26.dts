@@ -64,16 +64,6 @@
 	nvmem-cell-names = "mac-address";
 };
 
-&gmac1 {
-	status = "disabled";
-};
-&gmac2 {
-	status = "disabled";
-};
-&gmac3 {
-	status = "disabled";
-};
-
 &nandcs {
 	partitions {
 		compatible = "fixed-partitions";
