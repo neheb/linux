@@ -13,7 +13,6 @@
 #include <linux/interrupt.h>
 #include <linux/genalloc.h>
 #include <linux/of_address.h>
-#include <linux/of_irq.h>
 #include <linux/platform_device.h>
 
 #include <asm/mpc85xx.h>
@@ -402,26 +401,25 @@ static void setup_omt(struct ome *omt)
  * Get the maximum number of PAACT table entries
  * and subwindows supported by PAMU
  */
-static void get_pamu_cap_values(unsigned long pamu_reg_base)
+static void get_pamu_cap_values(void __iomem *pamu_reg_base)
 {
 	u32 pc_val;
 
-	pc_val = in_be32((u32 *)(pamu_reg_base + PAMU_PC3));
+	pc_val = in_be32(pamu_reg_base + PAMU_PC3);
 	/* Maximum number of subwindows per liodn */
 	max_subwindow_count = 1 << (1 + PAMU_PC3_MWCE(pc_val));
 }
 
 /* Setup PAMU registers pointing to PAACT, SPAACT and OMT */
-static int setup_one_pamu(unsigned long pamu_reg_base, unsigned long pamu_reg_size,
+static int setup_one_pamu(void __iomem *pamu_reg_base, unsigned long pamu_reg_size,
 			  phys_addr_t ppaact_phys, phys_addr_t spaact_phys,
 			  phys_addr_t omt_phys)
 {
-	u32 *pc;
-	struct pamu_mmap_regs *pamu_regs;
+	u32 __iomem *pc;
+	struct pamu_mmap_regs __iomem *pamu_regs;
 
-	pc = (u32 *) (pamu_reg_base + PAMU_PC);
-	pamu_regs = (struct pamu_mmap_regs *)
-		(pamu_reg_base + PAMU_MMAP_REGS_BASE);
+	pc = pamu_reg_base + PAMU_PC;
+	pamu_regs = pamu_reg_base + PAMU_MMAP_REGS_BASE;
 
 	/* set up pointers to corenet control blocks */
 
@@ -449,8 +447,7 @@ static int setup_one_pamu(unsigned long pamu_reg_base, unsigned long pamu_reg_si
 	 * & enable PAMU access violation interrupts.
 	 */
 
-	out_be32((u32 *)(pamu_reg_base + PAMU_PICS),
-		 PAMU_ACCESS_VIOLATION_ENABLE);
+	out_be32(pamu_reg_base + PAMU_PICS, PAMU_ACCESS_VIOLATION_ENABLE);
 	out_be32(pc, PAMU_PC_PE | PAMU_PC_OCE | PAMU_PC_SPCC | PAMU_PC_PPCC);
 	return 0;
 }
@@ -749,10 +746,10 @@ static int fsl_pamu_probe(struct platform_device *pdev)
 	struct ccsr_guts __iomem *guts_regs = NULL;
 	u32 pamubypenr, pamu_counter;
 	unsigned long pamu_reg_off;
-	unsigned long pamu_reg_base;
+	void __iomem *pamu_reg_base;
 	struct pamu_isr_data *data = NULL;
 	struct device_node *guts_node;
-	u64 size;
+	u64 size = 0;
 	struct page *p;
 	int ret = 0;
 	int irq;
@@ -773,25 +770,22 @@ static int fsl_pamu_probe(struct platform_device *pdev)
 	if (WARN_ON(probed))
 		return -EBUSY;
 
-	pamu_regs = of_iomap(dev->of_node, 0);
-	if (!pamu_regs) {
-		dev_err(dev, "ioremap of PAMU node failed\n");
-		return -ENOMEM;
-	}
-	of_get_address(dev->of_node, 0, &size, NULL);
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
 
-	irq = irq_of_parse_and_map(dev->of_node, 0);
-	if (!irq) {
-		dev_warn(dev, "no interrupts listed in PAMU node\n");
-		goto error;
-	}
+	pamu_regs = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(pamu_regs))
+		return PTR_ERR(pamu_regs);
 
 	data = kzalloc_obj(*data);
 	if (!data) {
 		ret = -ENOMEM;
 		goto error;
 	}
+
 	data->pamu_reg_base = pamu_regs;
+	of_get_address(dev->of_node, 0, &size, NULL);
 	data->count = size / PAMU_OFFSET;
 
 	/* The ISR needs access to the regs, so we won't iounmap them */
@@ -817,7 +811,7 @@ static int fsl_pamu_probe(struct platform_device *pdev)
 	}
 
 	/* read in the PAMU capability registers */
-	get_pamu_cap_values((unsigned long)pamu_regs);
+	get_pamu_cap_values(pamu_regs);
 	/*
 	 * To simplify the allocation of a coherency domain, we allocate the
 	 * PAACT and the OMT in the same memory buffer.  Unfortunately, this
@@ -882,7 +876,7 @@ static int fsl_pamu_probe(struct platform_device *pdev)
 	for (pamu_reg_off = 0, pamu_counter = 0x80000000; pamu_reg_off < size;
 	     pamu_reg_off += PAMU_OFFSET, pamu_counter >>= 1) {
 
-		pamu_reg_base = (unsigned long)pamu_regs + pamu_reg_off;
+		pamu_reg_base = pamu_regs + pamu_reg_off;
 		setup_one_pamu(pamu_reg_base, pamu_reg_off, ppaact_phys,
 			       spaact_phys, omt_phys);
 		/* Disable PAMU bypass for this PAMU */
@@ -909,9 +903,6 @@ error:
 		free_irq(irq, data);
 
 	kfree_sensitive(data);
-
-	if (pamu_regs)
-		iounmap(pamu_regs);
 
 	if (guts_regs)
 		iounmap(guts_regs);
