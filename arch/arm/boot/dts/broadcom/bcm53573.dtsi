@@ -128,8 +128,10 @@
 		pcie0: pcie@2000 {
 			reg = <0x00002000 0x1000>;
 
+			device_type = "pci";
 			#address-cells = <3>;
 			#size-cells = <2>;
+			ranges;
 		};
 
 		usb2: usb2@4000 {
