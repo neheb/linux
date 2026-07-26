@@ -102,7 +102,12 @@ static int udc_plat_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct resource *res;
 	struct udc *udc;
+	int irq;
 	int ret;
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
 
 	udc = devm_kzalloc(dev, sizeof(*udc), GFP_KERNEL);
 	if (!udc)
@@ -130,11 +135,7 @@ static int udc_plat_probe(struct platform_device *pdev)
 
 	udc->phys_addr = (unsigned long)res->start;
 
-	udc->irq = irq_of_parse_and_map(dev->of_node, 0);
-	if (udc->irq <= 0) {
-		dev_err(dev, "Can't parse and map interrupt\n");
-		return -EINVAL;
-	}
+	udc->irq = irq;
 
 	udc->udc_phy = devm_of_phy_get_by_index(dev, dev->of_node, 0);
 	if (IS_ERR(udc->udc_phy)) {
