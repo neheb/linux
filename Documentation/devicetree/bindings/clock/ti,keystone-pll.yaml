@@ -1,0 +1,176 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/ti,keystone-pll.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments Keystone PLL Clocks
+
+maintainers:
+  - Murali Karicheri <m-karicheri2@ti.com>
+
+description: |
+  Binding for Keystone PLLs. The main PLL IP typically has a multiplier,
+  a divider and a post divider. The additional PLL IPs like ARMPLL, DDRPLL
+  and PAPLL are controlled by the memory mapped register where as the Main
+  PLL is controlled by a PLL controller registers along with memory mapped
+  registers.
+
+  This binding uses the common clock binding[1].
+
+  [1] Documentation/devicetree/bindings/clock/clock-bindings.txt
+
+  There are four compatible strings supported:
+
+  - "ti,keystone,main-pll-clock": Main PLL with multiplier, pre-divider
+    and post-divider.
+  - "ti,keystone,pll-clock": Additional PLLs (ARMPLL, DDRPLL, PAPLL).
+  - "ti,keystone,pll-mux-clock": PLL mux for selecting between PLL output
+    and bypass clock.
+  - "ti,keystone,pll-divider-clock": PLL output divider.
+
+properties:
+  compatible:
+    enum:
+      - ti,keystone,main-pll-clock
+      - ti,keystone,pll-clock
+      - ti,keystone,pll-mux-clock
+      - ti,keystone,pll-divider-clock
+
+  "#clock-cells":
+    const: 0
+
+  clocks:
+    description:
+      For main-pll-clock and pll-clock, a single parent clock phandle.
+      For pll-mux-clock, two parent clock phandles (PLL output and bypass).
+      For pll-divider-clock, a single parent clock phandle.
+
+  clock-output-names:
+    description: From common clock binding to override the default output
+      clock name.
+
+  reg:
+    description: |
+      Register base and size for the clock control registers.
+      For main-pll-clock: control, multiplier and post-divider registers.
+      For pll-clock: control register.
+      For pll-mux-clock: mux register.
+      For pll-divider-clock: divider register.
+    minItems: 1
+    maxItems: 3
+
+  reg-names:
+    description: |
+      Names for the registers. Required for main-pll-clock and pll-clock
+      to identify "control", "multiplier" and "post-divider" registers.
+    minItems: 1
+    maxItems: 3
+
+  fixed-postdiv:
+    description: Fixed post divider value. If absent, use clkod register
+      bits for postdiv. Only applicable to main-pll-clock.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  bit-shift:
+    description: Number of bits to shift the bit-mask. Only applicable to
+      pll-mux-clock and pll-divider-clock.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  bit-mask:
+    description: Arbitrary bitmask for programming the mux or divider.
+      Only applicable to pll-mux-clock and pll-divider-clock.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ti,keystone,main-pll-clock
+    then:
+      required:
+        - reg
+        - reg-names
+        - clocks
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ti,keystone,pll-clock
+    then:
+      required:
+        - reg
+        - clocks
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ti,keystone,pll-mux-clock
+    then:
+      required:
+        - reg
+        - clocks
+        - bit-shift
+        - bit-mask
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ti,keystone,pll-divider-clock
+    then:
+      required:
+        - reg
+        - clocks
+        - bit-shift
+        - bit-mask
+
+additionalProperties: false
+
+examples:
+  - |
+    clocks {
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        mainpllclk: mainpllclk@2310110 {
+            #clock-cells = <0>;
+            compatible = "ti,keystone,main-pll-clock";
+            clocks = <&refclksys>;
+            reg = <0x02620350 4>, <0x02310110 4>, <0x02310108 4>;
+            reg-names = "control", "multiplier", "post-divider";
+            fixed-postdiv = <2>;
+        };
+
+        papllclk: papllclk@2620358 {
+            #clock-cells = <0>;
+            compatible = "ti,keystone,pll-clock";
+            clocks = <&refclkpass>;
+            clock-output-names = "pa-pll-clk";
+            reg = <0x02620358 4>;
+            reg-names = "control";
+        };
+
+        mainmuxclk: mainmuxclk@2310108 {
+            #clock-cells = <0>;
+            compatible = "ti,keystone,pll-mux-clock";
+            clocks = <&mainpllclk>, <&refclksys>;
+            reg = <0x02310108 4>;
+            bit-shift = <23>;
+            bit-mask = <1>;
+            clock-output-names = "mainmuxclk";
+        };
+
+        gemtraceclk: gemtraceclk@2310120 {
+            #clock-cells = <0>;
+            compatible = "ti,keystone,pll-divider-clock";
+            clocks = <&mainmuxclk>;
+            reg = <0x02310120 4>;
+            bit-shift = <0>;
+            bit-mask = <8>;
+            clock-output-names = "gemtraceclk";
+        };
+    };
