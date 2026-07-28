@@ -147,6 +147,15 @@
 #define SCORPION_ITLB_MISS				0x12021
 
 /*
+ * The perf_map and cache_map arrays use range initializers to fill all
+ * entries with HW_OP_UNSUPPORTED / CACHE_OP_UNSUPPORTED, then override
+ * specific entries with supported event codes. This is valid C99 but
+ * triggers Clang's -Winitializer-overrides.
+ */
+__diag_push();
+__diag_ignore_all("-Winitializer-overrides", "");
+
+/*
  * Cortex-A8 HW events mapping
  *
  * The hardware events that we support. We do support cache operations but
@@ -529,6 +538,8 @@ static const unsigned scorpion_perf_cache_map[PERF_COUNT_HW_CACHE_MAX]
 	[C(BPU)][C(OP_WRITE)][C(RESULT_ACCESS)] = ARMV7_PERFCTR_PC_BRANCH_PRED,
 	[C(BPU)][C(OP_WRITE)][C(RESULT_MISS)] = ARMV7_PERFCTR_PC_BRANCH_MIS_PRED,
 };
+
+__diag_pop();
 
 PMU_FORMAT_ATTR(event, "config:0-7");
 
