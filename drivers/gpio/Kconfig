@@ -1876,7 +1876,7 @@ config GPIO_BT8XX
 
 config GPIO_MERRIFIELD
 	tristate "Intel Merrifield GPIO support"
-	depends on X86_INTEL_MID
+	depends on X86_INTEL_MID || COMPILE_TEST
 	select GPIO_TANGIER
 	help
 	  Say Y here to support Intel Merrifield GPIO.
