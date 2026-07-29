@@ -427,7 +427,6 @@ static void brcms_c_detach_mfree(struct brcms_c_info *wlc)
 	kfree(wlc->pub);
 	kfree(wlc->default_bss);
 	kfree(wlc->protection);
-	kfree(wlc->stf);
 	kfree(wlc->corestate);
 	kfree(wlc->hw);
 	if (wlc->beacon)
@@ -481,12 +480,6 @@ brcms_c_attach_malloc(uint unit, uint *err, uint devid)
 	wlc->protection = kzalloc_obj(*wlc->protection, GFP_ATOMIC);
 	if (wlc->protection == NULL) {
 		*err = 1016;
-		goto fail;
-	}
-
-	wlc->stf = kzalloc_obj(*wlc->stf, GFP_ATOMIC);
-	if (wlc->stf == NULL) {
-		*err = 1017;
 		goto fail;
 	}
 
@@ -2223,7 +2216,7 @@ void brcms_b_txant_set(struct brcms_hardware *wlc_hw, u16 phytxant)
 
 u16 brcms_b_get_txant(struct brcms_hardware *wlc_hw)
 {
-	return (u16) wlc_hw->wlc->stf->txant;
+	return (u16) wlc_hw->wlc->stf.txant;
 }
 
 void brcms_b_antsel_type_set(struct brcms_hardware *wlc_hw, u8 antsel_type)
@@ -3303,8 +3296,8 @@ static void brcms_c_set_phy_chanspec(struct brcms_c_info *wlc,
 	/* Set the chanspec and power limits for this locale */
 	brcms_c_channel_set_chanspec(wlc->cmi, chanspec, BRCMS_TXPWR_MAX);
 
-	if (wlc->stf->ss_algosel_auto)
-		brcms_c_stf_ss_algo_channel_get(wlc, &wlc->stf->ss_algo_channel,
+	if (wlc->stf.ss_algosel_auto)
+		brcms_c_stf_ss_algo_channel_get(wlc, &wlc->stf.ss_algo_channel,
 					    chanspec);
 
 	brcms_c_stf_ss_update(wlc, wlc->band);
@@ -3317,7 +3310,7 @@ brcms_default_rateset(struct brcms_c_info *wlc, struct brcms_c_rateset *rs)
 		wlc->band->bandtype, false, BRCMS_RATE_MASK_FULL,
 		(bool) (wlc->pub->_n_enab & SUPPORT_11N),
 		brcms_chspec_bw(wlc->default_bss->chanspec),
-		wlc->stf->txstreams);
+		wlc->stf.txstreams);
 }
 
 /* derive wlc->band->basic_rate[] table from 'rateset' */
@@ -3579,7 +3572,7 @@ static void brcms_c_set_ratetable(struct brcms_c_info *wlc)
 	rs_dflt = brcms_c_rateset_get_hwrs(wlc);
 
 	brcms_c_rateset_copy(rs_dflt, &rs);
-	brcms_c_rateset_mcs_upd(&rs, wlc->stf->txstreams);
+	brcms_c_rateset_mcs_upd(&rs, wlc->stf.txstreams);
 
 	/* walk the phy rate table and update SHM basic rate lookup table */
 	for (i = 0; i < rs.count; i++) {
@@ -3857,14 +3850,14 @@ static void brcms_c_set_chanspec(struct brcms_c_info *wlc, u16 chanspec)
 /*
  * This function changes the phytxctl for beacon based on current
  * beacon ratespec AND txant setting as per this table:
- *  ratespec     CCK		ant = wlc->stf->txant
+ *  ratespec     CCK		ant = wlc->stf.txant
  *		OFDM		ant = 3
  */
 void brcms_c_beacon_phytxctl_txant_upd(struct brcms_c_info *wlc,
 				       u32 bcn_rspec)
 {
 	u16 phyctl;
-	u16 phytxant = wlc->stf->phytxant;
+	u16 phytxant = wlc->stf.phytxant;
 	u16 mask = PHY_TXC_ANT_MASK;
 
 	/* for non-siso rates or default setting, use the available chains */
@@ -3940,7 +3933,7 @@ static void brcms_c_ht_update_sgi_rx(struct brcms_c_info *wlc, int val)
 
 static void brcms_c_ht_update_ldpc(struct brcms_c_info *wlc, s8 val)
 {
-	wlc->stf->ldpc = val;
+	wlc->stf.ldpc = val;
 
 	if (wlc->pub->up) {
 		brcms_c_update_beacon(wlc);
@@ -4229,8 +4222,8 @@ static void brcms_c_info_init(struct brcms_c_info *wlc, int unit)
 	/* 802.11g draft 4.0 NonERP elt advertisement */
 	wlc->include_legacy_erp = true;
 
-	wlc->stf->ant_rx_ovr = ANT_RX_DIV_DEF;
-	wlc->stf->txant = ANT_TX_DEF;
+	wlc->stf.ant_rx_ovr = ANT_RX_DIV_DEF;
+	wlc->stf.txant = ANT_TX_DEF;
 
 	wlc->prb_resp_timeout = BRCMS_PRB_RESP_TIMEOUT;
 
@@ -4624,11 +4617,11 @@ static bool brcms_c_attach_stf_ant_init(struct brcms_c_info *wlc)
 
 	/* reset the defaults if we have a single antenna */
 	if (aa == 1) {
-		wlc->stf->ant_rx_ovr = ANT_RX_DIV_FORCE_0;
-		wlc->stf->txant = ANT_TX_FORCE_0;
+		wlc->stf.ant_rx_ovr = ANT_RX_DIV_FORCE_0;
+		wlc->stf.txant = ANT_TX_FORCE_0;
 	} else if (aa == 2) {
-		wlc->stf->ant_rx_ovr = ANT_RX_DIV_FORCE_1;
-		wlc->stf->txant = ANT_TX_FORCE_1;
+		wlc->stf.ant_rx_ovr = ANT_RX_DIV_FORCE_1;
+		wlc->stf.txant = ANT_TX_FORCE_1;
 	} else {
 	}
 
@@ -4667,7 +4660,7 @@ static void brcms_c_bss_default_init(struct brcms_c_info *wlc)
 	brcms_c_rateset_default(&bi->rateset, NULL, band->phytype,
 		band->bandtype, false, BRCMS_RATE_MASK_FULL,
 		(bool) (wlc->pub->_n_enab & SUPPORT_11N),
-		brcms_chspec_bw(chanspec), wlc->stf->txstreams);
+		brcms_chspec_bw(chanspec), wlc->stf.txstreams);
 
 	if (wlc->pub->_n_enab & SUPPORT_11N)
 		bi->flags |= BRCMS_BSS_HT;
@@ -4994,7 +4987,7 @@ int brcms_c_up(struct brcms_c_info *wlc)
 	/* ensure antenna config is up to date */
 	brcms_c_stf_phy_txant_upd(wlc);
 	/* ensure LDPC config is in sync */
-	brcms_c_ht_update_ldpc(wlc, wlc->stf->ldpc);
+	brcms_c_ht_update_ldpc(wlc, wlc->stf.ldpc);
 
 	return 0;
 }
@@ -5216,7 +5209,7 @@ int brcms_c_set_nmode(struct brcms_c_info *wlc)
 	uint i;
 	s32 nmode = AUTO;
 
-	if (wlc->stf->txstreams == WL_11N_3x3)
+	if (wlc->stf.txstreams == WL_11N_3x3)
 		nmode = WL_11N_3x3;
 	else
 		nmode = WL_11N_2x2;
@@ -5230,7 +5223,7 @@ int brcms_c_set_nmode(struct brcms_c_info *wlc)
 	wlc->default_bss->flags |= BRCMS_BSS_HT;
 	/* add the mcs rates to the default and hw ratesets */
 	brcms_c_rateset_mcs_build(&wlc->default_bss->rateset,
-			      wlc->stf->txstreams);
+			      wlc->stf.txstreams);
 	for (i = 0; i < wlc->pub->_nbands; i++)
 		memcpy(wlc->bandstate[i].hw_rateset.mcs,
 		       wlc->default_bss->rateset.mcs, MCSSET_LEN);
@@ -5256,7 +5249,7 @@ brcms_c_set_internal_rateset(struct brcms_c_info *wlc,
 	memcpy(&new, &rs, sizeof(struct brcms_c_rateset));
 	if (brcms_c_rate_hwrs_filter_sort_validate
 	    (&new, &wlc->bandstate[bandunit].hw_rateset, true,
-	     wlc->stf->txstreams))
+	     wlc->stf.txstreams))
 		goto good;
 
 	/* try the other band */
@@ -5267,7 +5260,7 @@ brcms_c_set_internal_rateset(struct brcms_c_info *wlc,
 						       &wlc->
 						       bandstate[bandunit].
 						       hw_rateset, true,
-						       wlc->stf->txstreams))
+						       wlc->stf.txstreams))
 			goto good;
 	}
 
@@ -5822,7 +5815,7 @@ mac80211_wlc_set_nrate(struct brcms_c_info *wlc, struct brcms_band *cur_band,
 		goto done;
 	}
 	/* make sure multiple antennae are available for non-siso rates */
-	if ((stf != PHY_TXC1_MODE_SISO) && (wlc->stf->txstreams == 1)) {
+	if ((stf != PHY_TXC1_MODE_SISO) && (wlc->stf.txstreams == 1)) {
 		brcms_err(core, "wl%d: %s: SISO antenna but !SISO "
 			  "request\n", wlc->pub->unit, __func__);
 		goto done;
@@ -6210,7 +6203,7 @@ brcms_c_d11hdrs_mac80211(struct brcms_c_info *wlc, struct ieee80211_hw *hw,
 		}
 	}
 
-	phyctl1_stf = wlc->stf->ss_opmode;
+	phyctl1_stf = wlc->stf.ss_opmode;
 
 	if (wlc->pub->_n_enab & SUPPORT_11N) {
 		for (k = 0; k < hw->max_rates; k++) {
@@ -6845,7 +6838,7 @@ brcms_c_rspec_to_rts_rspec(struct brcms_c_info *wlc, u32 rspec,
 		/* pick siso/cdd as default for ofdm */
 		if (is_ofdm_rate(rts_rspec)) {
 			rts_rspec &= ~RSPEC_STF_MASK;
-			rts_rspec |= (wlc->stf->ss_opmode << RSPEC_STF_SHIFT);
+			rts_rspec |= (wlc->stf.ss_opmode << RSPEC_STF_SHIFT);
 		}
 	}
 	return rts_rspec;
@@ -7115,7 +7108,7 @@ brcms_c_mod_prb_rsp_rate_table(struct brcms_c_info *wlc, uint frame_len)
 	rs_dflt = brcms_c_rateset_get_hwrs(wlc);
 
 	brcms_c_rateset_copy(rs_dflt, &rs);
-	brcms_c_rateset_mcs_upd(&rs, wlc->stf->txstreams);
+	brcms_c_rateset_mcs_upd(&rs, wlc->stf.txstreams);
 
 	/*
 	 * walk the phy rate table and update MAC core SHM
@@ -7864,12 +7857,12 @@ brcms_c_attach(struct brcms_info *wl, struct bcma_device *core, uint unit,
 	brcms_c_stf_phy_chain_calc(wlc);
 
 	/* txchain 1: txant 0, txchain 2: txant 1 */
-	if (BRCMS_ISNPHY(wlc->band) && (wlc->stf->txstreams == 1))
-		wlc->stf->txant = wlc->stf->hw_txchain - 1;
+	if (BRCMS_ISNPHY(wlc->band) && (wlc->stf.txstreams == 1))
+		wlc->stf.txant = wlc->stf.hw_txchain - 1;
 
 	/* push to BMAC driver */
-	wlc_phy_stf_chain_init(wlc->band->pi, wlc->stf->hw_txchain,
-			       wlc->stf->hw_rxchain);
+	wlc_phy_stf_chain_init(wlc->band->pi, wlc->stf.hw_txchain,
+			       wlc->stf.hw_rxchain);
 
 	/* pull up some info resulting from the low attach */
 	for (i = 0; i < NFIFO; i++)
@@ -7918,7 +7911,7 @@ brcms_c_attach(struct brcms_info *wl, struct bcma_device *core, uint unit,
 
 	/*
 	 * update antenna config due to
-	 * wlc->stf->txant/txchain/ant_rx_ovr change
+	 * wlc->stf.txant/txchain/ant_rx_ovr change
 	 */
 	brcms_c_stf_phy_txant_upd(wlc);
 
