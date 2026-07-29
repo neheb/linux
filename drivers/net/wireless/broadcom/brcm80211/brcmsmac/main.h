@@ -186,8 +186,8 @@ struct brcms_protection {
  * txant: userTx antenna setting.
  * phytxant: phyTx antenna setting in txheader.
  * ss_opmode: singlestream Operational mode, 0:siso; 1:cdd.
- * ss_algosel_auto: if true, use wlc->stf->ss_algo_channel;
- *			else use wlc->band->stf->ss_mode_band.
+ * ss_algosel_auto: if true, use wlc->stf.ss_algo_channel;
+ *			else use wlc->band->stf.ss_mode_band.
  * ss_algo_channel: ss based on per-channel algo: 0: SISO, 1: CDD 2: STBC.
  * rxchain_restore_delay: delay time to restore default rxchain.
  * ldpc: AUTO/ON/OFF ldpc cap supported.
@@ -214,10 +214,10 @@ struct brcms_stf {
 };
 
 #define BRCMS_STF_SS_STBC_TX(wlc, scb) \
-	(((wlc)->stf->txstreams > 1) && (((wlc)->band->band_stf_stbc_tx == ON) \
+	(((wlc)->stf.txstreams > 1) && (((wlc)->band->band_stf_stbc_tx == ON) \
 	 || (((scb)->flags & SCB_STBCCAP) && \
 	     (wlc)->band->band_stf_stbc_tx == AUTO && \
-	     isset(&((wlc)->stf->ss_algo_channel), PHY_TXC1_MODE_STBC))))
+	     isset(&((wlc)->stf.ss_algo_channel), PHY_TXC1_MODE_STBC))))
 
 #define BRCMS_STBC_CAP_PHY(wlc) (BRCMS_ISNPHY(wlc->band) && \
 				 NREV_GE(wlc->band->phyrev, 3))
@@ -552,7 +552,7 @@ struct brcms_c_info {
 	struct brcms_protection *protection;
 	s8 PLCPHdr_override;
 
-	struct brcms_stf *stf;
+	struct brcms_stf stf;
 
 	u32 bcn_rspec;
 
