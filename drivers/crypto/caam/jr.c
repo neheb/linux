@@ -173,6 +173,7 @@ static int caam_jr_shutdown(struct device *dev)
 
 	ret = caam_reset_hw_jr(dev);
 
+	free_irq(jrp->irq, jrp);
 	tasklet_kill(&jrp->irqtask);
 
 	return ret;
@@ -218,8 +219,7 @@ static void caam_jr_remove(struct platform_device *pdev)
 /* Main per-ring interrupt handler */
 static irqreturn_t caam_jr_interrupt(int irq, void *st_dev)
 {
-	struct device *dev = st_dev;
-	struct caam_drv_private_jr *jrp = dev_get_drvdata(dev);
+	struct caam_drv_private_jr *jrp = st_dev;
 	u32 irqstate;
 
 	/*
@@ -236,7 +236,7 @@ static irqreturn_t caam_jr_interrupt(int irq, void *st_dev)
 	 * restart the queue (and fix code).
 	 */
 	if (irqstate & JRINT_JR_ERROR) {
-		dev_err(dev, "job ring error: irqstate: %08x\n", irqstate);
+		dev_err(jrp->dev, "job ring error: irqstate: %08x\n", irqstate);
 		BUG();
 	}
 
@@ -563,8 +563,8 @@ static int caam_jr_init(struct device *dev)
 		     (unsigned long)&jrp->tasklet_params);
 
 	/* Connect job ring interrupt handler. */
-	error = devm_request_irq(dev, jrp->irq, caam_jr_interrupt, IRQF_SHARED,
-				 dev_name(dev), dev);
+	error = request_irq(jrp->irq, caam_jr_interrupt, IRQF_SHARED,
+				 dev_name(dev), jrp);
 	if (error) {
 		dev_err(dev, "can't connect JobR %d interrupt (%d)\n",
 			jrp->ridx, jrp->irq);
@@ -653,12 +653,12 @@ static int caam_jr_probe(struct platform_device *pdev)
 	/* Identify the interrupt */
 	jrpriv->irq = irq;
 
+	jrpriv->dev = jrdev;
+
 	/* Now do the platform independent part */
 	error = caam_jr_init(jrdev); /* now turn on hardware */
 	if (error)
 		return error;
-
-	jrpriv->dev = jrdev;
 	spin_lock(&driver_data.jr_alloc_lock);
 	list_add_tail(&jrpriv->list_node, &driver_data.jr_list);
 	spin_unlock(&driver_data.jr_alloc_lock);
