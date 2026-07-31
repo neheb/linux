@@ -393,6 +393,65 @@ void edac_mc_free(struct mem_ctl_info *mci)
 }
 EXPORT_SYMBOL_GPL(edac_mc_free);
 
+static void devm_edac_mc_release(void *data)
+{
+	edac_mc_free(data);
+}
+
+/**
+ * devm_edac_mc_alloc - Allocate and partially fill a struct &mem_ctl_info.
+ *
+ * @dev:	Device to tie the lifetime to
+ * @mc_num:	Memory controller number
+ * @n_layers:	Number of MC hierarchy layers
+ * @layers:	Describes each layer as seen by the Memory Controller
+ * @sz_pvt:	Size of private storage needed
+ *
+ * This is the devres-managed version of edac_mc_alloc().  The &mem_ctl_info
+ * is automatically freed when @dev is released, or earlier with
+ * devm_edac_mc_free().
+ *
+ * Returns:
+ *	On success, return a pointer to struct mem_ctl_info;
+ *	%NULL otherwise
+ */
+struct mem_ctl_info *devm_edac_mc_alloc(struct device *dev,
+					unsigned int mc_num,
+					unsigned int n_layers,
+					struct edac_mc_layer *layers,
+					unsigned int sz_pvt)
+{
+	struct mem_ctl_info *mci;
+	int ret;
+
+	mci = edac_mc_alloc(mc_num, n_layers, layers, sz_pvt);
+	if (!mci)
+		return NULL;
+
+	ret = devm_add_action_or_reset(dev, devm_edac_mc_release, mci);
+	if (ret)
+		return NULL;
+
+	return mci;
+}
+EXPORT_SYMBOL_GPL(devm_edac_mc_alloc);
+
+/**
+ * devm_edac_mc_free - Free a devres-managed &mem_ctl_info.
+ *
+ * @dev:	Device the &mem_ctl_info was allocated for
+ * @mci:	Pointer to the &mem_ctl_info to free
+ *
+ * Frees an &mem_ctl_info allocated by devm_edac_mc_alloc() before the
+ * device is released.  The controller must be removed from the EDAC MC
+ * list (with edac_mc_del_mc()) beforehand.
+ */
+void devm_edac_mc_free(struct device *dev, struct mem_ctl_info *mci)
+{
+	devm_release_action(dev, devm_edac_mc_release, mci);
+}
+EXPORT_SYMBOL_GPL(devm_edac_mc_free);
+
 bool edac_has_mcs(void)
 {
 	bool ret;

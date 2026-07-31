@@ -157,6 +157,41 @@ extern int edac_mc_add_mc_with_groups(struct mem_ctl_info *mci,
 extern void edac_mc_free(struct mem_ctl_info *mci);
 
 /**
+ * devm_edac_mc_alloc() - Allocate and partially fill a struct &mem_ctl_info.
+ *
+ * @dev:	Device to tie the lifetime to
+ * @mc_num:	Memory controller number
+ * @n_layers:	Number of MC hierarchy layers
+ * @layers:	Describes each layer as seen by the Memory Controller
+ * @sz_pvt:	size of private storage needed
+ *
+ * This is the devres-managed version of edac_mc_alloc().  The &mem_ctl_info
+ * is automatically freed when @dev is released, or earlier with
+ * devm_edac_mc_free().
+ *
+ * Returns:
+ *	Pointer to struct mem_ctl_info on success.
+ *	%NULL on failure.
+ */
+extern struct mem_ctl_info *devm_edac_mc_alloc(struct device *dev,
+					       unsigned int mc_num,
+					       unsigned int n_layers,
+					       struct edac_mc_layer *layers,
+					       unsigned int sz_pvt);
+
+/**
+ * devm_edac_mc_free() -  Frees a previously allocated @mci structure
+ *
+ * @dev: Device the &mem_ctl_info was allocated for
+ * @mci: pointer to a struct mem_ctl_info structure
+ *
+ * Frees a &mem_ctl_info allocated by devm_edac_mc_alloc() before @dev is
+ * released.  The controller must be removed from the EDAC MC list (with
+ * edac_mc_del_mc()) beforehand.
+ */
+extern void devm_edac_mc_free(struct device *dev, struct mem_ctl_info *mci);
+
+/**
  * edac_has_mcs() - Check if any MCs have been allocated.
  *
  * Returns:
