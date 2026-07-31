@@ -509,8 +509,8 @@ int fsl_mc_err_probe(struct platform_device *op)
 	layers[1].type = EDAC_MC_LAYER_CHANNEL;
 	layers[1].size = 1;
 	layers[1].is_virt_csrow = false;
-	mci = edac_mc_alloc(edac_mc_idx, ARRAY_SIZE(layers), layers,
-			    sizeof(*pdata));
+	mci = devm_edac_mc_alloc(&op->dev, edac_mc_idx, ARRAY_SIZE(layers), layers,
+				 sizeof(*pdata));
 	if (!mci)
 		return -ENOMEM;
 
@@ -533,10 +533,8 @@ int fsl_mc_err_probe(struct platform_device *op)
 
 	if (pdata->flag == TYPE_IMX9) {
 		pdata->inject_vbase = devm_platform_ioremap_resource_byname(op, "inject");
-		if (IS_ERR(pdata->inject_vbase)) {
-			res = PTR_ERR(pdata->inject_vbase);
-			goto err;
-		}
+		if (IS_ERR(pdata->inject_vbase))
+			return PTR_ERR(pdata->inject_vbase);
 	}
 
 	if (pdata->flag == TYPE_IMX9) {
@@ -550,8 +548,7 @@ int fsl_mc_err_probe(struct platform_device *op)
 	if ((sdram_ctl & ecc_en_mask) != ecc_en_mask) {
 		/* no ECC */
 		pr_warn("%s: No ECC DIMMs discovered\n", __func__);
-		res = -ENODEV;
-		goto err;
+		return -ENODEV;
 	}
 
 	edac_dbg(3, "init mci\n");
@@ -622,7 +619,6 @@ int fsl_mc_err_probe(struct platform_device *op)
 err2:
 	edac_mc_del_mc(&op->dev);
 err:
-	edac_mc_free(mci);
 	return res;
 }
 
@@ -643,5 +639,4 @@ void fsl_mc_err_remove(struct platform_device *op)
 
 
 	edac_mc_del_mc(&op->dev);
-	edac_mc_free(mci);
 }
