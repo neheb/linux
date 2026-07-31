@@ -124,7 +124,7 @@ do {									\
  */
 struct mem_ctl_info *edac_mc_alloc(unsigned int mc_num,
 				   unsigned int n_layers,
-				   struct edac_mc_layer *layers,
+				   const struct edac_mc_layer *layers,
 				   unsigned int sz_pvt);
 
 /**
