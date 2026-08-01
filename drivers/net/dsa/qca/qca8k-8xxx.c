@@ -625,7 +625,7 @@ qca8k_phy_eth_command(struct qca8k_priv *priv, bool read, int phy,
 {
 	struct sk_buff *write_skb, *clear_skb, *read_skb;
 	struct qca8k_mgmt_eth_data *mgmt_eth_data;
-	u32 write_val, clear_val = 0, val;
+	u32 write_val, clear_val = QCA8K_MDIO_MASTER_EN, val;
 	struct net_device *mgmt_conduit;
 	int ret, ret1;
 	bool ack;
@@ -679,7 +679,7 @@ qca8k_phy_eth_command(struct qca8k_priv *priv, bool read, int phy,
 	 * 1. Send mdio master packet
 	 * 2. Busy Wait for mdio master command
 	 * 3. Get the data if we are reading
-	 * 4. Reset the mdio master (even with error)
+	 * 4. Clear the command bits while keeping the mdio master selected
 	 */
 	mutex_lock(&mgmt_eth_data->mutex);
 
@@ -2121,6 +2121,16 @@ qca8k_sw_probe(struct mdio_device *mdiodev)
 	return dsa_register_switch(priv->ds);
 }
 
+static void qca8k_mdio_master_disable(struct qca8k_priv *priv)
+{
+	int ret;
+
+	ret = regmap_clear_bits(priv->regmap, QCA8K_MDIO_MASTER_CTRL,
+			QCA8K_MDIO_MASTER_EN);
+	if (ret)
+		dev_warn(priv->dev, "failed to disable mdio master: %d\n", ret);
+}
+
 static void
 qca8k_sw_remove(struct mdio_device *mdiodev)
 {
@@ -2134,6 +2144,7 @@ qca8k_sw_remove(struct mdio_device *mdiodev)
 		qca8k_port_set_status(priv, i, 0);
 
 	dsa_unregister_switch(priv->ds);
+	qca8k_mdio_master_disable(priv);
 }
 
 static void qca8k_sw_shutdown(struct mdio_device *mdiodev)
@@ -2144,6 +2155,7 @@ static void qca8k_sw_shutdown(struct mdio_device *mdiodev)
 		return;
 
 	dsa_switch_shutdown(priv->ds);
+	qca8k_mdio_master_disable(priv);
 
 	dev_set_drvdata(&mdiodev->dev, NULL);
 }
