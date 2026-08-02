@@ -18,6 +18,7 @@
 #include <linux/gpio/driver.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
+#include <linux/interrupt.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
@@ -1980,13 +1981,13 @@ static int hp_event(struct snd_soc_dapm_widget *w,
 				    WM8962_HP1L_ENA_DLY | WM8962_HP1R_ENA_DLY |
 				    WM8962_HP1L_ENA_OUTP |
 				    WM8962_HP1R_ENA_OUTP, 0);
-				    
+
 		break;
 
 	default:
 		WARN(1, "Invalid event %d\n", event);
 		return -EINVAL;
-	
+
 	}
 
 	return 0;

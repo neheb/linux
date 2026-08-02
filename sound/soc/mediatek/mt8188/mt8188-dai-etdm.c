@@ -9,6 +9,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <sound/pcm_params.h>

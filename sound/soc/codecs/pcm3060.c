@@ -5,6 +5,7 @@
 // Copyright (C) 2018 Kirill Marinushkin <k.marinushkin@gmail.com>
 
 #include <linux/module.h>
+#include <linux/of.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <sound/tlv.h>

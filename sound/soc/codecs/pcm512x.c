@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/clk.h>
 #include <linux/kernel.h>
+#include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>

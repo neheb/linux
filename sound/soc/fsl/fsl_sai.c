@@ -8,6 +8,7 @@
 #include <linux/delay.h>
 #include <linux/dmaengine.h>
 #include <linux/firmware/imx/sm.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>

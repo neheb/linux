@@ -5,6 +5,7 @@
 // Copyright (c) 2018 Socionext Inc.
 
 #include <linux/module.h>
+#include <linux/of.h>
 
 #include "aio.h"
 

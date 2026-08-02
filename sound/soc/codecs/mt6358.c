@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
+#include <linux/of.h>
 #include <linux/sched.h>
 #include <linux/mfd/mt6397/core.h>
 #include <linux/regulator/consumer.h>

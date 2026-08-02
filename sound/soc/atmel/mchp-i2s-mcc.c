@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 
 #include <linux/delay.h>
+#include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/clk.h>
 #include <linux/mfd/syscon.h>

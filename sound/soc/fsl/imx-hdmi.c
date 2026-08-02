@@ -2,6 +2,7 @@
 // Copyright 2017-2020 NXP
 
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_platform.h>
 #include <sound/jack.h>
 #include <sound/pcm_params.h>

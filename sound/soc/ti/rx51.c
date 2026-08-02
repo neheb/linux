@@ -10,6 +10,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>

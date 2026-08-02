@@ -9,6 +9,7 @@
 
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/mfd/syscon.h>
 #include <linux/of.h>

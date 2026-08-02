@@ -7,6 +7,7 @@
 
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <sound/soc.h>
 
 #define DRV_NAME "ssm2305"

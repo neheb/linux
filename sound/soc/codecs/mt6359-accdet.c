@@ -9,6 +9,7 @@
 #include <linux/cleanup.h>
 #include <linux/of.h>
 #include <linux/input.h>
+#include <linux/interrupt.h>
 #include <linux/kthread.h>
 #include <linux/io.h>
 #include <linux/sched/clock.h>

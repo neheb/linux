@@ -6,6 +6,7 @@
 
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 
 #include <sound/soc.h>

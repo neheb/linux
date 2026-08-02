@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2020, Linaro Limited
 
+#include <linux/of.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>
 #include <sound/pcm_params.h>

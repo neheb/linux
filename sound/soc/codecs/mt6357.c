@@ -7,6 +7,7 @@
  */
 
 #include <linux/dma-mapping.h>
+#include <linux/of.h>
 #include <sound/soc.h>
 #include <sound/tlv.h>
 #include <linux/mfd/mt6397/core.h>

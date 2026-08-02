@@ -5,6 +5,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/of.h>
 #include <sound/soc.h>
 
 #include "an7581-afe-common.h"

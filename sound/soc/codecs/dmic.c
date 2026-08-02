@@ -11,6 +11,8 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/of.h>
+#include <linux/property.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>

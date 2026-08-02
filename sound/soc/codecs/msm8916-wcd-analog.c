@@ -7,6 +7,7 @@
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
 #include <linux/types.h>
+#include <linux/interrupt.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>

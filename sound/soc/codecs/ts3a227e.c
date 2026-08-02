@@ -8,6 +8,7 @@
 #include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/input.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/acpi.h>

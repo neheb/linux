@@ -14,6 +14,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/of.h>
 #include <linux/of_clk.h>
 #include <linux/pm.h>
 #include <linux/regulator/consumer.h>

@@ -5,6 +5,7 @@
 // Author: Kevin-Ke Li <kevin-ke.li@broadcom.com>
 
 #include <linux/dma-mapping.h>
+#include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>
 #include <linux/module.h>

@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 #include <linux/clk.h>
 #include <linux/pm_runtime.h>
+#include <linux/property.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
 #include <sound/pcm_params.h>
