@@ -5,6 +5,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/interrupt.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/module.h>

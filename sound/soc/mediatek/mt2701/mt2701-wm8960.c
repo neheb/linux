@@ -6,6 +6,7 @@
  * Author: Ryder Lee <ryder.lee@mediatek.com>
  */
 
+#include <linux/of.h>
 #include <linux/module.h>
 #include <sound/soc.h>
 

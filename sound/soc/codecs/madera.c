@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/gcd.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/string_choices.h>

@@ -8,6 +8,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/of.h>
 #include <sound/soc.h>
 
 #include "mt7986-afe-common.h"

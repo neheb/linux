@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
+#include <linux/of.h>
 #include <linux/regulator/consumer.h>
 #include <sound/core.h>
 #include <sound/pcm.h>

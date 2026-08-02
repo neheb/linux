@@ -11,6 +11,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/clk.h>
 #include <sound/soc.h>

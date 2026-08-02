@@ -9,6 +9,7 @@
 #ifndef _MTK_DSP_SOF_COMMON_H_
 #define _MTK_DSP_SOF_COMMON_H_
 
+#include <linux/of.h>
 #include <sound/soc.h>
 
 struct sof_conn_stream {

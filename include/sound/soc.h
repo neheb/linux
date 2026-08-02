@@ -12,14 +12,11 @@
 
 #include <linux/args.h>
 #include <linux/array_size.h>
-#include <linux/device.h>
 #include <linux/errno.h>
-#include <linux/interrupt.h>
 #include <linux/lockdep.h>
 #include <linux/log2.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
-#include <linux/of.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
 
@@ -29,7 +26,10 @@
 #include <sound/core.h>
 #include <sound/pcm.h>
 
+struct device;
+struct device_node;
 struct module;
+struct of_phandle_args;
 struct platform_device;
 
 /* For the current users of sound/soc.h to avoid build issues */

@@ -8,6 +8,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/slab.h>
@@ -15,6 +16,7 @@
 #include <linux/io.h>
 #include <linux/clk.h>
 #include <linux/mfd/syscon.h>
+#include <linux/of.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>

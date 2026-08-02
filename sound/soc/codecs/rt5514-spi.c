@@ -19,6 +19,7 @@
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/regulator/consumer.h>
+#include <linux/of.h>
 #include <linux/pm_qos.h>
 #include <linux/sysfs.h>
 #include <linux/clk.h>

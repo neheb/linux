@@ -7,6 +7,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/of.h>
 #include <sound/soc.h>
 #include <sound/jack.h>
 #include "../../codecs/rt5645.h"

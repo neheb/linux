@@ -4,6 +4,7 @@
 
 #include <dt-bindings/sound/qcom,q6afe.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <sound/jack.h>
 #include <linux/input-event-codes.h>
 #include "common.h"

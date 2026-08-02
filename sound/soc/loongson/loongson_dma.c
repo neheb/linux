@@ -8,6 +8,7 @@
 //
 
 #include <linux/module.h>
+#include <linux/interrupt.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>

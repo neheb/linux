@@ -12,6 +12,7 @@
 
 #include <linux/firmware/cirrus/cs_dsp.h>
 #include <linux/firmware/cirrus/wmfw.h>
+#include <linux/interrupt.h>
 
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>

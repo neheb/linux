@@ -75,6 +75,7 @@
  * CLK/SYNC are inputed. It can be happen because MSIOF is working as Clock/Frame Consumer.
  */
 
+#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_dma.h>

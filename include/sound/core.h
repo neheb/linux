@@ -11,10 +11,10 @@
 #include <linux/sched.h>		/* wake_up() */
 #include <linux/mutex.h>		/* struct mutex */
 #include <linux/rwsem.h>		/* struct rw_semaphore */
-#include <linux/pm.h>			/* pm_message_t */
-#include <linux/stringify.h>
-#include <linux/printk.h>
+
+#ifdef CONFIG_SND_CTL_FAST_LOOKUP
 #include <linux/xarray.h>
+#endif
 
 /* number of supported soundcards */
 #ifdef CONFIG_SND_DYNAMIC_MINORS

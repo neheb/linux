@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/clk.h>
+#include <linux/of.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>

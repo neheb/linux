@@ -7,6 +7,7 @@
 // Author: Maruthi Srinivas Bayyavarapu <maruthis@xilinx.com>
 
 #include <linux/clk.h>
+#include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/sizes.h>
