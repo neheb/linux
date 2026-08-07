@@ -167,6 +167,9 @@ static irqreturn_t rk_crypto_irq_handle(int irq, void *dev_id)
 	u32 interrupt_status;
 
 	interrupt_status = CRYPTO_READ(dev, RK_CRYPTO_INTSTS);
+	if (!interrupt_status)
+		return IRQ_NONE;
+
 	CRYPTO_WRITE(dev, RK_CRYPTO_INTSTS, interrupt_status);
 
 	dev->status = 1;
