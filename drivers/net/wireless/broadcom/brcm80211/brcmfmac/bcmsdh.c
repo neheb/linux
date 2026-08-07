@@ -61,8 +61,7 @@ struct brcmf_sdiod_freezer {
 
 static irqreturn_t brcmf_sdiod_oob_irqhandler(int irq, void *dev_id)
 {
-	struct brcmf_bus *bus_if = dev_get_drvdata(dev_id);
-	struct brcmf_sdio_dev *sdiodev = bus_if->bus_priv.sdio;
+	struct brcmf_sdio_dev *sdiodev = dev_id;
 
 	brcmf_dbg(INTR, "OOB intr triggered\n");
 
@@ -110,7 +109,7 @@ int brcmf_sdiod_intr_register(struct brcmf_sdio_dev *sdiodev)
 
 		ret = request_irq(pdata->oob_irq_nr, brcmf_sdiod_oob_irqhandler,
 				  pdata->oob_irq_flags, "brcmf_oob_intr",
-				  &sdiodev->func1->dev);
+				  sdiodev);
 		if (ret != 0) {
 			brcmf_err("request_irq failed %d\n", ret);
 			return ret;
@@ -182,7 +181,7 @@ void brcmf_sdiod_intr_unregister(struct brcmf_sdio_dev *sdiodev)
 		sdio_release_host(sdiodev->func1);
 
 		sdiodev->oob_irq_requested = false;
-		free_irq(pdata->oob_irq_nr, &sdiodev->func1->dev);
+		free_irq(pdata->oob_irq_nr, sdiodev);
 		sdiodev->irq_en = false;
 		sdiodev->oob_irq_requested = false;
 	}
