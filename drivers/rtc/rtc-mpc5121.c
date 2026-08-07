@@ -220,7 +220,7 @@ static int mpc5121_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alarm)
 
 static irqreturn_t mpc5121_rtc_handler(int irq, void *dev)
 {
-	struct mpc5121_rtc_data *rtc = dev_get_drvdata((struct device *)dev);
+	struct mpc5121_rtc_data *rtc = dev;
 	struct mpc5121_rtc_regs __iomem *regs = rtc->regs;
 
 	if (ioread8(&regs->int_alm)) {
@@ -237,7 +237,7 @@ static irqreturn_t mpc5121_rtc_handler(int irq, void *dev)
 
 static irqreturn_t mpc5121_rtc_handler_upd(int irq, void *dev)
 {
-	struct mpc5121_rtc_data *rtc = dev_get_drvdata((struct device *)dev);
+	struct mpc5121_rtc_data *rtc = dev;
 	struct mpc5121_rtc_regs __iomem *regs = rtc->regs;
 
 	if (ioread8(&regs->int_sec) && (ioread8(&regs->int_enable) & 0x1)) {
@@ -315,13 +315,13 @@ static int mpc5121_rtc_probe(struct platform_device *op)
 	platform_set_drvdata(op, rtc);
 
 	err = devm_request_irq(&op->dev, irq, mpc5121_rtc_handler, 0,
-			       "mpc5121-rtc", &op->dev);
+			       "mpc5121-rtc", rtc);
 	if (err)
 		return err;
 
 	err = devm_request_irq(&op->dev, irq_periodic,
 			       mpc5121_rtc_handler_upd, 0,
-			       "mpc5121-rtc_upd", &op->dev);
+			       "mpc5121-rtc_upd", rtc);
 	if (err)
 		return err;
 
