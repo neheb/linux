@@ -146,11 +146,10 @@ static void gpio_vbus_work(struct work_struct *work)
 /* VBUS change IRQ handler */
 static irqreturn_t gpio_vbus_irq(int irq, void *data)
 {
-	struct platform_device *pdev = data;
-	struct gpio_vbus_data *gpio_vbus = platform_get_drvdata(pdev);
+	struct gpio_vbus_data *gpio_vbus = data;
 	struct usb_otg *otg = gpio_vbus->phy.otg;
 
-	dev_dbg(&pdev->dev, "VBUS %s (gadget: %s)\n",
+	dev_dbg(gpio_vbus->dev, "VBUS %s (gadget: %s)\n",
 		is_vbus_powered(gpio_vbus) ? "supplied" : "inactive",
 		otg->gadget ? otg->gadget->name : "none");
 
@@ -194,7 +193,7 @@ static int gpio_vbus_set_peripheral(struct usb_otg *otg,
 
 	/* initialize connection state */
 	gpio_vbus->vbus = 0; /* start with disconnected */
-	gpio_vbus_irq(gpio_vbus->irq, pdev);
+	gpio_vbus_irq(gpio_vbus->irq, gpio_vbus);
 	return 0;
 }
 
@@ -296,7 +295,7 @@ static int gpio_vbus_probe(struct platform_device *pdev)
 		gpiod_set_consumer_name(gpio_vbus->pullup_gpiod, "udc_pullup");
 
 	err = devm_request_irq(&pdev->dev, irq, gpio_vbus_irq, irqflags,
-			       "vbus_detect", pdev);
+			       "vbus_detect", gpio_vbus);
 	if (err)
 		return err;
 
