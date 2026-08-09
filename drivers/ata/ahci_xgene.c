@@ -729,7 +729,7 @@ static int xgene_ahci_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct ahci_host_priv *hpriv;
 	struct xgene_ahci_context *ctx;
-	struct resource *res;
+	void __iomem *csr;
 	enum xgene_ahci_version version = XGENE_AHCI_V1;
 	const struct ata_port_info *ppi[] = { &xgene_ahci_v1_port_info,
 					      &xgene_ahci_v2_port_info };
@@ -748,29 +748,30 @@ static int xgene_ahci_probe(struct platform_device *pdev)
 	ctx->dev = dev;
 
 	/* Retrieve the IP core resource */
-	ctx->csr_core = devm_platform_ioremap_resource(pdev, 1);
-	if (IS_ERR(ctx->csr_core))
-		return PTR_ERR(ctx->csr_core);
+	csr = devm_platform_ioremap_resource(pdev, 1);
+	if (IS_ERR(csr))
+		return PTR_ERR(csr);
+
+	ctx->csr_core = csr;
 
 	/* Retrieve the IP diagnostic resource */
-	ctx->csr_diag = devm_platform_ioremap_resource(pdev, 2);
-	if (IS_ERR(ctx->csr_diag))
-		return PTR_ERR(ctx->csr_diag);
+	csr = devm_platform_ioremap_resource(pdev, 2);
+	if (IS_ERR(csr))
+		return PTR_ERR(csr);
+
+	ctx->csr_diag = csr;
 
 	/* Retrieve the IP AXI resource */
-	ctx->csr_axi = devm_platform_ioremap_resource(pdev, 3);
-	if (IS_ERR(ctx->csr_axi))
-		return PTR_ERR(ctx->csr_axi);
+	csr = devm_platform_ioremap_resource(pdev, 3);
+	if (IS_ERR(csr))
+		return PTR_ERR(csr);
+
+	ctx->csr_axi = csr;
 
 	/* Retrieve the optional IP mux resource */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 4);
-	if (res) {
-		void __iomem *csr = devm_ioremap_resource(dev, res);
-		if (IS_ERR(csr))
-			return PTR_ERR(csr);
-
+	csr = devm_platform_ioremap_resource(pdev, 4);
+	if (!IS_ERR(csr))
 		ctx->csr_mux = csr;
-	}
 
 	if (dev->of_node) {
 		version = (unsigned long)of_device_get_match_data(dev);
