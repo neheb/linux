@@ -218,7 +218,6 @@ struct rk_crypto_info {
 	int				num_clks;
 	struct reset_control		*rst;
 	void __iomem			*reg;
-	int				irq;
 	const struct rk_variant *variant;
 	unsigned long nreq;
 	struct crypto_engine *engine;
