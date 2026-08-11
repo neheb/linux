@@ -321,6 +321,11 @@ static int rk_crypto_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct rk_crypto_info *crypto_info, *first;
 	int err = 0;
+	int irq;
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0)
+		return irq;
 
 	crypto_info = devm_kzalloc(&pdev->dev,
 				   sizeof(*crypto_info), GFP_KERNEL);
@@ -358,13 +363,7 @@ static int rk_crypto_probe(struct platform_device *pdev)
 	if (err)
 		goto err_crypto;
 
-	crypto_info->irq = platform_get_irq(pdev, 0);
-	if (crypto_info->irq < 0) {
-		err = crypto_info->irq;
-		goto err_crypto;
-	}
-
-	err = devm_request_irq(&pdev->dev, crypto_info->irq,
+	err = devm_request_irq(&pdev->dev, irq,
 			       rk_crypto_irq_handle, IRQF_SHARED,
 			       "rk-crypto", crypto_info);
 
