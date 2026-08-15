@@ -186,8 +186,7 @@ static void ts_reg_dump(struct iproc_ts_priv *priv)
 
 static irqreturn_t iproc_touchscreen_interrupt(int irq, void *data)
 {
-	struct platform_device *pdev = data;
-	struct iproc_ts_priv *priv = platform_get_drvdata(pdev);
+	struct iproc_ts_priv *priv = data;
 	u32 intr_status;
 	u32 raw_coordinate;
 	u16 x;
@@ -487,7 +486,7 @@ static int iproc_ts_probe(struct platform_device *pdev)
 
 	error = devm_request_irq(&pdev->dev, irq,
 				 iproc_touchscreen_interrupt,
-				 IRQF_SHARED, IPROC_TS_NAME, pdev);
+				 IRQF_SHARED, IPROC_TS_NAME, priv);
 	if (error)
 		return error;
 
