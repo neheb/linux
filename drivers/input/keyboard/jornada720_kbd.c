@@ -51,8 +51,7 @@ struct jornadakbd {
 
 static irqreturn_t jornada720_kbd_interrupt(int irq, void *dev_id)
 {
-	struct platform_device *pdev = dev_id;
-	struct jornadakbd *jornadakbd = platform_get_drvdata(pdev);
+	struct jornadakbd *jornadakbd = dev_id;
 	struct input_dev *input = jornadakbd->input;
 	u8 count, kbd_data, scan_code;
 
@@ -60,7 +59,7 @@ static irqreturn_t jornada720_kbd_interrupt(int irq, void *dev_id)
 	jornada_ssp_start();
 
 	if (jornada_ssp_inout(GETSCANKEYCODE) != TXDUMMY) {
-		dev_dbg(&pdev->dev,
+		dev_dbg(&input->dev,
 			"GetKeycode command failed with ETIMEDOUT, flushed bus\n");
 	} else {
 		/* How many keycodes are waiting for us? */
@@ -122,7 +121,7 @@ static int jornada720_kbd_probe(struct platform_device *pdev)
 	input_set_capability(input_dev, EV_MSC, MSC_SCAN);
 
 	err = devm_request_irq(&pdev->dev, irq, jornada720_kbd_interrupt,
-			       IRQF_TRIGGER_FALLING, "jornadakbd", pdev);
+			       IRQF_TRIGGER_FALLING, "jornadakbd", jornadakbd);
 	if (err) {
 		dev_err(&pdev->dev, "unable to grab IRQ%d: %d\n", irq, err);
 		return err;
