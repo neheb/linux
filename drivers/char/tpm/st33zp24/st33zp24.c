@@ -288,8 +288,7 @@ static int recv_data(struct tpm_chip *chip, u8 *buf, size_t count)
 
 static irqreturn_t tpm_ioserirq_handler(int irq, void *dev_id)
 {
-	struct tpm_chip *chip = dev_id;
-	struct st33zp24_dev *tpm_dev = dev_get_drvdata(&chip->dev);
+	struct st33zp24_dev *tpm_dev = dev_id;
 
 	tpm_dev->intrs++;
 	wake_up_interruptible(&tpm_dev->read_queue);
@@ -507,7 +506,7 @@ int st33zp24_probe(void *phy_id, const struct st33zp24_phy_ops *ops,
 		clear_interruption(tpm_dev);
 		ret = devm_request_irq(dev, irq, tpm_ioserirq_handler,
 				IRQF_TRIGGER_HIGH, "TPM SERIRQ management",
-				chip);
+				tpm_dev);
 		if (ret < 0)
 			goto _tpm_clean_answer;
 
