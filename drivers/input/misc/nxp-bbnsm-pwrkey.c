@@ -69,8 +69,7 @@ static void bbnsm_pwrkey_check_for_events(struct timer_list *t)
 
 static irqreturn_t bbnsm_pwrkey_interrupt(int irq, void *dev_id)
 {
-	struct platform_device *pdev = dev_id;
-	struct bbnsm_pwrkey *bbnsm = platform_get_drvdata(pdev);
+	struct bbnsm_pwrkey *bbnsm = dev_id;
 	struct input_dev *input = bbnsm->input;
 	u32 event;
 
@@ -167,7 +166,7 @@ static int bbnsm_pwrkey_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, bbnsm);
 
 	error = devm_request_irq(&pdev->dev, bbnsm->irq, bbnsm_pwrkey_interrupt,
-				 IRQF_SHARED, pdev->name, pdev);
+				 IRQF_SHARED, pdev->name, bbnsm);
 	if (error) {
 		dev_err(&pdev->dev, "interrupt not available.\n");
 		return error;
