@@ -1672,23 +1672,19 @@ static int grcan_probe(struct platform_device *ofdev)
 		goto exit_error;
 	}
 
-	irq = irq_of_parse_and_map(np, GRCAN_IRQIX_IRQ);
-	if (!irq) {
+	irq = platform_get_irq(irq, GRCAN_IRQIX_IRQ);
+	if (irq < 0) {
 		dev_err(&ofdev->dev, "no irq found\n");
-		err = -ENODEV;
+		err = irq;
 		goto exit_error;
 	}
 
 	grcan_sanitize_module_config(ofdev);
 
 	err = grcan_setup_netdev(ofdev, base, irq, ambafreq, txbug);
-	if (err)
-		goto exit_dispose_irq;
+	if (!err)
+		return 0;
 
-	return 0;
-
-exit_dispose_irq:
-	irq_dispose_mapping(irq);
 exit_error:
 	dev_err(&ofdev->dev,
 		"%s socket CAN driver initialization failed with error %d\n",
@@ -1703,7 +1699,6 @@ static void grcan_remove(struct platform_device *ofdev)
 
 	unregister_candev(dev); /* Will in turn call grcan_close */
 
-	irq_dispose_mapping(dev->irq);
 	netif_napi_del(&priv->napi);
 	free_candev(dev);
 }
