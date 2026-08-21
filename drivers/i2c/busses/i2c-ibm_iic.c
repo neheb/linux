@@ -648,31 +648,22 @@ static inline u8 iic_clckdiv(unsigned int opb)
 }
 
 static int iic_request_irq(struct platform_device *ofdev,
-				     struct ibm_iic_private *dev)
+			   struct ibm_iic_private *dev)
 {
-	struct device_node *np = ofdev->dev.of_node;
-	int irq;
-
-	if (iic_force_poll)
-		return 0;
-
-	irq = irq_of_parse_and_map(np, 0);
-	if (!irq) {
-		dev_err(&ofdev->dev, "irq_of_parse_and_map failed\n");
-		return 0;
-	}
+	int ret;
 
 	/* Disable interrupts until we finish initialization, assumes
 	 *  level-sensitive IRQ setup...
 	 */
 	iic_interrupt_mode(dev, 0);
-	if (request_irq(irq, iic_handler, 0, "IBM IIC", dev)) {
-		dev_err(&ofdev->dev, "request_irq %d failed\n", irq);
+	ret = request_irq(dev->irq, iic_handler, 0, "IBM IIC", dev);
+	if (ret) {
+		dev_err(&ofdev->dev, "request_irq %d failed\n", dev->irq);
 		/* Fallback to the polling mode */
-		return 0;
+		return ret;
 	}
 
-	return irq;
+	return ret;
 }
 
 /*
@@ -685,11 +676,22 @@ static int iic_probe(struct platform_device *ofdev)
 	struct i2c_adapter *adap;
 	void __iomem *vaddr;
 	const u32 *freq;
+	int irq;
 	int ret;
 
 	vaddr = devm_platform_ioremap_resource(ofdev, 0);
 	if (IS_ERR(vaddr))
 		return PTR_ERR(vaddr);
+
+	if (iic_force_poll) {
+		irq = 0;
+	} else {
+		irq = platform_get_irq(ofdev, 0);
+		if (irq == -EPROBE_DEFER)
+			return irq;
+		if (irq < 0)
+			dev_warn(&ofdev->dev, "using polling mode\n");
+	}
 
 	dev = kzalloc_obj(*dev);
 	if (!dev)
@@ -701,9 +703,12 @@ static int iic_probe(struct platform_device *ofdev)
 
 	init_waitqueue_head(&dev->wq);
 
-	dev->irq = iic_request_irq(ofdev, dev);
-	if (!dev->irq)
-		dev_warn(&ofdev->dev, "using polling mode\n");
+	dev->irq = irq;
+	if (dev->irq > 0) {
+		ret = iic_request_irq(ofdev, dev);
+		if (ret)
+			dev->irq = 0;
+	}
 
 	/* Board specific settings */
 	if (iic_force_fast || of_get_property(np, "fast-mode", NULL))
