@@ -619,7 +619,7 @@
 				status = "disabled";
 			};
 
-			sdhci: sdhci@d8000 {
+			sdhci: mmc@d8000 {
 				compatible = "marvell,armada-380-sdhci";
 				reg-names = "sdhci", "mbus", "conf-sdio3";
 				reg = <0xd8000 0x1000>,
