@@ -58,7 +58,7 @@
 			};
 
 			/* CON18 */
-			sdhci@d8000 {
+			mmc@d8000 {
 				broken-cd;
 				wp-inverted;
 				bus-width = <8>;
