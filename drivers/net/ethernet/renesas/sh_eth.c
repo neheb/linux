@@ -3210,14 +3210,16 @@ static struct sh_eth_plat_data *sh_eth_parse_dt(struct device *dev)
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	ret = of_get_phy_mode(np, &interface);
 	if (ret)
-		return NULL;
+		return ERR_PTR(ret);
 	pdata->phy_interface = interface;
 
-	of_get_mac_address(np, pdata->mac_addr);
+	ret = of_get_mac_address(np, pdata->mac_addr);
+	if (ret == -EPROBE_DEFER)
+		return ERR_PTR(ret);
 
 	pdata->no_ether_link =
 		of_property_read_bool(np, "renesas,no-ether-link");
@@ -3248,14 +3250,14 @@ MODULE_DEVICE_TABLE(of, sh_eth_match_table);
 #else
 static inline struct sh_eth_plat_data *sh_eth_parse_dt(struct device *dev)
 {
-	return NULL;
+	return ERR_PTR(-ENODEV);
 }
 #endif
 
 static int sh_eth_drv_probe(struct platform_device *pdev)
 {
 	struct resource *res;
-	struct sh_eth_plat_data *pd = dev_get_platdata(&pdev->dev);
+	struct sh_eth_plat_data *pd;
 	const struct platform_device_id *id = platform_get_device_id(pdev);
 	struct sh_eth_private *mdp;
 	struct net_device *ndev;
@@ -3289,12 +3291,19 @@ static int sh_eth_drv_probe(struct platform_device *pdev)
 	spin_lock_init(&mdp->lock);
 	mdp->pdev = pdev;
 
-	if (pdev->dev.of_node)
+	if (pdev->dev.of_node) {
 		pd = sh_eth_parse_dt(&pdev->dev);
-	if (!pd) {
-		dev_err(&pdev->dev, "no platform data\n");
-		ret = -EINVAL;
-		goto out_release;
+		if (IS_ERR(pd)) {
+			ret = dev_err_probe(&pdev->dev, PTR_ERR(pd), "failed to parse DT platform data\n");
+			goto out_release;
+		}
+	} else {
+		pd = dev_get_platdata(&pdev->dev);
+		if (!pd) {
+			dev_err(&pdev->dev, "no platform data\n");
+			ret = -EINVAL;
+			goto out_release;
+		}
 	}
 
 	/* get PHY ID */
