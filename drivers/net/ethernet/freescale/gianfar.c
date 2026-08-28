@@ -1795,8 +1795,8 @@ static netdev_tx_t gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	skb_frag_t *frag;
 	int i, rq = 0;
 	int do_tstamp, do_csum, do_vlan;
-	u32 bufaddr;
-	unsigned int nr_frags, nr_txbds, bytes_sent, fcb_len = 0;
+	u32 bufaddr, head_dma = 0;
+	unsigned int nr_frags, nr_txbds, bytes_sent, fcb_len = 0, head_len = 0;
 
 	rq = skb->queue_mapping;
 	tx_queue = priv->tx_queue[rq];
@@ -1886,10 +1886,12 @@ static netdev_tx_t gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (do_vlan)
 		gfar_tx_vlan(skb, fcb);
 
-	bufaddr = dma_map_single(priv->dev, skb->data, skb_headlen(skb),
+	head_len = skb_headlen(skb);
+	bufaddr = dma_map_single(priv->dev, skb->data, head_len,
 				 DMA_TO_DEVICE);
 	if (unlikely(dma_mapping_error(priv->dev, bufaddr)))
 		goto dma_map_err;
+	head_dma = bufaddr;
 
 	txbdp_start->bufPtr = cpu_to_be32(bufaddr);
 
@@ -2005,6 +2007,9 @@ static netdev_tx_t gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	return NETDEV_TX_OK;
 
 dma_map_err:
+	if (head_dma)
+		dma_unmap_single(priv->dev, head_dma, head_len,
+				 DMA_TO_DEVICE);
 	txbdp = next_txbd(txbdp_start, base, tx_queue->tx_ring_size);
 	if (do_tstamp)
 		txbdp = next_txbd(txbdp, base, tx_queue->tx_ring_size);
