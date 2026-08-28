@@ -14,23 +14,6 @@
 		     "marvell,armada388", "marvell,armada385",
 		     "marvell,armada380";
 
-	soc {
-		internal-regs {
-			usb3@f0000 {
-				/* CON2, nearest CPU, USB2 only. */
-				status = "okay";
-			};
-		};
-
-		pcie {
-			pcie@3,0 {
-				/* Port 2, Lane 0. CON2, nearest CPU. */
-				reset-gpios = <&expander0 2 GPIO_ACTIVE_LOW>;
-				status = "okay";
-			};
-		};
-	};
-
 	gpio-keys {
 		compatible = "gpio-keys";
 		pinctrl-0 = <&rear_button_pins>;
@@ -154,6 +137,12 @@
 	};
 };
 
+&pcie3 {
+	/* Port 2, Lane 0. CON2, nearest CPU. */
+	reset-gpios = <&expander0 2 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
 &pinctrl {
 	clearfog_dsa0_clk_pins: clearfog-dsa0-clk-pins {
 		marvell,pins = "mpp46";
@@ -181,4 +170,9 @@
 	 * CS2: mikrobus
 	 */
 	pinctrl-0 = <&spi1_pins &clearfog_spi1_cs_pins &mikro_spi_pins>;
+};
+
+&usb3_0 {
+	/* CON2, nearest CPU, USB2 only. */
+	status = "okay";
 };
