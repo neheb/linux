@@ -97,7 +97,7 @@
 			status = "disabled";
 		};
 
-		internal-regs {
+		internal_regs: internal-regs {
 			compatible = "simple-bus";
 			#address-cells = <1>;
 			#size-cells = <1>;

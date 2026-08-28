@@ -28,55 +28,6 @@
 		regulator-always-on;
 	};
 
-	soc {
-		internal-regs {
-			sata@a8000 {
-				/* pinctrl? */
-				status = "okay";
-			};
-
-			sata@e0000 {
-				/* pinctrl? */
-				status = "okay";
-			};
-
-			sdhci@d8000 {
-				bus-width = <4>;
-				cd-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
-				no-1-8-v;
-				pinctrl-0 = <&microsom_sdhci_pins
-					     &clearfog_sdhci_cd_pins>;
-				pinctrl-names = "default";
-				status = "okay";
-				vmmc-supply = <&reg_3p3v>;
-				wp-inverted;
-			};
-
-			usb@58000 {
-				/* CON3, nearest  power. */
-				status = "okay";
-			};
-
-			usb3@f8000 {
-				/* CON7 */
-				status = "okay";
-			};
-		};
-
-		pcie {
-			status = "okay";
-			/*
-			 * The two PCIe units are accessible through
-			 * the mini-PCIe connectors on the board.
-			 */
-			pcie@2,0 {
-				/* Port 1, Lane 0. CON3, nearest power. */
-				reset-gpios = <&expander0 1 GPIO_ACTIVE_LOW>;
-				status = "okay";
-			};
-		};
-	};
-
 	sfp: sfp {
 		compatible = "sff,sfp";
 		i2c-bus = <&i2c1>;
@@ -86,6 +37,16 @@
 		tx-fault-gpio = <&expander0 13 GPIO_ACTIVE_HIGH>;
 		maximum-power-milliwatt = <2000>;
 	};
+};
+
+&ahci0 {
+	/* pinctrl? */
+	status = "okay";
+};
+
+&ahci1 {
+	/* pinctrl? */
+	status = "okay";
 };
 
 &eth1 {
@@ -195,6 +156,20 @@
 	status = "okay";
 };
 
+&pciec {
+	status = "okay";
+	/*
+	 * The two PCIe units are accessible through
+	 * the mini-PCIe connectors on the board.
+	 */
+};
+
+&pcie2 {
+	/* Port 1, Lane 0. CON3, nearest power. */
+	reset-gpios = <&expander0 1 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
 &pinctrl {
 	clearfog_i2c1_pins: i2c1-pins {
 		/* SFP, PCIe, mSATA, mikrobus */
@@ -220,6 +195,18 @@
 	};
 };
 
+&sdhci {
+	bus-width = <4>;
+	cd-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
+	no-1-8-v;
+	pinctrl-0 = <&microsom_sdhci_pins
+		     &clearfog_sdhci_cd_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+	vmmc-supply = <&reg_3p3v>;
+	wp-inverted;
+};
+
 &spi1 {
 	/*
 	 * Add SPI CS pins for clearfog:
@@ -236,5 +223,15 @@
 	/* mikrobus uart */
 	pinctrl-0 = <&mikro_uart_pins>;
 	pinctrl-names = "default";
+	status = "okay";
+};
+
+&usb0 {
+	/* CON3, nearest  power. */
+	status = "okay";
+};
+
+&usb3_1 {
+	/* CON7 */
 	status = "okay";
 };

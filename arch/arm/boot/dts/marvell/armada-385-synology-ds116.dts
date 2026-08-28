@@ -29,103 +29,6 @@
 			  MBUS_ID(0x09, 0x15) 0 0xf1110000 0x10000
 			  MBUS_ID(0x0c, 0x04) 0 0xf1200000 0x100000>;
 
-		internal-regs {
-			i2c@11000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&i2c0_pins>;
-				status = "okay";
-				clock-frequency = <100000>;
-
-				eeprom@57 {
-					compatible = "atmel,24c64";
-					reg = <0x57>;
-				};
-			};
-
-			serial@12000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&uart0_pins>;
-				status = "okay";
-			};
-
-			serial@12100 {
-				/* A PIC16F1829 is connected to uart1 at 9600 bps,
-				 * and takes single-character orders :
-				 *   "1" : power off // already handled by the poweroff node
-				 *   "2" : short beep
-				 *   "3" : long beep
-				 *   "4" : turn the power LED ON
-				 *   "5" : flash the power LED
-				 *   "6" : turn the power LED OFF
-				 *   "7" : turn the status LED OFF
-				 *   "8" : turn the status LED ON
-				 *   "9" : flash the status LED
-				 *   "A" : flash the motherboard LED (D8)
-				 *   "B" : turn the motherboard LED OFF
-				 *   "C" : hard reset
-				 */
-				pinctrl-names = "default";
-				pinctrl-0 = <&uart1_pins>;
-				status = "okay";
-			};
-
-			poweroff@12100 {
-				compatible = "synology,power-off";
-				reg = <0x12100 0x100>;
-				clocks = <&coreclk 0>;
-			};
-
-			ethernet@70000 {
-				pinctrl-names = "default";
-				phy = <&phy0>;
-				phy-mode = "sgmii";
-				buffer-manager = <&bm>;
-				bm,pool-long = <0>;
-				status = "okay";
-			};
-
-
-			mdio@72004 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&mdio_pins>;
-
-				phy0: ethernet-phy@1 {
-					reg = <1>;
-				};
-			};
-
-			sata@a8000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&sata0_pins>;
-				status = "okay";
-				#address-cells = <1>;
-				#size-cells = <0>;
-
-				sata0: sata-port@0 {
-					reg = <0>;
-					target-supply = <&reg_5v_sata0>;
-				};
-			};
-
-			bm@c8000 {
-				status = "okay";
-			};
-
-			usb3@f0000 {
-				usb-phy = <&usb3_0_phy>;
-				status = "okay";
-			};
-
-			usb3@f8000 {
-				usb-phy = <&usb3_1_phy>;
-				status = "okay";
-			};
-		};
-
-		bm-bppi {
-			status = "okay";
-		};
-
 		gpio-fan {
 			compatible = "gpio-fan";
 			gpios = <&gpio1 18 GPIO_ACTIVE_HIGH>,
@@ -218,6 +121,82 @@
 	};
 };
 
+&ahci0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&sata0_pins>;
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	sata0: sata-port@0 {
+		reg = <0>;
+		target-supply = <&reg_5v_sata0>;
+	};
+};
+
+&bm {
+	status = "okay";
+};
+
+&bm_bppi {
+	status = "okay";
+};
+
+&eth0 {
+	pinctrl-names = "default";
+	phy = <&phy0>;
+	phy-mode = "sgmii";
+	buffer-manager = <&bm>;
+	bm,pool-long = <0>;
+	status = "okay";
+};
+
+&i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0_pins>;
+	status = "okay";
+	clock-frequency = <100000>;
+
+	eeprom@57 {
+		compatible = "atmel,24c64";
+		reg = <0x57>;
+	};
+};
+
+&internal_regs {
+	poweroff@12100 {
+		compatible = "synology,power-off";
+		reg = <0x12100 0x100>;
+		clocks = <&coreclk 0>;
+	};
+};
+
+&mdio {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mdio_pins>;
+
+	phy0: ethernet-phy@1 {
+		reg = <1>;
+	};
+};
+
+&pinctrl {
+	/* use only one pin for UART1, as mpp20 is used by sata0 */
+	uart1_pins: uart-pins-1 {
+		marvell,pins = "mpp19";
+		marvell,function = "ua1";
+	};
+
+	xhci0_vbus_pins: xhci0_vbus_pins {
+		marvell,pins = "mpp58";
+		marvell,function = "gpio";
+	};
+	xhci1_vbus_pins: xhci1_vbus_pins {
+		marvell,pins = "mpp59";
+		marvell,function = "gpio";
+	};
+};
+
 &spi0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&spi0_pins>;
@@ -274,19 +253,39 @@
 	};
 };
 
-&pinctrl {
-	/* use only one pin for UART1, as mpp20 is used by sata0 */
-	uart1_pins: uart-pins-1 {
-		marvell,pins = "mpp19";
-		marvell,function = "ua1";
-	};
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins>;
+	status = "okay";
+};
 
-	xhci0_vbus_pins: xhci0_vbus_pins {
-		marvell,pins = "mpp58";
-		marvell,function = "gpio";
-	};
-	xhci1_vbus_pins: xhci1_vbus_pins {
-		marvell,pins = "mpp59";
-		marvell,function = "gpio";
-	};
+&uart1 {
+	/* A PIC16F1829 is connected to uart1 at 9600 bps,
+	 * and takes single-character orders :
+	 *   "1" : power off // already handled by the poweroff node
+	 *   "2" : short beep
+	 *   "3" : long beep
+	 *   "4" : turn the power LED ON
+	 *   "5" : flash the power LED
+	 *   "6" : turn the power LED OFF
+	 *   "7" : turn the status LED OFF
+	 *   "8" : turn the status LED ON
+	 *   "9" : flash the status LED
+	 *   "A" : flash the motherboard LED (D8)
+	 *   "B" : turn the motherboard LED OFF
+	 *   "C" : hard reset
+	 */
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart1_pins>;
+	status = "okay";
+};
+
+&usb3_0 {
+	usb-phy = <&usb3_0_phy>;
+	status = "okay";
+};
+
+&usb3_1 {
+	usb-phy = <&usb3_1_phy>;
+	status = "okay";
 };

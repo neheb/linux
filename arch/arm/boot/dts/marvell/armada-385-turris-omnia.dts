@@ -40,58 +40,6 @@
 			  MBUS_ID(0x09, 0x19) 0 0xf1100000 0x10000
 			  MBUS_ID(0x09, 0x15) 0 0xf1110000 0x10000
 			  MBUS_ID(0x0c, 0x04) 0 0xf1200000 0x100000>;
-
-		internal-regs {
-
-			/* USB part of the PCIe2/USB 2.0 port */
-			usb@58000 {
-				status = "okay";
-			};
-
-			sata@a8000 {
-				status = "okay";
-			};
-
-			sdhci@d8000 {
-				pinctrl-names = "default";
-				pinctrl-0 = <&sdhci_pins>;
-				status = "okay";
-
-				bus-width = <8>;
-				no-1-8-v;
-				non-removable;
-			};
-
-			usb3@f0000 {
-				status = "okay";
-			};
-
-			usb3@f8000 {
-				status = "okay";
-			};
-		};
-
-		pcie {
-			status = "okay";
-
-			pcie@1,0 {
-				/* Port 0, Lane 0 */
-				status = "okay";
-				slot-power-limit-milliwatt = <10000>;
-			};
-
-			pcie@2,0 {
-				/* Port 1, Lane 0 */
-				status = "okay";
-				slot-power-limit-milliwatt = <10000>;
-			};
-
-			pcie@3,0 {
-				/* Port 2, Lane 0 */
-				status = "okay";
-				slot-power-limit-milliwatt = <10000>;
-			};
-		};
 	};
 
 	sfp: sfp {
@@ -143,6 +91,10 @@
 		#sound-dai-cells = <0>;
 		compatible = "linux,spdif-dit";
 	};
+};
+
+&ahci0 {
+	status = "okay";
 };
 
 &audio_controller {
@@ -529,6 +481,28 @@
 	};
 };
 
+&pciec {
+	status = "okay";
+};
+
+&pcie1 {
+	/* Port 0, Lane 0 */
+	status = "okay";
+	slot-power-limit-milliwatt = <10000>;
+};
+
+&pcie2 {
+	/* Port 1, Lane 0 */
+	status = "okay";
+	slot-power-limit-milliwatt = <10000>;
+};
+
+&pcie3 {
+	/* Port 2, Lane 0 */
+	status = "okay";
+	slot-power-limit-milliwatt = <10000>;
+};
+
 &pinctrl {
 	mcu_pins: mcu-pins {
 		marvell,pins = "mpp43";
@@ -554,6 +528,16 @@
 		marvell,pins = "mpp26";
 		marvell,function = "spi0";
 	};
+};
+
+&sdhci {
+	pinctrl-names = "default";
+	pinctrl-0 = <&sdhci_pins>;
+	status = "okay";
+
+	bus-width = <8>;
+	no-1-8-v;
+	non-removable;
 };
 
 &spi0 {
@@ -599,5 +583,18 @@
 	/* Pin header CN11 */
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart1_pins>;
+	status = "okay";
+};
+
+/* USB part of the PCIe2/USB 2.0 port */
+&usb0 {
+	status = "okay";
+};
+
+&usb3_0 {
+	status = "okay";
+};
+
+&usb3_1 {
 	status = "okay";
 };
