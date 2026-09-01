@@ -286,7 +286,7 @@
 					marvell,pins = "mpp23";
 					marvell,function = "gpio";
 				};
-				microsom_phy0_int_pins: microsom-phy0-int-pins {
+				helios_phy0_int_pins: helios-phy0-int-pins {
 					marvell,pins = "mpp18";
 					marvell,function = "gpio";
 				};
@@ -325,6 +325,14 @@
 			};
 		};
 	};
+};
+
+&phy_dedicated {
+	pinctrl-0 = <&helios_phy0_int_pins>;
+	pinctrl-names = "default";
+	interrupt-parent = <&gpio0>;
+	interrupts = <18 IRQ_TYPE_LEVEL_LOW>;
+	wakeup-source;
 };
 
 &spi1 {
