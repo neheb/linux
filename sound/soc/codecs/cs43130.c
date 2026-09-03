@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/i2c.h>
+#include <linux/interrupt.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>

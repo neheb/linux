@@ -14,6 +14,7 @@
 #include <linux/moduleparam.h>
 #include <linux/types.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>

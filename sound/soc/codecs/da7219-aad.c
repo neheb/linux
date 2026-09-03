@@ -11,6 +11,7 @@
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/i2c.h>
+#include <linux/interrupt.h>
 #include <linux/property.h>
 #include <linux/pm_wakeirq.h>
 #include <linux/slab.h>

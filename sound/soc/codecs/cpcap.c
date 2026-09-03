@@ -16,6 +16,8 @@
 #include <linux/mfd/motorola-cpcap.h>
 #include <sound/core.h>
 #include <linux/input.h>
+#include <linux/interrupt.h>
+#include <linux/irq.h>
 #include <sound/jack.h>
 #include <sound/soc.h>
 #include <sound/tlv.h>

@@ -20,6 +20,7 @@
 #include <linux/gpio/driver.h>
 #include <linux/pm.h>
 #include <linux/i2c.h>
+#include <linux/interrupt.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>

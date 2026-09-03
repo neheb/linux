@@ -11,6 +11,7 @@
 #include <linux/hwmon.h>
 #include <linux/pm.h>
 #include <linux/i2c.h>
+#include <linux/interrupt.h>
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/consumer.h>
 #include <linux/regmap.h>
