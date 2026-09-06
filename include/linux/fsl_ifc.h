@@ -827,7 +827,6 @@ struct fsl_ifc_runtime {
 };
 
 extern unsigned int convert_ifc_address(phys_addr_t addr_base);
-extern int fsl_ifc_find(phys_addr_t addr_base);
 
 /* overview of the fsl ifc controller */
 
@@ -848,13 +847,11 @@ struct fsl_ifc_ctrl {
 	bool little_endian;
 };
 
-extern struct fsl_ifc_ctrl *fsl_ifc_ctrl_dev;
-
-static inline u32 ifc_in32(void __iomem *addr)
+static inline u32 ifc_in32(struct fsl_ifc_ctrl *ctrl, void __iomem *addr)
 {
 	u32 val;
 
-	if (fsl_ifc_ctrl_dev->little_endian)
+	if (ctrl->little_endian)
 		val = ioread32(addr);
 	else
 		val = ioread32be(addr);
@@ -862,11 +859,11 @@ static inline u32 ifc_in32(void __iomem *addr)
 	return val;
 }
 
-static inline u16 ifc_in16(void __iomem *addr)
+static inline u16 ifc_in16(struct fsl_ifc_ctrl *ctrl, void __iomem *addr)
 {
 	u16 val;
 
-	if (fsl_ifc_ctrl_dev->little_endian)
+	if (ctrl->little_endian)
 		val = ioread16(addr);
 	else
 		val = ioread16be(addr);
@@ -879,17 +876,19 @@ static inline u8 ifc_in8(void __iomem *addr)
 	return ioread8(addr);
 }
 
-static inline void ifc_out32(u32 val, void __iomem *addr)
+static inline void ifc_out32(struct fsl_ifc_ctrl *ctrl, u32 val,
+			     void __iomem *addr)
 {
-	if (fsl_ifc_ctrl_dev->little_endian)
+	if (ctrl->little_endian)
 		iowrite32(val, addr);
 	else
 		iowrite32be(val, addr);
 }
 
-static inline void ifc_out16(u16 val, void __iomem *addr)
+static inline void ifc_out16(struct fsl_ifc_ctrl *ctrl, u16 val,
+			     void __iomem *addr)
 {
-	if (fsl_ifc_ctrl_dev->little_endian)
+	if (ctrl->little_endian)
 		iowrite16(val, addr);
 	else
 		iowrite16be(val, addr);
