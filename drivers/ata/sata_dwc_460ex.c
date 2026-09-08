@@ -142,10 +142,19 @@ struct sata_dwc_device_port {
 	int			cmd_issued[SATA_DWC_QCMD_MAX];
 	int			dma_pending[SATA_DWC_QCMD_MAX];
 
+	/*
+	 * Each DMA transaction produces 2 interrupts: the DMAC (DMA
+	 * transfer complete) interrupt and the SATA controller operation
+	 * done (DEV/SDB) interrupt.  A command is completed only after both
+	 * have been seen, tracked per tag so that the pairing survives
+	 * either interrupt arriving first.
+	 */
+	bool			dma_done[SATA_DWC_QCMD_MAX];
+	bool			dev_done[SATA_DWC_QCMD_MAX];
+
 	/* DMA info */
 	struct dma_chan			*chan;
 	struct dma_async_tx_descriptor	*desc[SATA_DWC_QCMD_MAX];
-	u32				dma_interrupt_count;
 };
 
 /*
@@ -296,12 +305,8 @@ static void dma_dwc_xfer_done(void *hsdev_instance)
 	hsdevp = HSDEVP_FROM_AP(ap);
 	tag = ap->link.active_tag;
 
-	/*
-	 * Each DMA command produces 2 interrupts.  Only
-	 * complete the command after both interrupts have been
-	 * seen. (See sata_dwc_isr())
-	 */
-	hsdevp->dma_interrupt_count++;
+	/* This is the DMAC half of the transaction; remember it. */
+	hsdevp->dma_done[tag] = true;
 	sata_dwc_clear_dmacr(hsdevp, tag);
 
 	if (hsdevp->dma_pending[tag] == SATA_DWC_DMA_PENDING_NONE) {
@@ -309,7 +314,8 @@ static void dma_dwc_xfer_done(void *hsdev_instance)
 			tag, hsdevp->dma_pending[tag]);
 	}
 
-	if ((hsdevp->dma_interrupt_count % 2) == 0)
+	/* Complete now if the operation done interrupt was already seen. */
+	if (hsdevp->dev_done[tag])
 		sata_dwc_dma_xfer_complete(ap);
 
 	spin_unlock_irqrestore(&host->lock, flags);
@@ -421,8 +427,8 @@ static void sata_dwc_error_intr(struct ata_port *ap,
 	tag = ap->link.active_tag;
 
 	dev_err(ap->dev,
-		"%s SCR_ERROR=0x%08x intpr=0x%08x status=0x%08x dma_intp=%d pending=%d issued=%d",
-		__func__, serror, intpr, status, hsdevp->dma_interrupt_count,
+		"%s SCR_ERROR=0x%08x intpr=0x%08x status=0x%08x pending=%d issued=%d",
+		__func__, serror, intpr, status,
 		hsdevp->dma_pending[tag], hsdevp->cmd_issued[tag]);
 
 	/* Clear error register and interrupt bit */
@@ -551,12 +557,11 @@ static irqreturn_t sata_dwc_isr(int irq, void *dev_instance)
 DRVSTILLBUSY:
 		if (ata_is_dma(qc->tf.protocol)) {
 			/*
-			 * Each DMA transaction produces 2 interrupts. The DMAC
-			 * transfer complete interrupt and the SATA controller
-			 * operation done interrupt. The command should be
-			 * completed only after both interrupts are seen.
+			 * This is the operation done half of the transaction.
+			 * Complete the command if the DMAC half was already
+			 * seen, otherwise wait for it.  (See dma_dwc_xfer_done())
 			 */
-			hsdevp->dma_interrupt_count++;
+			hsdevp->dev_done[tag] = true;
 			if (hsdevp->dma_pending[tag] == \
 					SATA_DWC_DMA_PENDING_NONE) {
 				dev_err(ap->dev,
@@ -565,7 +570,7 @@ DRVSTILLBUSY:
 					hsdevp->dma_pending[tag]);
 			}
 
-			if ((hsdevp->dma_interrupt_count % 2) == 0)
+			if (hsdevp->dma_done[tag])
 				sata_dwc_dma_xfer_complete(ap);
 		} else if (ata_is_pio(qc->tf.protocol)) {
 			ata_sff_hsm_move(ap, qc, status, 0);
@@ -612,14 +617,22 @@ DRVSTILLBUSY:
 		tag_mask &= ~(1U << tag);
 		qc = ata_qc_from_tag(ap, tag);
 		if (unlikely(!qc)) {
-			dev_err(ap->dev, "failed to get qc");
-			handled = 1;
-			goto DONE;
+			dev_err(ap->dev, "stale tag %d in NCQ completion",
+				tag);
+			continue;
 		}
 
 		/* To be picked up by completion functions */
 		qc->ap->link.active_tag = tag;
 		hsdevp->cmd_issued[tag] = SATA_DWC_CMD_ISSUED_NOT;
+
+		/*
+		 * The device has already dropped this tag from SCR_ACTIVE,
+		 * so stop tracking it as in-flight.  This is the operation
+		 * done half of the transaction; the command still completes
+		 * only after the DMAC half has also been seen.
+		 */
+		hsdev->sactive_issued &= ~qcmd_tag_to_mask(tag);
 
 		/* Let libata/scsi layers handle error */
 		if (status & ATA_ERR) {
@@ -634,12 +647,12 @@ DRVSTILLBUSY:
 		dev_dbg(ap->dev, "%s NCQ command, protocol: %s\n", __func__,
 			get_prot_descript(qc->tf.protocol));
 		if (ata_is_dma(qc->tf.protocol)) {
-			hsdevp->dma_interrupt_count++;
+			hsdevp->dev_done[tag] = true;
 			if (hsdevp->dma_pending[tag] == \
 					SATA_DWC_DMA_PENDING_NONE)
 				dev_warn(ap->dev, "%s: DMA not pending?\n",
 					__func__);
-			if ((hsdevp->dma_interrupt_count % 2) == 0)
+			if (hsdevp->dma_done[tag])
 				sata_dwc_dma_xfer_complete(ap);
 		} else {
 			if (unlikely(sata_dwc_qc_complete(ap, qc)))
@@ -859,8 +872,11 @@ static int sata_dwc_port_start(struct ata_port *ap)
 	if (err)
 		goto CLEANUP_PHY;
 
-	for (i = 0; i < SATA_DWC_QCMD_MAX; i++)
+	for (i = 0; i < SATA_DWC_QCMD_MAX; i++) {
 		hsdevp->cmd_issued[i] = SATA_DWC_CMD_ISSUED_NOT;
+		hsdevp->dma_done[i] = false;
+		hsdevp->dev_done[i] = false;
+	}
 
 	ap->bmdma_prd = NULL;	/* set these so libata doesn't use them */
 	ap->bmdma_prd_dma = 0;
@@ -1014,6 +1030,8 @@ static unsigned int sata_dwc_qc_issue(struct ata_queued_cmd *qc)
 		tag = 0;
 
 	if (ata_is_dma(qc->tf.protocol)) {
+		hsdevp->dma_done[tag] = false;
+		hsdevp->dev_done[tag] = false;
 		hsdevp->desc[tag] = dma_dwc_xfer_setup(qc);
 		if (!hsdevp->desc[tag])
 			return AC_ERR_SYSTEM;
