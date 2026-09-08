@@ -2003,9 +2003,9 @@ static int __init at_dma_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, atdma);
 
 	/* create a pool of consistent memory blocks for hardware descriptors */
-	atdma->lli_pool = dma_pool_create("at_hdmac_lli_pool",
-					  &pdev->dev, sizeof(struct at_lli),
-					  4 /* word alignment */, 0);
+	atdma->lli_pool = dmam_pool_create("at_hdmac_lli_pool",
+					   &pdev->dev, sizeof(struct at_lli),
+					   4 /* word alignment */, 0);
 	if (!atdma->lli_pool) {
 		dev_err(&pdev->dev, "Unable to allocate DMA LLI descriptor pool\n");
 		err = -ENOMEM;
@@ -2013,12 +2013,12 @@ static int __init at_dma_probe(struct platform_device *pdev)
 	}
 
 	/* create a pool of consistent memory blocks for memset blocks */
-	atdma->memset_pool = dma_pool_create("at_hdmac_memset_pool",
+	atdma->memset_pool = dmam_pool_create("at_hdmac_memset_pool",
 					     &pdev->dev, sizeof(int), 4, 0);
 	if (!atdma->memset_pool) {
 		dev_err(&pdev->dev, "No memory for memset dma pool\n");
 		err = -ENOMEM;
-		goto err_memset_pool_create;
+		goto err_desc_pool_create;
 	}
 
 	/* clear any pending interrupt */
@@ -2112,9 +2112,6 @@ err_of_dma_controller_register:
 err_dma_async_device_register:
 	disable_irq(platform_get_irq(pdev, 0));
 	at_dma_cleanup_channels(atdma);
-	dma_pool_destroy(atdma->memset_pool);
-err_memset_pool_create:
-	dma_pool_destroy(atdma->lli_pool);
 err_desc_pool_create:
 	free_irq(irq, atdma);
 	return err;
@@ -2132,8 +2129,6 @@ static void at_dma_remove(struct platform_device *pdev)
 	free_irq(platform_get_irq(pdev, 0), atdma);
 
 	at_dma_cleanup_channels(atdma);
-	dma_pool_destroy(atdma->memset_pool);
-	dma_pool_destroy(atdma->lli_pool);
 }
 
 static void at_dma_shutdown(struct platform_device *pdev)
