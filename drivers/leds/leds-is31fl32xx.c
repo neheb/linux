@@ -577,7 +577,7 @@ static int is31fl32xx_probe(struct i2c_client *client)
 	cdef = device_get_match_data(dev);
 
 	count = device_get_child_node_count(dev);
-	if (!count)
+	if (!cdef || !count)
 		return -EINVAL;
 
 	priv = devm_kzalloc(dev, struct_size(priv, leds, count),
