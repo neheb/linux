@@ -354,6 +354,8 @@ struct marvell_priv {
 	u32 step;
 	s8 pair;
 	u8 vct_phase;
+	u16 wol_led_tcr;
+	bool wol_led_armed;
 };
 
 static int marvell_read_page(struct phy_device *phydev)
@@ -2031,6 +2033,7 @@ static void m88e1318_get_wol(struct phy_device *phydev,
 static int m88e1318_set_wol(struct phy_device *phydev,
 			    struct ethtool_wolinfo *wol)
 {
+	struct marvell_priv *priv = phydev->priv;
 	int err = 0, oldpage;
 
 	oldpage = phy_save_page(phydev);
@@ -2062,6 +2065,21 @@ static int m88e1318_set_wol(struct phy_device *phydev,
 		if (err < 0)
 			goto error;
 
+		/* Remember the LED[2]/INTn mux before forcing the pin to
+		 * INTn, so it can be restored when WoL is disabled again.
+		 * Only save it once, or a re-enable would overwrite the
+		 * value read before WoL was first armed.
+		 */
+		if (!priv->wol_led_armed) {
+			err = __phy_read(phydev, MII_88E1318S_PHY_LED_TCR);
+			if (err < 0)
+				goto error;
+
+			priv->wol_led_tcr = err &
+				(MII_88E1318S_PHY_LED_TCR_INTn_ENABLE |
+				 MII_88E1318S_PHY_LED_TCR_INT_ACTIVE_LOW);
+		}
+
 		/* Setup LED[2] as interrupt pin (active low) */
 		err = __phy_modify(phydev, MII_88E1318S_PHY_LED_TCR,
 				   MII_88E1318S_PHY_LED_TCR_FORCE_INT,
@@ -2069,6 +2087,12 @@ static int m88e1318_set_wol(struct phy_device *phydev,
 				   MII_88E1318S_PHY_LED_TCR_INT_ACTIVE_LOW);
 		if (err < 0)
 			goto error;
+
+		/* Mark the mux as claimed only once the pin was actually
+		 * forced to the INTn function; the saved value taken
+		 * before that write is still pristine on error.
+		 */
+		priv->wol_led_armed = true;
 	}
 
 	if (wol->wolopts & WAKE_MAGIC) {
@@ -2134,6 +2158,48 @@ static int m88e1318_set_wol(struct phy_device *phydev,
 				   MII_88E1318S_PHY_WOL_CTRL_CLEAR_WOL_STATUS);
 		if (err < 0)
 			goto error;
+	}
+
+	if (!(wol->wolopts & (WAKE_MAGIC | WAKE_PHY))) {
+		/* Fully disabled: undo the WoL interrupt setup done above,
+		 * so a later re-enable starts from a clean state.
+		 *
+		 * Clear CSIER.WOL_EIE on the copper page. If this session
+		 * forced the LED[2]/INTn mux, restore the INTn enable and
+		 * polarity bits read at arming time. FORCE_INT is not
+		 * restored: arming cleared it, and reasserting it would
+		 * hold the interrupt line asserted and turn a shared PHY
+		 * interrupt into a "nobody cared" IRQ storm.
+		 *
+		 * If the mux was never claimed here (MAC-interrupt PHYs,
+		 * strap or marvell,reg-init setups, or a left-over from an
+		 * earlier session), LED_TCR is left alone.
+		 */
+		err = marvell_write_page(phydev, MII_MARVELL_COPPER_PAGE);
+		if (err < 0)
+			goto error;
+
+		err = __phy_clear_bits(phydev, MII_88E1318S_PHY_CSIER,
+				       MII_88E1318S_PHY_CSIER_WOL_EIE);
+		if (err < 0)
+			goto error;
+
+		if (!priv->wol_led_armed)
+			goto error;
+
+		err = marvell_write_page(phydev, MII_MARVELL_LED_PAGE);
+		if (err < 0)
+			goto error;
+
+		err = __phy_modify(phydev, MII_88E1318S_PHY_LED_TCR,
+				   MII_88E1318S_PHY_LED_TCR_FORCE_INT |
+				   MII_88E1318S_PHY_LED_TCR_INTn_ENABLE |
+				   MII_88E1318S_PHY_LED_TCR_INT_ACTIVE_LOW,
+				   priv->wol_led_tcr);
+		if (err < 0)
+			goto error;
+
+		priv->wol_led_armed = false;
 	}
 
 error:
