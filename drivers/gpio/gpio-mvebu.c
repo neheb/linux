@@ -94,6 +94,12 @@
 #define MVEBU_GPIO_SOC_VARIANT_ARMADAXP 0x3
 #define MVEBU_GPIO_SOC_VARIANT_A8K	0x4
 
+/* Indexes into struct irq_chip_generic.chip_types[] */
+enum mvebu_gpio_chip_type {
+	MVEBU_GPIO_CHIP_LEVEL,
+	MVEBU_GPIO_CHIP_EDGE,
+};
+
 #define MVEBU_MAX_GPIO_PER_BANK		32
 
 struct mvebu_pwm {
@@ -996,6 +1002,46 @@ static const struct of_device_id mvebu_gpio_of_match[] = {
 	},
 };
 
+static void
+mvebu_gpio_restore_irq_masks(struct mvebu_gpio_chip *mvchip, u32 level_cache,
+			     u32 edge_cache)
+{
+	int i;
+
+	switch (mvchip->soc_variant) {
+	case MVEBU_GPIO_SOC_VARIANT_ORION:
+	case MVEBU_GPIO_SOC_VARIANT_A8K:
+		regmap_write(mvchip->regs, GPIO_EDGE_MASK_OFF + mvchip->offset,
+			     mvchip->edge_mask_regs[0] & edge_cache);
+		regmap_write(mvchip->regs, GPIO_LEVEL_MASK_OFF + mvchip->offset,
+			     mvchip->level_mask_regs[0] & level_cache);
+		break;
+	case MVEBU_GPIO_SOC_VARIANT_MV78200:
+		for (i = 0; i < 2; i++) {
+			regmap_write(mvchip->regs,
+				     GPIO_EDGE_MASK_MV78200_OFF(i),
+				     mvchip->edge_mask_regs[i] & edge_cache);
+			regmap_write(mvchip->regs,
+				     GPIO_LEVEL_MASK_MV78200_OFF(i),
+				     mvchip->level_mask_regs[i] & level_cache);
+		}
+		break;
+	case MVEBU_GPIO_SOC_VARIANT_ARMADAXP:
+		for (i = 0; i < 4; i++) {
+			regmap_write(mvchip->percpu_regs,
+				     GPIO_EDGE_MASK_ARMADAXP_OFF(i),
+				     mvchip->edge_mask_regs[i] & edge_cache);
+			regmap_write(mvchip->percpu_regs,
+				     GPIO_LEVEL_MASK_ARMADAXP_OFF(i),
+				     mvchip->level_mask_regs[i] & level_cache);
+		}
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		return;
+	}
+}
+
 static int mvebu_gpio_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct mvebu_gpio_chip *mvchip = platform_get_drvdata(pdev);
@@ -1051,9 +1097,6 @@ static int mvebu_gpio_suspend(struct platform_device *pdev, pm_message_t state)
 static int mvebu_gpio_resume(struct platform_device *pdev)
 {
 	struct mvebu_gpio_chip *mvchip = platform_get_drvdata(pdev);
-	u32 edge_cache = ~0U, level_cache = ~0U;
-	unsigned long flags;
-	int i;
 
 	regmap_write(mvchip->regs, GPIO_OUT_OFF + mvchip->offset,
 		     mvchip->out_reg);
@@ -1077,42 +1120,15 @@ static int mvebu_gpio_resume(struct platform_device *pdev)
 		struct irq_chip_generic *gc;
 
 		gc = irq_get_domain_generic_chip(mvchip->domain, 0);
-		raw_spin_lock_irqsave(&gc->lock, flags);
-		level_cache = gc->chip_types[0].mask_cache_priv;
-		edge_cache = gc->chip_types[1].mask_cache_priv;
-		raw_spin_unlock_irqrestore(&gc->lock, flags);
-	}
+		if (!gc)
+			return -EINVAL;
 
-	switch (mvchip->soc_variant) {
-	case MVEBU_GPIO_SOC_VARIANT_ORION:
-	case MVEBU_GPIO_SOC_VARIANT_A8K:
-		regmap_write(mvchip->regs, GPIO_EDGE_MASK_OFF + mvchip->offset,
-			     mvchip->edge_mask_regs[0] & edge_cache);
-		regmap_write(mvchip->regs, GPIO_LEVEL_MASK_OFF + mvchip->offset,
-			     mvchip->level_mask_regs[0] & level_cache);
-		break;
-	case MVEBU_GPIO_SOC_VARIANT_MV78200:
-		for (i = 0; i < 2; i++) {
-			regmap_write(mvchip->regs,
-				     GPIO_EDGE_MASK_MV78200_OFF(i),
-				     mvchip->edge_mask_regs[i] & edge_cache);
-			regmap_write(mvchip->regs,
-				     GPIO_LEVEL_MASK_MV78200_OFF(i),
-				     mvchip->level_mask_regs[i] & level_cache);
-		}
-		break;
-	case MVEBU_GPIO_SOC_VARIANT_ARMADAXP:
-		for (i = 0; i < 4; i++) {
-			regmap_write(mvchip->percpu_regs,
-				     GPIO_EDGE_MASK_ARMADAXP_OFF(i),
-				     mvchip->edge_mask_regs[i] & edge_cache);
-			regmap_write(mvchip->percpu_regs,
-				     GPIO_LEVEL_MASK_ARMADAXP_OFF(i),
-				     mvchip->level_mask_regs[i] & level_cache);
-		}
-		break;
-	default:
-		BUG();
+		guard(raw_spinlock)(&gc->lock);
+		mvebu_gpio_restore_irq_masks(mvchip,
+					     gc->chip_types[MVEBU_GPIO_CHIP_LEVEL]
+						     .mask_cache_priv,
+					     gc->chip_types[MVEBU_GPIO_CHIP_EDGE]
+						     .mask_cache_priv);
 	}
 
 	if (IS_REACHABLE(CONFIG_PWM) && mvchip->mvpwm)
@@ -1333,7 +1349,7 @@ static int mvebu_gpio_probe(struct platform_device *pdev)
 	 */
 	gc = irq_get_domain_generic_chip(mvchip->domain, 0);
 	gc->private = mvchip;
-	ct = &gc->chip_types[0];
+	ct = &gc->chip_types[MVEBU_GPIO_CHIP_LEVEL];
 	ct->type = IRQ_TYPE_LEVEL_MASK;
 	ct->chip.irq_mask = mvebu_gpio_level_irq_mask;
 	ct->chip.irq_unmask = mvebu_gpio_level_irq_unmask;
@@ -1342,7 +1358,7 @@ static int mvebu_gpio_probe(struct platform_device *pdev)
 	ct->chip.flags = IRQCHIP_SET_TYPE_MASKED | IRQCHIP_MASK_ON_SUSPEND;
 	ct->chip.name = mvchip->chip.label;
 
-	ct = &gc->chip_types[1];
+	ct = &gc->chip_types[MVEBU_GPIO_CHIP_EDGE];
 	ct->type = IRQ_TYPE_EDGE_BOTH;
 	ct->chip.irq_ack = mvebu_gpio_irq_ack;
 	ct->chip.irq_mask = mvebu_gpio_edge_irq_mask;
