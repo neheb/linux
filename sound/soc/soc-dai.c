@@ -6,6 +6,8 @@
 // Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
 //
 
+#include <linux/of.h>
+
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <sound/soc-dai.h>
