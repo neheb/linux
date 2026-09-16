@@ -10,6 +10,7 @@
 #include <linux/miscdevice.h>
 #include <linux/mailbox_client.h>
 #include <linux/semaphore.h>
+#include <linux/slab.h>
 #include <linux/workqueue.h>
 
 #define MAX_DEVNAME_SZ			64
