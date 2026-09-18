@@ -155,32 +155,32 @@
 			reg = <0>;
 			spi-max-frequency = <40000000>; /* input clock */
 
-			partition@u-boot {
+			partition@0 {
 				/* 512KB for u-boot Bootloader Image */
 				reg = <0x0 0x00080000>;
 				label = "u-boot";
 				read-only;
 			};
 
-			partition@dtb {
+			partition@80000 {
 				/* 512KB for DTB Image*/
 				reg = <0x00080000 0x00080000>;
 				label = "dtb";
 			};
 
-			partition@kernel {
+			partition@100000 {
 				/* 4MB for Linux Kernel Image */
 				reg = <0x00100000 0x00400000>;
 				label = "kernel";
 			};
 
-			partition@fs {
+			partition@500000 {
 				/* 4MB for Compressed RFS Image */
 				reg = <0x00500000 0x00400000>;
 				label = "file system";
 			};
 
-			partition@jffs-fs {
+			partition@900000 {
 				/* 7MB for JFFS2 based RFS */
 				reg = <0x00900000 0x00700000>;
 				label = "file system jffs2";
