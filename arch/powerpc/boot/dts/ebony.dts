@@ -147,7 +147,7 @@
 				interrupts = <0x5 0x4>;
 				interrupt-parent = <&UIC1>;
 
-				small-flash@0,80000 {
+				flash@0,80000 {
 					compatible = "jedec-flash";
 					bank-width = <1>;
 					reg = <0x00000000 0x00080000 0x00080000>;
@@ -167,7 +167,7 @@
 					reg = <0x00000001 0x00000000 0x00002000>;
 				};
 
-				large-flash@2,0 {
+				flash@2,0 {
 					compatible = "jedec-flash";
 					bank-width = <1>;
 					reg = <0x00000002 0x00000000 0x00400000>;

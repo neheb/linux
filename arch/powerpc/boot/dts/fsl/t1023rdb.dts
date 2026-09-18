@@ -67,7 +67,7 @@
 		ranges = <0 0 0xf 0xe8000000 0x08000000
 			  1 0 0xf 0xff800000 0x00010000>;
 
-		nor@0,0 {
+		flash@0,0 {
 			#address-cells = <1>;
 			#size-cells = <1>;
 			status = "disabled";
