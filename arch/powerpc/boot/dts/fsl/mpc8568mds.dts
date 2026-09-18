@@ -30,7 +30,7 @@
 			  0x4 0x0 0xf8008000 0x00008000
 			  0x5 0x0 0xf8010000 0x00008000>;
 
-		nor@0,0 {
+		flash@0,0 {
 			#address-cells = <1>;
 			#size-cells = <1>;
 			compatible = "cfi-flash";
