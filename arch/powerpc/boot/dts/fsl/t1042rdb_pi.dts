@@ -39,7 +39,7 @@
 	model = "fsl,T1042RDB_PI";
 	compatible = "fsl,T1042RDB_PI";
 
-	ifc: localbus@ffe124000 {
+	ifc: memory-controller@ffe124000 {
 		cpld@3,0 {
 			compatible = "fsl,t104xrdb-cpld", "fsl,deepsleep-cpld";
 		};

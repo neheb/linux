@@ -46,7 +46,7 @@
 		phy_xaui_slot2 = &phy_xaui_slot2;
 	};
 
-	ifc: localbus@ffe124000 {
+	ifc: memory-controller@ffe124000 {
 		board-control@3,0 {
 			compatible = "fsl,b4860qds-fpga", "fsl,fpga-qixis";
 		};

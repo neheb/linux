@@ -39,7 +39,7 @@
 	model = "fsl,B4420QDS";
 	compatible = "fsl,B4420QDS";
 
-	ifc: localbus@ffe124000 {
+	ifc: memory-controller@ffe124000 {
 		board-control@3,0 {
 			compatible = "fsl,b4420qds-fpga", "fsl,fpga-qixis";
 		};

@@ -42,7 +42,7 @@
 	#size-cells = <2>;
 	interrupt-parent = <&mpic>;
 
-	ifc: localbus@ffe124000 {
+	ifc: memory-controller@ffe124000 {
 		cpld@3,0 {
 			compatible = "fsl,t1040d4rdb-cpld",
 					"fsl,deepsleep-cpld";
