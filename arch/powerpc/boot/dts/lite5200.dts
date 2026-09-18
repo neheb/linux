@@ -296,7 +296,7 @@
 		ranges = <0 0 0xff000000 0x01000000>;
 
 		flash@0,0 {
-			compatible = "amd,am29lv652d", "cfi-flash";
+			compatible = "cfi-flash";
 			reg = <0 0 0x01000000>;
 			bank-width = <1>;
 		};
