@@ -79,7 +79,7 @@
 		emi1_slot4 = &t4240mdio4;
 	};
 
-	ifc: localbus@ffe124000 {
+	ifc: memory-controller@ffe124000 {
 		reg = <0xf 0xfe124000 0 0x2000>;
 		ranges = <0 0 0xf 0xe8000000 0x08000000
 			  2 0 0xf 0xff800000 0x00010000
@@ -121,7 +121,7 @@
 				label = "NAND Linux Kernel Image";
 			};
 
-			partition@C00000 {
+			partition@c00000 {
 				/* 500MB for Root file System Image */
 				reg = <0x00c00000 0x1F400000>;
 				label = "NAND RFS Image";
