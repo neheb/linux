@@ -161,7 +161,7 @@
 				nor_flash@0,0 {
 					compatible = "amd,s29gl512n", "cfi-flash";
 					bank-width = <2>;
-					/* reg property is supplied in by U-Boot */
+					reg = <0x00000000 0x00000000 0x00000000>; /* Filled in by U-Boot */
 					#address-cells = <1>;
 					#size-cells = <1>;
 					partition@0 {
