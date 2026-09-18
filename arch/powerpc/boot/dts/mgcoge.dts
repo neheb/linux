@@ -81,7 +81,7 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			bank-width = <2>;
-			partition@app { /* 64 MBytes */
+			partition@0 { /* 64 MBytes */
 				label = "ubi0";
 				reg = <0x00000000 0x04000000>;
 			};

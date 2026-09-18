@@ -123,22 +123,22 @@
 				reg = <0>;
 				spi-max-frequency = <40000000>; /* input clock */
 
-				partition@u-boot {
+				partition@0 {
 					label = "u-boot-spi";
 					reg = <0x00000000 0x00100000>;
 					read-only;
 				};
-				partition@kernel {
+				partition@100000 {
 					label = "kernel-spi";
 					reg = <0x00100000 0x00500000>;
 					read-only;
 				};
-				partition@dtb {
+				partition@600000 {
 					label = "dtb-spi";
 					reg = <0x00600000 0x00100000>;
 					read-only;
 				};
-				partition@fs {
+				partition@700000 {
 					label = "file system-spi";
 					reg = <0x00700000 0x00900000>;
 				};
