@@ -120,6 +120,8 @@ struct eip93_ring {
 	struct idr			crypto_async_idr;
 };
 
+struct eip93_alg_template;
+
 /**
  * struct eip93_device - crypto engine device structure
  */
@@ -128,6 +130,8 @@ struct eip93_device {
 	struct device		*dev;
 	struct clk		*clk;
 	int			irq;
+	/* device-local copies of the registered algorithm templates */
+	struct eip93_alg_template *algs;
 	struct eip93_ring	ring[];
 };
 

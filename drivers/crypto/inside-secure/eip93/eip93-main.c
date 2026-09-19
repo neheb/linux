@@ -107,24 +107,28 @@ static int eip93_algo_is_supported(u32 alg_flags, u32 supported_algo_flags)
 	return 1;
 }
 
-static void eip93_unregister_algs(u32 supported_algo_flags, unsigned int i)
+static void eip93_unregister_algs(struct eip93_device *eip93,
+				  u32 supported_algo_flags, unsigned int i)
 {
 	unsigned int j;
 
+	if (!eip93->algs)
+		return;
+
 	for (j = 0; j < i; j++) {
-		if (!eip93_algo_is_supported(eip93_algs[j]->flags,
+		if (!eip93_algo_is_supported(eip93->algs[j].flags,
 					     supported_algo_flags))
 			continue;
 
-		switch (eip93_algs[j]->type) {
+		switch (eip93->algs[j].type) {
 		case EIP93_ALG_TYPE_SKCIPHER:
-			crypto_unregister_skcipher(&eip93_algs[j]->alg.skcipher);
+			crypto_unregister_skcipher(&eip93->algs[j].alg.skcipher);
 			break;
 		case EIP93_ALG_TYPE_AEAD:
-			crypto_unregister_aead(&eip93_algs[j]->alg.aead);
+			crypto_unregister_aead(&eip93->algs[j].alg.aead);
 			break;
 		case EIP93_ALG_TYPE_HASH:
-			crypto_unregister_ahash(&eip93_algs[j]->alg.ahash);
+			crypto_unregister_ahash(&eip93->algs[j].alg.ahash);
 			break;
 		}
 	}
@@ -135,41 +139,49 @@ static int eip93_register_algs(struct eip93_device *eip93, u32 supported_algo_fl
 	unsigned int i;
 	int ret = 0;
 
-	for (i = 0; i < ARRAY_SIZE(eip93_algs); i++) {
-		u32 alg_flags = eip93_algs[i]->flags;
+	eip93->algs = devm_kcalloc(eip93->dev, ARRAY_SIZE(eip93_algs),
+				   sizeof(*eip93->algs), GFP_KERNEL);
+	if (!eip93->algs)
+		return -ENOMEM;
 
-		eip93_algs[i]->eip93 = eip93;
+	for (i = 0; i < ARRAY_SIZE(eip93_algs); i++) {
+		struct eip93_alg_template *tmpl = &eip93->algs[i];
+		u32 alg_flags;
+
+		*tmpl = *eip93_algs[i];
+		tmpl->eip93 = eip93;
+		alg_flags = tmpl->flags;
 
 		if (!eip93_algo_is_supported(alg_flags, supported_algo_flags))
 			continue;
 
 		if (IS_AES(alg_flags) && !IS_HMAC(alg_flags)) {
 			if (supported_algo_flags & EIP93_PE_OPTION_AES_KEY128)
-				eip93_algs[i]->alg.skcipher.max_keysize =
+				tmpl->alg.skcipher.max_keysize =
 					AES_KEYSIZE_128;
 
 			if (supported_algo_flags & EIP93_PE_OPTION_AES_KEY192)
-				eip93_algs[i]->alg.skcipher.max_keysize =
+				tmpl->alg.skcipher.max_keysize =
 					AES_KEYSIZE_192;
 
 			if (supported_algo_flags & EIP93_PE_OPTION_AES_KEY256)
-				eip93_algs[i]->alg.skcipher.max_keysize =
+				tmpl->alg.skcipher.max_keysize =
 					AES_KEYSIZE_256;
 
 			if (IS_RFC3686(alg_flags))
-				eip93_algs[i]->alg.skcipher.max_keysize +=
+				tmpl->alg.skcipher.max_keysize +=
 					CTR_RFC3686_NONCE_SIZE;
 		}
 
-		switch (eip93_algs[i]->type) {
+		switch (tmpl->type) {
 		case EIP93_ALG_TYPE_SKCIPHER:
-			ret = crypto_register_skcipher(&eip93_algs[i]->alg.skcipher);
+			ret = crypto_register_skcipher(&tmpl->alg.skcipher);
 			break;
 		case EIP93_ALG_TYPE_AEAD:
-			ret = crypto_register_aead(&eip93_algs[i]->alg.aead);
+			ret = crypto_register_aead(&tmpl->alg.aead);
 			break;
 		case EIP93_ALG_TYPE_HASH:
-			ret = crypto_register_ahash(&eip93_algs[i]->alg.ahash);
+			ret = crypto_register_ahash(&tmpl->alg.ahash);
 			break;
 		}
 		if (ret)
@@ -179,7 +191,7 @@ static int eip93_register_algs(struct eip93_device *eip93, u32 supported_algo_fl
 	return 0;
 
 fail:
-	eip93_unregister_algs(supported_algo_flags, i);
+	eip93_unregister_algs(eip93, supported_algo_flags, i);
 
 	return ret;
 }
@@ -520,7 +532,7 @@ static void eip93_crypto_remove(struct platform_device *pdev)
 
 	algo_flags = readl(eip93->base + EIP93_REG_PE_OPTION_1);
 
-	eip93_unregister_algs(algo_flags, ARRAY_SIZE(eip93_algs));
+	eip93_unregister_algs(eip93, algo_flags, ARRAY_SIZE(eip93_algs));
 	eip93_cleanup(eip93);
 }
 
