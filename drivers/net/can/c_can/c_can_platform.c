@@ -77,21 +77,15 @@ static void c_can_hw_raminit_wait_syscon(const struct c_can_priv *priv,
 					 u32 mask, u32 val)
 {
 	const struct c_can_raminit *raminit = &priv->raminit_sys;
-	int timeout = 0;
+	int ret;
 	u32 ctrl = 0;
 
 	/* We look only at the bits of our instance. */
 	val &= mask;
-	do {
-		udelay(1);
-		timeout++;
-
-		regmap_read(raminit->syscon, raminit->reg, &ctrl);
-		if (timeout == 1000) {
-			dev_err(&priv->dev->dev, "%s: time out\n", __func__);
-			break;
-		}
-	} while ((ctrl & mask) != val);
+	ret = regmap_read_poll_timeout_atomic(raminit->syscon, raminit->reg,
+					      ctrl, (ctrl & mask) == val, 1, 1000);
+	if (ret)
+		dev_err(&priv->dev->dev, "%s: time out\n", __func__);
 }
 
 static void c_can_hw_raminit_syscon(const struct c_can_priv *priv, bool enable)
