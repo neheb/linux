@@ -18,6 +18,7 @@
 #include <linux/if_ether.h>
 #include <linux/init.h>
 #include <linux/errno.h>
+#include <linux/iopoll.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
@@ -2876,8 +2877,8 @@ static void bcmgenet_fini_tx_napi(struct bcmgenet_priv *priv)
 
 static int bcmgenet_tdma_disable(struct bcmgenet_priv *priv)
 {
-	int timeout = 0;
 	u32 reg, mask;
+	int ret;
 
 	reg = bcmgenet_tdma_readl(priv, DMA_CTRL);
 	mask = (1 << (priv->hw_params->tx_queues + 1)) - 1;
@@ -2886,21 +2887,16 @@ static int bcmgenet_tdma_disable(struct bcmgenet_priv *priv)
 	bcmgenet_tdma_writel(priv, reg, DMA_CTRL);
 
 	/* Check DMA status register to confirm DMA is disabled */
-	while (timeout++ < DMA_TIMEOUT_VAL) {
-		reg = bcmgenet_tdma_readl(priv, DMA_STATUS);
-		if ((reg & mask) == mask)
-			return 0;
+	ret = read_poll_timeout_atomic(bcmgenet_tdma_readl, reg, (reg & mask) == mask,
+				       1, DMA_TIMEOUT_VAL, false, priv, DMA_STATUS);
 
-		udelay(1);
-	}
-
-	return -ETIMEDOUT;
+	return ret;
 }
 
 static int bcmgenet_rdma_disable(struct bcmgenet_priv *priv)
 {
-	int timeout = 0;
 	u32 reg, mask;
+	int ret;
 
 	reg = bcmgenet_rdma_readl(priv, DMA_CTRL);
 	mask = (1 << (priv->hw_params->rx_queues + 1)) - 1;
@@ -2909,15 +2905,10 @@ static int bcmgenet_rdma_disable(struct bcmgenet_priv *priv)
 	bcmgenet_rdma_writel(priv, reg, DMA_CTRL);
 
 	/* Check DMA status register to confirm DMA is disabled */
-	while (timeout++ < DMA_TIMEOUT_VAL) {
-		reg = bcmgenet_rdma_readl(priv, DMA_STATUS);
-		if ((reg & mask) == mask)
-			return 0;
+	ret = read_poll_timeout_atomic(bcmgenet_rdma_readl, reg, (reg & mask) == mask,
+				       1, DMA_TIMEOUT_VAL, false, priv, DMA_STATUS);
 
-		udelay(1);
-	}
-
-	return -ETIMEDOUT;
+	return ret;
 }
 
 /* Initialize Tx queues
