@@ -69,7 +69,7 @@
 #include <linux/delay.h>
 #include <linux/bitops.h>
 #include <linux/io.h>
-
+#include <linux/iopoll.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
@@ -863,7 +863,6 @@ static void et1310_config_mac_regs1(struct et131x_adapter *adapter)
 
 static void et1310_config_mac_regs2(struct et131x_adapter *adapter)
 {
-	int32_t delay = 0;
 	struct mac_regs __iomem *mac = &adapter->regs->mac;
 	struct phy_device *phydev = adapter->netdev->phydev;
 	u32 cfg1;
@@ -915,17 +914,12 @@ static void et1310_config_mac_regs2(struct et131x_adapter *adapter)
 	writel(ifctrl, &mac->if_ctrl);
 	writel(cfg2, &mac->cfg2);
 
-	do {
-		udelay(10);
-		delay++;
-		cfg1 = readl(&mac->cfg1);
-	} while ((cfg1 & ET_MAC_CFG1_WAIT) != ET_MAC_CFG1_WAIT && delay < 100);
-
-	if (delay == 100) {
+	if (read_poll_timeout_atomic(readl, cfg1,
+				     (cfg1 & ET_MAC_CFG1_WAIT) == ET_MAC_CFG1_WAIT,
+				     10, 1000, false, &mac->cfg1))
 		dev_warn(&adapter->pdev->dev,
 			 "Syncd bits did not respond correctly cfg1 word 0x%08x\n",
 			 cfg1);
-	}
 
 	ctl |= ET_TX_CTRL_TXMAC_ENABLE | ET_TX_CTRL_FC_DISABLE;
 	writel(ctl, &adapter->regs->txmac.ctl);
@@ -1171,10 +1165,10 @@ static int et131x_phy_mii_read(struct et131x_adapter *adapter, u8 addr,
 {
 	struct mac_regs __iomem *mac = &adapter->regs->mac;
 	int status = 0;
-	u32 delay = 0;
 	u32 mii_addr;
 	u32 mii_cmd;
 	u32 mii_indicator;
+	int ret;
 
 	/* Save a local copy of the registers we are dealing with so we can
 	 * set them back
@@ -1190,14 +1184,11 @@ static int et131x_phy_mii_read(struct et131x_adapter *adapter, u8 addr,
 
 	writel(0x1, &mac->mii_mgmt_cmd);
 
-	do {
-		udelay(50);
-		delay++;
-		mii_indicator = readl(&mac->mii_mgmt_indicator);
-	} while ((mii_indicator & ET_MAC_MGMT_WAIT) && delay < 50);
-
+	ret = read_poll_timeout_atomic(readl, mii_indicator,
+				       !(mii_indicator & ET_MAC_MGMT_WAIT),
+				       50, 2500, false, &mac->mii_mgmt_indicator);
 	/* If we hit the max delay, we could not read the register */
-	if (delay == 50) {
+	if (ret) {
 		dev_warn(&adapter->pdev->dev,
 			 "reg 0x%08x could not be read\n", reg);
 		dev_warn(&adapter->pdev->dev, "status is  0x%08x\n",
@@ -1240,10 +1231,10 @@ static int et131x_mii_write(struct et131x_adapter *adapter, u8 addr, u8 reg,
 {
 	struct mac_regs __iomem *mac = &adapter->regs->mac;
 	int status = 0;
-	u32 delay = 0;
 	u32 mii_addr;
 	u32 mii_cmd;
 	u32 mii_indicator;
+	int ret;
 
 	/* Save a local copy of the registers we are dealing with so we can
 	 * set them back
@@ -1260,14 +1251,11 @@ static int et131x_mii_write(struct et131x_adapter *adapter, u8 addr, u8 reg,
 	/* Add the value to write to the registers to the mac */
 	writel(value, &mac->mii_mgmt_ctrl);
 
-	do {
-		udelay(50);
-		delay++;
-		mii_indicator = readl(&mac->mii_mgmt_indicator);
-	} while ((mii_indicator & ET_MAC_MGMT_BUSY) && delay < 100);
-
+	ret = read_poll_timeout_atomic(readl, mii_indicator,
+				       !(mii_indicator & ET_MAC_MGMT_BUSY),
+				       50, 5000, false, &mac->mii_mgmt_indicator);
 	/* If we hit the max delay, we could not write the register */
-	if (delay == 100) {
+	if (ret) {
 		u16 tmp;
 
 		dev_warn(&adapter->pdev->dev,
