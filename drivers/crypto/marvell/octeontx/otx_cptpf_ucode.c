@@ -10,6 +10,7 @@
 
 #include <linux/ctype.h>
 #include <linux/firmware.h>
+#include <linux/iopoll.h>
 #include <linux/string.h>
 #include <linux/string_choices.h>
 #include "otx_cpt_common.h"
@@ -1543,8 +1544,9 @@ void otx_cpt_set_eng_grps_is_rdonly(struct otx_cpt_eng_grps *eng_grps,
 
 void otx_cpt_disable_all_cores(struct otx_cpt_device *cpt)
 {
-	int grp, timeout = 100;
+	int grp;
 	u64 reg;
+	int ret;
 
 	/* Disengage the cores from groups */
 	for (grp = 0; grp < OTX_CPT_MAX_ENGINE_GROUPS; grp++) {
@@ -1552,15 +1554,11 @@ void otx_cpt_disable_all_cores(struct otx_cpt_device *cpt)
 		udelay(CSR_DELAY);
 	}
 
-	reg = readq(cpt->reg_base + OTX_CPT_PF_EXEC_BUSY);
-	while (reg) {
-		udelay(CSR_DELAY);
-		reg = readq(cpt->reg_base + OTX_CPT_PF_EXEC_BUSY);
-		if (timeout--) {
-			dev_warn(&cpt->pdev->dev, "Cores still busy\n");
-			break;
-		}
-	}
+	ret = read_poll_timeout_atomic(readq, reg, !reg, CSR_DELAY,
+				       100 * CSR_DELAY, false,
+				       cpt->reg_base + OTX_CPT_PF_EXEC_BUSY);
+	if (ret)
+		dev_warn(&cpt->pdev->dev, "Cores still busy\n");
 
 	/* Disable the cores */
 	writeq(0, cpt->reg_base + OTX_CPT_PF_EXE_CTL);
