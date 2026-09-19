@@ -20,6 +20,7 @@
 #include <linux/mii.h>
 #include <linux/crc32.h>
 #include <linux/delay.h>
+#include <linux/iopoll.h>
 #include <linux/spinlock.h>
 #include <linux/in.h>
 #include <linux/ip.h>
@@ -411,9 +412,9 @@ static int
 jme_check_link(struct net_device *netdev, int testonly)
 {
 	struct jme_adapter *jme = netdev_priv(netdev);
-	u32 phylink, cnt = JME_SPDRSV_TIMEOUT, bmcr;
+	u32 phylink, bmcr;
 	char linkmsg[64];
-	int rc = 0;
+	int rc = 0, ret;
 
 	linkmsg[0] = '\0';
 
@@ -449,17 +450,19 @@ jme_check_link(struct net_device *netdev, int testonly)
 			/*
 			 * Keep polling for speed/duplex resolve complete
 			 */
-			while (!(phylink & PHY_LINK_SPEEDDPU_RESOLVED) &&
-				--cnt) {
-
-				udelay(1);
-
-				if (jme->fpgaver)
-					phylink = jme_linkstat_from_phy(jme);
-				else
-					phylink = jread32(jme, JME_PHY_LINK);
-			}
-			if (!cnt)
+			if (jme->fpgaver)
+				ret = read_poll_timeout_atomic(jme_linkstat_from_phy,
+							       phylink,
+							       phylink & PHY_LINK_SPEEDDPU_RESOLVED,
+							       1, JME_SPDRSV_TIMEOUT,
+							       false, jme);
+			else
+				ret = read_poll_timeout_atomic(jread32, phylink,
+							       phylink & PHY_LINK_SPEEDDPU_RESOLVED,
+							       1, JME_SPDRSV_TIMEOUT,
+							       false, jme,
+							       JME_PHY_LINK);
+			if (ret)
 				pr_err("Waiting speed resolve timeout\n");
 
 			strcat(linkmsg, "ANed: ");
