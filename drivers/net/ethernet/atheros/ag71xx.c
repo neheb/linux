@@ -38,6 +38,7 @@
 #include <linux/reset.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/mm.h>
 #include <net/page_pool/helpers.h>
 #include <net/selftests.h>
@@ -552,23 +553,16 @@ static const struct ethtool_ops ag71xx_ethtool_ops = {
 static int ag71xx_mdio_wait_busy(struct ag71xx *ag)
 {
 	struct net_device *ndev = ag->ndev;
-	int i;
+	u32 busy;
 
-	for (i = 0; i < AG71XX_MDIO_RETRY; i++) {
-		u32 busy;
-
-		udelay(AG71XX_MDIO_DELAY);
-
-		busy = ag71xx_rr(ag, AG71XX_REG_MII_IND);
-		if (!busy)
-			return 0;
-
-		udelay(AG71XX_MDIO_DELAY);
+	if (read_poll_timeout_atomic(ag71xx_rr, busy, !busy, AG71XX_MDIO_DELAY,
+				     AG71XX_MDIO_RETRY * 2 * AG71XX_MDIO_DELAY,
+				     false, ag, AG71XX_REG_MII_IND)) {
+		netif_err(ag, link, ndev, "MDIO operation timed out\n");
+		return -ETIMEDOUT;
 	}
 
-	netif_err(ag, link, ndev, "MDIO operation timed out\n");
-
-	return -ETIMEDOUT;
+	return 0;
 }
 
 static int ag71xx_mdio_mii_read(struct mii_bus *bus, int addr, int reg)
