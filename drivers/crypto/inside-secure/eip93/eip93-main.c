@@ -238,7 +238,13 @@ get_more:
 		if (err)
 			return;
 
-		err = rdesc->pe_ctrl_stat_word & (EIP93_PE_CTRL_PE_EXT_ERR_CODE |
+		/*
+		 * Order the READY word before the remaining payload words
+		 * the DMA engine wrote back to the descriptor.
+		 */
+		dma_rmb();
+
+		err = pe_ctrl_stat & (EIP93_PE_CTRL_PE_EXT_ERR_CODE |
 						  EIP93_PE_CTRL_PE_EXT_ERR |
 						  EIP93_PE_CTRL_PE_SEQNUM_ERR |
 						  EIP93_PE_CTRL_PE_PAD_ERR |
