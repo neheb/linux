@@ -4,6 +4,7 @@
  */
 
 #include <linux/list.h>
+#include <linux/iopoll.h>
 #include "altera_utils.h"
 #include "altera_tse.h"
 #include "altera_sgdmahw.h"
@@ -511,15 +512,14 @@ static int sgdma_rxbusy(struct altera_tse_private *priv)
  */
 static int sgdma_txbusy(struct altera_tse_private *priv)
 {
-	int delay = 0;
+	u32 sts;
+	int ret;
 
 	/* if DMA is busy, wait for current transaction to finish */
-	while ((csrrd32(priv->tx_dma_csr, sgdma_csroffs(status))
-		& SGDMA_STSREG_BUSY) && (delay++ < 100))
-		udelay(1);
-
-	if (csrrd32(priv->tx_dma_csr, sgdma_csroffs(status))
-	    & SGDMA_STSREG_BUSY) {
+	ret = read_poll_timeout_atomic(csrrd32, sts, !(sts & SGDMA_STSREG_BUSY),
+				       1, 100, false, priv->tx_dma_csr,
+				       sgdma_csroffs(status));
+	if (ret) {
 		netdev_err(priv->dev, "timeout waiting for tx dma\n");
 		return 1;
 	}
