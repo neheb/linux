@@ -4,6 +4,7 @@
  */
 
 #include <linux/netdevice.h>
+#include <linux/iopoll.h>
 #include "altera_utils.h"
 #include "altera_tse.h"
 #include "altera_msgdmahw.h"
@@ -25,7 +26,8 @@ void msgdma_start_rxdma(struct altera_tse_private *priv)
 
 void msgdma_reset(struct altera_tse_private *priv)
 {
-	int counter;
+	u32 sts;
+	int ret;
 
 	/* Reset Rx mSGDMA */
 	csrwr32(MSGDMA_CSR_STAT_MASK, priv->rx_dma_csr,
@@ -33,15 +35,13 @@ void msgdma_reset(struct altera_tse_private *priv)
 	csrwr32(MSGDMA_CSR_CTL_RESET, priv->rx_dma_csr,
 		msgdma_csroffs(control));
 
-	counter = 0;
-	while (counter++ < ALTERA_TSE_SW_RESET_WATCHDOG_CNTR) {
-		if (tse_bit_is_clear(priv->rx_dma_csr, msgdma_csroffs(status),
-				     MSGDMA_CSR_STAT_RESETTING))
-			break;
-		udelay(1);
-	}
+	ret = read_poll_timeout_atomic(csrrd32, sts,
+				       !(sts & MSGDMA_CSR_STAT_RESETTING),
+				       1, ALTERA_TSE_SW_RESET_WATCHDOG_CNTR,
+				       false, priv->rx_dma_csr,
+				       msgdma_csroffs(status));
 
-	if (counter >= ALTERA_TSE_SW_RESET_WATCHDOG_CNTR)
+	if (ret)
 		netif_warn(priv, drv, priv->dev,
 			   "TSE Rx mSGDMA resetting bit never cleared!\n");
 
@@ -55,15 +55,13 @@ void msgdma_reset(struct altera_tse_private *priv)
 	csrwr32(MSGDMA_CSR_CTL_RESET, priv->tx_dma_csr,
 		msgdma_csroffs(control));
 
-	counter = 0;
-	while (counter++ < ALTERA_TSE_SW_RESET_WATCHDOG_CNTR) {
-		if (tse_bit_is_clear(priv->tx_dma_csr, msgdma_csroffs(status),
-				     MSGDMA_CSR_STAT_RESETTING))
-			break;
-		udelay(1);
-	}
+	ret = read_poll_timeout_atomic(csrrd32, sts,
+				       !(sts & MSGDMA_CSR_STAT_RESETTING),
+				       1, ALTERA_TSE_SW_RESET_WATCHDOG_CNTR,
+				       false, priv->tx_dma_csr,
+				       msgdma_csroffs(status));
 
-	if (counter >= ALTERA_TSE_SW_RESET_WATCHDOG_CNTR)
+	if (ret)
 		netif_warn(priv, drv, priv->dev,
 			   "TSE Tx mSGDMA resetting bit never cleared!\n");
 

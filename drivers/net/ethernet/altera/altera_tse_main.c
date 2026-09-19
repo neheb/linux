@@ -24,6 +24,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mii.h>
@@ -658,23 +659,19 @@ static void tse_update_mac_addr(struct altera_tse_private *priv, const u8 *addr)
  */
 static int reset_mac(struct altera_tse_private *priv)
 {
-	int counter;
 	u32 dat;
+	int ret;
 
 	dat = csrrd32(priv->mac_dev, tse_csroffs(command_config));
 	dat &= ~(MAC_CMDCFG_TX_ENA | MAC_CMDCFG_RX_ENA);
 	dat |= MAC_CMDCFG_SW_RESET | MAC_CMDCFG_CNT_RESET;
 	csrwr32(dat, priv->mac_dev, tse_csroffs(command_config));
 
-	counter = 0;
-	while (counter++ < ALTERA_TSE_SW_RESET_WATCHDOG_CNTR) {
-		if (tse_bit_is_clear(priv->mac_dev, tse_csroffs(command_config),
-				     MAC_CMDCFG_SW_RESET))
-			break;
-		udelay(1);
-	}
-
-	if (counter >= ALTERA_TSE_SW_RESET_WATCHDOG_CNTR) {
+	ret = read_poll_timeout_atomic(csrrd32, dat, !(dat & MAC_CMDCFG_SW_RESET),
+				       1, ALTERA_TSE_SW_RESET_WATCHDOG_CNTR,
+				       false, priv->mac_dev,
+				       tse_csroffs(command_config));
+	if (ret) {
 		dat = csrrd32(priv->mac_dev, tse_csroffs(command_config));
 		dat &= ~MAC_CMDCFG_SW_RESET;
 		csrwr32(dat, priv->mac_dev, tse_csroffs(command_config));
