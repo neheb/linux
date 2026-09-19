@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/of.h>
 #include <linux/regulator/consumer.h>
 
@@ -106,7 +107,6 @@ MODULE_VERSION(HECC_MODULE_VERSION);
 
 #define HECC_SET_REG		0xFFFFFFFF
 #define HECC_CANID_MASK		0x3FF	/* 18 bits mask for extended id's */
-#define HECC_CCE_WAIT_COUNT     100	/* Wait for ~1 sec for CCE bit */
 
 #define HECC_CANMC_SCM		BIT(13)	/* SCC compat mode */
 #define HECC_CANMC_CCR		BIT(12)	/* Change config request */
@@ -292,7 +292,7 @@ static int ti_hecc_transceiver_switch(const struct ti_hecc_priv *priv,
 
 static void ti_hecc_reset(struct net_device *ndev)
 {
-	u32 cnt;
+	u32 val;
 	struct ti_hecc_priv *priv = netdev_priv(ndev);
 
 	netdev_dbg(ndev, "resetting hecc ...\n");
@@ -305,11 +305,9 @@ static void ti_hecc_reset(struct net_device *ndev)
 	 * set and hw seems to be ok even if this bit is not set so
 	 * timing out with a timing of 1ms to respect the specs
 	 */
-	cnt = HECC_CCE_WAIT_COUNT;
-	while (!hecc_get_bit(priv, HECC_CANES, HECC_CANES_CCE) && cnt != 0) {
-		--cnt;
-		udelay(10);
-	}
+	read_poll_timeout_atomic(hecc_get_bit, val, val & HECC_CANES_CCE,
+				 10, 1000, false, priv, HECC_CANES,
+				 HECC_CANES_CCE);
 
 	/* Note: On HECC, BTC can be programmed only in initialization mode, so
 	 * it is expected that the can bittiming parameters are set via ip
@@ -327,11 +325,9 @@ static void ti_hecc_reset(struct net_device *ndev)
 	/* INFO: It has been observed that at times CCE bit may not be
 	 * set and hw seems to be ok even if this bit is not set so
 	 */
-	cnt = HECC_CCE_WAIT_COUNT;
-	while (hecc_get_bit(priv, HECC_CANES, HECC_CANES_CCE) && cnt != 0) {
-		--cnt;
-		udelay(10);
-	}
+	read_poll_timeout_atomic(hecc_get_bit, val, !(val & HECC_CANES_CCE),
+				 10, 1000, false, priv, HECC_CANES,
+				 HECC_CANES_CCE);
 
 	/* Enable TX and RX I/O Control pins */
 	hecc_write(priv, HECC_CANTIOC, HECC_CANTIOC_EN);
