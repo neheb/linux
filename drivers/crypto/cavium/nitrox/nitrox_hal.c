@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/delay.h>
+#include <linux/iopoll.h>
 #include <linux/string.h>
 
 #include "nitrox_dev.h"
@@ -67,7 +68,6 @@ static void reset_pkt_input_ring(struct nitrox_device *ndev, int ring)
 {
 	union nps_pkt_in_instr_ctl pkt_in_ctl;
 	union nps_pkt_in_done_cnts pkt_in_cnts;
-	int max_retries = MAX_CSR_RETRIES;
 	u64 offset;
 
 	/* step 1: disable the ring, clear enable bit */
@@ -78,12 +78,9 @@ static void reset_pkt_input_ring(struct nitrox_device *ndev, int ring)
 
 	/* step 2: wait to clear [ENB] */
 	usleep_range(100, 150);
-	do {
-		pkt_in_ctl.value = nitrox_read_csr(ndev, offset);
-		if (!pkt_in_ctl.s.enb)
-			break;
-		udelay(50);
-	} while (max_retries--);
+	read_poll_timeout_atomic(nitrox_read_csr, pkt_in_ctl.value,
+				 !pkt_in_ctl.s.enb, 50, MAX_CSR_RETRIES * 50,
+				false, ndev, offset);
 
 	/* step 3: clear done counts */
 	offset = NPS_PKT_IN_DONE_CNTSX(ring);
@@ -95,7 +92,6 @@ static void reset_pkt_input_ring(struct nitrox_device *ndev, int ring)
 void enable_pkt_input_ring(struct nitrox_device *ndev, int ring)
 {
 	union nps_pkt_in_instr_ctl pkt_in_ctl;
-	int max_retries = MAX_CSR_RETRIES;
 	u64 offset;
 
 	/* 64-byte instruction size */
@@ -106,12 +102,9 @@ void enable_pkt_input_ring(struct nitrox_device *ndev, int ring)
 	nitrox_write_csr(ndev, offset, pkt_in_ctl.value);
 
 	/* wait for set [ENB] */
-	do {
-		pkt_in_ctl.value = nitrox_read_csr(ndev, offset);
-		if (pkt_in_ctl.s.enb)
-			break;
-		udelay(50);
-	} while (max_retries--);
+	read_poll_timeout_atomic(nitrox_read_csr, pkt_in_ctl.value,
+				 pkt_in_ctl.s.enb, 50, MAX_CSR_RETRIES * 50,
+				false, ndev, offset);
 }
 
 /**
@@ -163,7 +156,6 @@ static void reset_pkt_solicit_port(struct nitrox_device *ndev, int port)
 {
 	union nps_pkt_slc_ctl pkt_slc_ctl;
 	union nps_pkt_slc_cnts pkt_slc_cnts;
-	int max_retries = MAX_CSR_RETRIES;
 	u64 offset;
 
 	/* step 1: disable slc port */
@@ -175,12 +167,9 @@ static void reset_pkt_solicit_port(struct nitrox_device *ndev, int port)
 	/* step 2 */
 	usleep_range(100, 150);
 	/* wait to clear [ENB] */
-	do {
-		pkt_slc_ctl.value = nitrox_read_csr(ndev, offset);
-		if (!pkt_slc_ctl.s.enb)
-			break;
-		udelay(50);
-	} while (max_retries--);
+	read_poll_timeout_atomic(nitrox_read_csr, pkt_slc_ctl.value,
+				 !pkt_slc_ctl.s.enb, 50, MAX_CSR_RETRIES * 50,
+				false, ndev, offset);
 
 	/* step 3: clear slc counters */
 	offset = NPS_PKT_SLC_CNTSX(port);
@@ -192,7 +181,6 @@ static void reset_pkt_solicit_port(struct nitrox_device *ndev, int port)
 void enable_pkt_solicit_port(struct nitrox_device *ndev, int port)
 {
 	union nps_pkt_slc_ctl pkt_slc_ctl;
-	int max_retries = MAX_CSR_RETRIES;
 	u64 offset;
 
 	offset = NPS_PKT_SLC_CTLX(port);
@@ -208,12 +196,9 @@ void enable_pkt_solicit_port(struct nitrox_device *ndev, int port)
 	nitrox_write_csr(ndev, offset, pkt_slc_ctl.value);
 
 	/* wait to set [ENB] */
-	do {
-		pkt_slc_ctl.value = nitrox_read_csr(ndev, offset);
-		if (pkt_slc_ctl.s.enb)
-			break;
-		udelay(50);
-	} while (max_retries--);
+	read_poll_timeout_atomic(nitrox_read_csr, pkt_slc_ctl.value,
+				 pkt_slc_ctl.s.enb, 50, MAX_CSR_RETRIES * 50,
+				false, ndev, offset);
 }
 
 static void config_pkt_solicit_port(struct nitrox_device *ndev, int port)
@@ -312,7 +297,6 @@ static void reset_aqm_ring(struct nitrox_device *ndev, int ring)
 	union aqmq_en aqmq_en_reg;
 	union aqmq_activity_stat activity_stat;
 	union aqmq_cmp_cnt cmp_cnt;
-	int max_retries = MAX_CSR_RETRIES;
 	u64 offset;
 
 	/* step 1: disable the queue */
@@ -324,12 +308,9 @@ static void reset_aqm_ring(struct nitrox_device *ndev, int ring)
 	/* step 2: wait for AQMQ_ACTIVITY_STATX[QUEUE_ACTIVE] to clear */
 	usleep_range(100, 150);
 	offset = AQMQ_ACTIVITY_STATX(ring);
-	do {
-		activity_stat.value = nitrox_read_csr(ndev, offset);
-		if (!activity_stat.queue_active)
-			break;
-		udelay(50);
-	} while (max_retries--);
+	read_poll_timeout_atomic(nitrox_read_csr, activity_stat.value,
+				 !activity_stat.queue_active, 50,
+				MAX_CSR_RETRIES * 50, false, ndev, offset);
 
 	/* step 3: clear commands completed count */
 	offset = AQMQ_CMP_CNTX(ring);
@@ -512,7 +493,6 @@ void invalidate_lbc(struct nitrox_device *ndev)
 {
 	union lbc_inval_ctl lbc_ctl;
 	union lbc_inval_status lbc_stat;
-	int max_retries = MAX_CSR_RETRIES;
 	u64 offset;
 
 	/* invalidate LBC */
@@ -522,12 +502,9 @@ void invalidate_lbc(struct nitrox_device *ndev)
 	nitrox_write_csr(ndev, offset, lbc_ctl.value);
 
 	offset = LBC_INVAL_STATUS;
-	do {
-		lbc_stat.value = nitrox_read_csr(ndev, offset);
-		if (lbc_stat.s.done)
-			break;
-		udelay(50);
-	} while (max_retries--);
+	read_poll_timeout_atomic(nitrox_read_csr, lbc_stat.value,
+				 lbc_stat.s.done, 50, MAX_CSR_RETRIES * 50,
+				false, ndev, offset);
 }
 
 void nitrox_config_lbc_unit(struct nitrox_device *ndev)
