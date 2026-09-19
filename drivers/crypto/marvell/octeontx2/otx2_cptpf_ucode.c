@@ -3,6 +3,7 @@
 
 #include <linux/ctype.h>
 #include <linux/firmware.h>
+#include <linux/iopoll.h>
 #include <linux/string.h>
 #include <linux/string_choices.h>
 #include "otx2_cptpf_ucode.h"
@@ -1091,7 +1092,8 @@ static void rnm_to_cpt_errata_fixup(struct device *dev)
 {
 	struct pci_dev *pdev;
 	void __iomem *base;
-	int timeout = 5000;
+	u64 val;
+	int ret;
 
 	pdev = pci_get_device(PCI_VENDOR_ID_CAVIUM, PCI_DEVID_CN10K_RNM, NULL);
 	if (!pdev)
@@ -1101,15 +1103,10 @@ static void rnm_to_cpt_errata_fixup(struct device *dev)
 	if (!base)
 		goto put_pdev;
 
-	while ((readq(base + RNM_ENTROPY_STATUS) & 0x7F) != 0x40) {
-		cpu_relax();
-		udelay(1);
-		timeout--;
-		if (!timeout) {
-			dev_warn(dev, "RNM is not producing entropy\n");
-			break;
-		}
-	}
+	ret = read_poll_timeout_atomic(readq, val, (val & 0x7F) == 0x40, 1,
+				       5000, false, base + RNM_ENTROPY_STATUS);
+	if (ret)
+		dev_warn(dev, "RNM is not producing entropy\n");
 
 	iounmap(base);
 
@@ -1497,10 +1494,10 @@ int otx2_cpt_discover_eng_capabilities(struct otx2_cptpf_dev *cptpf)
 	dma_addr_t result_baddr;
 	dma_addr_t rptr_baddr;
 	struct pci_dev *pdev;
-	int timeout = 10000;
 	void *base, *rptr;
 	int ret, etype;
 	u32 len;
+	u8 cc;
 
 	/*
 	 * We don't get capabilities if it was already done
@@ -1565,19 +1562,15 @@ int otx2_cpt_discover_eng_capabilities(struct otx2_cptpf_dev *cptpf)
 							 etype);
 		otx2_cpt_fill_inst(&inst, &iq_cmd, result_baddr);
 		lfs->ops->send_cmd(&inst, 1, &cptpf->lfs.lf[0]);
-		timeout = 10000;
 
-		while (lfs->ops->cpt_get_compcode(result) ==
-						OTX2_CPT_COMPLETION_CODE_INIT) {
-			cpu_relax();
-			udelay(1);
-			timeout--;
-			if (!timeout) {
-				ret = -ENODEV;
-				cptpf->is_eng_caps_discovered = false;
-				dev_warn(&pdev->dev, "Timeout on CPT load_fvc completion poll\n");
-				goto error_no_response;
-			}
+		ret = read_poll_timeout_atomic(lfs->ops->cpt_get_compcode, cc,
+					       cc != OTX2_CPT_COMPLETION_CODE_INIT,
+					       1, 10000, false, result);
+		if (ret) {
+			ret = -ENODEV;
+			cptpf->is_eng_caps_discovered = false;
+			dev_warn(&pdev->dev, "Timeout on CPT load_fvc completion poll\n");
+			goto error_no_response;
 		}
 
 		cptpf->eng_caps[etype].u = be64_to_cpup(rptr);
