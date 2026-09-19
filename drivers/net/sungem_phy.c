@@ -29,6 +29,7 @@
 #include <linux/mii.h>
 #include <linux/ethtool.h>
 #include <linux/delay.h>
+#include <linux/iopoll.h>
 #include <linux/of.h>
 #include <linux/sungem_phy.h>
 
@@ -67,7 +68,7 @@ static inline void sungem_phy_write(struct mii_phy* phy, int reg, int val)
 static int reset_one_mii_phy(struct mii_phy* phy, int phy_id)
 {
 	u16 val;
-	int limit = 10000;
+	int ret;
 
 	val = __sungem_phy_read(phy, phy_id, MII_BMCR);
 	val &= ~(BMCR_ISOLATE | BMCR_PDOWN);
@@ -76,16 +77,13 @@ static int reset_one_mii_phy(struct mii_phy* phy, int phy_id)
 
 	udelay(100);
 
-	while (--limit) {
-		val = __sungem_phy_read(phy, phy_id, MII_BMCR);
-		if ((val & BMCR_RESET) == 0)
-			break;
-		udelay(10);
-	}
-	if ((val & BMCR_ISOLATE) && limit > 0)
+	ret = read_poll_timeout_atomic(__sungem_phy_read, val,
+				       !(val & BMCR_RESET), 10, 100000,
+				       false, phy, phy_id, MII_BMCR);
+	if (!ret && (val & BMCR_ISOLATE))
 		__sungem_phy_write(phy, phy_id, MII_BMCR, val & ~BMCR_ISOLATE);
 
-	return limit <= 0;
+	return ret;
 }
 
 static int bcm5201_init(struct mii_phy* phy)
