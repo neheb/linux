@@ -19,6 +19,7 @@
 #include <linux/firmware/imx/sci.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
@@ -488,29 +489,20 @@ static struct flexcan_mb __iomem *flexcan_get_mb(const struct flexcan_priv *priv
 static int flexcan_low_power_enter_ack(struct flexcan_priv *priv)
 {
 	struct flexcan_regs __iomem *regs = priv->regs;
-	unsigned int timeout = FLEXCAN_TIMEOUT_US / 10;
+	u32 reg;
 
-	while (timeout-- && !(priv->read(&regs->mcr) & FLEXCAN_MCR_LPM_ACK))
-		udelay(10);
-
-	if (!(priv->read(&regs->mcr) & FLEXCAN_MCR_LPM_ACK))
-		return -ETIMEDOUT;
-
-	return 0;
+	return read_poll_timeout_atomic(priv->read, reg, reg & FLEXCAN_MCR_LPM_ACK,
+					10, FLEXCAN_TIMEOUT_US, false, &regs->mcr);
 }
 
 static int flexcan_low_power_exit_ack(struct flexcan_priv *priv)
 {
 	struct flexcan_regs __iomem *regs = priv->regs;
-	unsigned int timeout = FLEXCAN_TIMEOUT_US / 10;
+	u32 reg;
 
-	while (timeout-- && (priv->read(&regs->mcr) & FLEXCAN_MCR_LPM_ACK))
-		udelay(10);
-
-	if (priv->read(&regs->mcr) & FLEXCAN_MCR_LPM_ACK)
-		return -ETIMEDOUT;
-
-	return 0;
+	return read_poll_timeout_atomic(priv->read, reg,
+					!(reg & FLEXCAN_MCR_LPM_ACK),
+					10, FLEXCAN_TIMEOUT_US, false, &regs->mcr);
 }
 
 static void flexcan_enable_wakeup_irq(struct flexcan_priv *priv, bool enable)
@@ -693,6 +685,7 @@ static int flexcan_chip_freeze(struct flexcan_priv *priv)
 	unsigned int timeout;
 	u32 bitrate = priv->can.bittiming.bitrate;
 	u32 reg;
+	int ret;
 
 	if (bitrate)
 		timeout = 1000 * 1000 * 10 / bitrate;
@@ -703,10 +696,9 @@ static int flexcan_chip_freeze(struct flexcan_priv *priv)
 	reg |= FLEXCAN_MCR_FRZ | FLEXCAN_MCR_HALT;
 	priv->write(reg, &regs->mcr);
 
-	while (timeout-- && !(priv->read(&regs->mcr) & FLEXCAN_MCR_FRZ_ACK))
-		udelay(100);
-
-	if (!(priv->read(&regs->mcr) & FLEXCAN_MCR_FRZ_ACK))
+	ret = read_poll_timeout_atomic(priv->read, reg, reg & FLEXCAN_MCR_FRZ_ACK,
+				       100, timeout * 100, false, &regs->mcr);
+	if (ret)
 		return -ETIMEDOUT;
 
 	return 0;
@@ -717,15 +709,15 @@ static int flexcan_chip_unfreeze(struct flexcan_priv *priv)
 	struct flexcan_regs __iomem *regs = priv->regs;
 	unsigned int timeout = FLEXCAN_TIMEOUT_US / 10;
 	u32 reg;
+	int ret;
 
 	reg = priv->read(&regs->mcr);
 	reg &= ~FLEXCAN_MCR_HALT;
 	priv->write(reg, &regs->mcr);
 
-	while (timeout-- && (priv->read(&regs->mcr) & FLEXCAN_MCR_FRZ_ACK))
-		udelay(10);
-
-	if (priv->read(&regs->mcr) & FLEXCAN_MCR_FRZ_ACK)
+	ret = read_poll_timeout_atomic(priv->read, reg, !(reg & FLEXCAN_MCR_FRZ_ACK),
+				       10, timeout * 10, false, &regs->mcr);
+	if (ret)
 		return -ETIMEDOUT;
 
 	return 0;
@@ -735,12 +727,14 @@ static int flexcan_chip_softreset(struct flexcan_priv *priv)
 {
 	struct flexcan_regs __iomem *regs = priv->regs;
 	unsigned int timeout = FLEXCAN_TIMEOUT_US / 10;
+	u32 reg;
+	int ret;
 
 	priv->write(FLEXCAN_MCR_SOFTRST, &regs->mcr);
-	while (timeout-- && (priv->read(&regs->mcr) & FLEXCAN_MCR_SOFTRST))
-		udelay(10);
-
-	if (priv->read(&regs->mcr) & FLEXCAN_MCR_SOFTRST)
+	ret = read_poll_timeout_atomic(priv->read, reg,
+				       !(reg & FLEXCAN_MCR_SOFTRST),
+				       10, timeout * 10, false, &regs->mcr);
+	if (ret)
 		return -ETIMEDOUT;
 
 	return 0;
