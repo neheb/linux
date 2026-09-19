@@ -212,8 +212,7 @@ get_more:
 		if (IS_ERR(rdesc)) {
 			dev_err(eip93->dev, "Ndesc: %d nreq: %d\n",
 				handled, left);
-			err = -EIO;
-			break;
+			return;
 		}
 		/* make sure DMA is finished writing */
 		do {
