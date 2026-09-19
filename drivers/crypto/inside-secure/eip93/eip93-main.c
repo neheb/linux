@@ -417,8 +417,16 @@ static void eip93_cleanup(struct eip93_device *eip93)
 	/* Synchronize and unregister the IRQ handler */
 	free_irq(eip93->irq, eip93);
 
-	/* No new IRQs can arrive — safe to kill the tasklet */
+	/* Drain any tasklet scheduled before the IRQ was disabled */
 	tasklet_kill(&eip93->ring->done_task);
+
+	/*
+	 * The tasklet re-enables the RDR interrupt when it drains the
+	 * result ring, so mask the device interrupts again before the
+	 * hardware is switched off.
+	 */
+	eip93_irq_clear(eip93, EIP93_INT_ALL);
+	eip93_irq_disable(eip93, EIP93_INT_ALL);
 
 	writel(0, eip93->base + EIP93_REG_PE_CLOCK_CTRL);
 
