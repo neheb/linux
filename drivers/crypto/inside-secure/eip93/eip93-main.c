@@ -305,8 +305,10 @@ static irqreturn_t eip93_irq_handler(int irq, void *data)
 
 	/* Ignore errors in AUTO mode, handled by the RDR */
 	eip93_irq_clear(eip93, irq_status);
-	if (irq_status)
+	if (irq_status) {
 		eip93_irq_disable(eip93, irq_status);
+		return IRQ_HANDLED;
+	}
 
 	return IRQ_NONE;
 }
