@@ -34,6 +34,7 @@
 #include <linux/if_ether.h>
 #include <linux/list.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/pm_runtime.h>
 #include <linux/pinctrl/consumer.h>
 
@@ -235,16 +236,14 @@ static void c_can_irq_control(struct c_can_priv *priv, bool enable)
 static void c_can_obj_update(struct net_device *dev, int iface, u32 cmd, u32 obj)
 {
 	struct c_can_priv *priv = netdev_priv(dev);
-	int cnt, reg = C_CAN_IFACE(COMREQ_REG, iface);
+	u32 val;
+	int reg = C_CAN_IFACE(COMREQ_REG, iface);
 
 	priv->write_reg32(priv, reg, (cmd << 16) | obj);
 
-	for (cnt = MIN_TIMEOUT_VALUE; cnt; cnt--) {
-		if (!(priv->read_reg(priv, reg) & IF_COMR_BUSY))
-			return;
-		udelay(1);
-	}
-	netdev_err(dev, "Updating object timed out\n");
+	if (read_poll_timeout_atomic(priv->read_reg, val, !(val & IF_COMR_BUSY),
+				     1, MIN_TIMEOUT_VALUE, false, priv, reg))
+		netdev_err(dev, "Updating object timed out\n");
 }
 
 static inline void c_can_object_get(struct net_device *dev, int iface,
@@ -486,14 +485,15 @@ static netdev_tx_t c_can_start_xmit(struct sk_buff *skb,
 static int c_can_wait_for_ctrl_init(struct net_device *dev,
 				    struct c_can_priv *priv, u32 init)
 {
-	int retry = 0;
+	u32 reg;
+	int ret;
 
-	while (init != (priv->read_reg(priv, C_CAN_CTRL_REG) & CONTROL_INIT)) {
-		udelay(10);
-		if (retry++ > 1000) {
-			netdev_err(dev, "CCTRL: set CONTROL_INIT failed\n");
-			return -EIO;
-		}
+	ret = read_poll_timeout_atomic(priv->read_reg, reg,
+				       init == (reg & CONTROL_INIT), 10, 10000,
+				       false, priv, C_CAN_CTRL_REG);
+	if (ret) {
+		netdev_err(dev, "CCTRL: set CONTROL_INIT failed\n");
+		return -EIO;
 	}
 	return 0;
 }
