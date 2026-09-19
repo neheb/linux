@@ -11,6 +11,7 @@
 #include <linux/efi.h>
 #include <linux/if_vlan.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/mdio/mdio-xgene.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -26,7 +27,6 @@ u32 xgene_mdio_rd_mac(struct xgene_mdio_pdata *pdata, u32 rd_addr)
 {
 	void __iomem *addr, *rd, *cmd, *cmd_done;
 	u32 done, rd_data = BUSY_MASK;
-	u8 wait = 10;
 
 	addr = pdata->mac_csr_addr + MAC_ADDR_REG_OFFSET;
 	rd = pdata->mac_csr_addr + MAC_READ_REG_OFFSET;
@@ -37,8 +37,7 @@ u32 xgene_mdio_rd_mac(struct xgene_mdio_pdata *pdata, u32 rd_addr)
 	iowrite32(rd_addr, addr);
 	iowrite32(XGENE_ENET_RD_CMD, cmd);
 
-	while (!(done = ioread32(cmd_done)) && wait--)
-		udelay(1);
+	readx_poll_timeout_atomic(ioread32, cmd_done, done, done, 1, 10);
 
 	if (done)
 		rd_data = ioread32(rd);
@@ -53,7 +52,6 @@ EXPORT_SYMBOL(xgene_mdio_rd_mac);
 void xgene_mdio_wr_mac(struct xgene_mdio_pdata *pdata, u32 wr_addr, u32 data)
 {
 	void __iomem *addr, *wr, *cmd, *cmd_done;
-	u8 wait = 10;
 	u32 done;
 
 	addr = pdata->mac_csr_addr + MAC_ADDR_REG_OFFSET;
@@ -66,8 +64,7 @@ void xgene_mdio_wr_mac(struct xgene_mdio_pdata *pdata, u32 wr_addr, u32 data)
 	iowrite32(data, wr);
 	iowrite32(XGENE_ENET_WR_CMD, cmd);
 
-	while (!(done = ioread32(cmd_done)) && wait--)
-		udelay(1);
+	readx_poll_timeout_atomic(ioread32, cmd_done, done, done, 1, 10);
 
 	if (!done)
 		pr_err("MCX mac write failed, addr: 0x%04x\n", wr_addr);
