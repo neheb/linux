@@ -833,8 +833,8 @@ static int kvaser_pciefd_set_bittiming(struct kvaser_pciefd_can *can, bool data)
 		  can->reg_base + KVASER_PCIEFD_KCAN_MODE_REG);
 
 	/* Can only set bittiming if in reset mode */
-	ret = readl_poll_timeout(can->reg_base + KVASER_PCIEFD_KCAN_MODE_REG,
-				 test, test & KVASER_PCIEFD_KCAN_MODE_RM, 0, 10);
+	ret = readl_poll_timeout_atomic(can->reg_base + KVASER_PCIEFD_KCAN_MODE_REG,
+					test, test & KVASER_PCIEFD_KCAN_MODE_RM, 0, 10);
 	if (ret) {
 		spin_unlock_irqrestore(&can->lock, irq_flags);
 		return -EBUSY;
