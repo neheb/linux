@@ -18,6 +18,7 @@
 #include <linux/types.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
+#include <linux/iopoll.h>
 #include <linux/hw_random.h>
 #include <linux/ccp.h>
 #include <linux/firmware.h>
@@ -180,14 +181,10 @@ static int sev_wait_cmd_ioc(struct sev_device *sev,
 		unsigned long timeout_usecs = (timeout * USEC_PER_SEC) / 10;
 
 		/* Poll for SEV command completion: */
-		while (timeout_usecs--) {
-			*reg = ioread32(sev->io_regs + sev->vdata->cmdresp_reg);
-			if (*reg & PSP_CMDRESP_RESP)
-				return 0;
-
-			udelay(10);
-		}
-		return -ETIMEDOUT;
+		return read_poll_timeout_atomic(ioread32, *reg,
+						*reg & PSP_CMDRESP_RESP, 10,
+						timeout_usecs, false,
+						sev->io_regs + sev->vdata->cmdresp_reg);
 	}
 
 	ret = wait_event_timeout(sev->int_queue,
