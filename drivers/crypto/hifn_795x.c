@@ -16,6 +16,7 @@
 #include <linux/scatterlist.h>
 #include <linux/string.h>
 #include <linux/highmem.h>
+#include <linux/iopoll.h>
 #include <linux/crypto.h>
 #include <linux/hw_random.h>
 #include <linux/ktime.h>
@@ -631,18 +632,10 @@ static inline void hifn_write_1(struct hifn_device *dev, u32 reg, u32 val)
 
 static void hifn_wait_puc(struct hifn_device *dev)
 {
-	int i;
 	u32 ret;
 
-	for (i = 10000; i > 0; --i) {
-		ret = hifn_read_0(dev, HIFN_0_PUCTRL);
-		if (!(ret & HIFN_PUCTRL_RESET))
-			break;
-
-		udelay(1);
-	}
-
-	if (!i)
+	if (read_poll_timeout_atomic(hifn_read_0, ret, !(ret & HIFN_PUCTRL_RESET),
+				     1, 10000, false, dev, HIFN_0_PUCTRL))
 		dev_err(&dev->pdev->dev, "Failed to reset PUC unit.\n");
 }
 
