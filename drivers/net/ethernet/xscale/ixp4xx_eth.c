@@ -26,6 +26,7 @@
 #include <linux/etherdevice.h>
 #include <linux/if_vlan.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/net_tstamp.h>
 #include <linux/of.h>
@@ -354,7 +355,8 @@ static void ixp_tx_timestamp(struct port *port, struct sk_buff *skb)
 	struct ixp46x_ts_regs *regs;
 	struct skb_shared_info *shtx;
 	u64 ns;
-	u32 ch, cnt, hi, lo, val;
+	u32 ch, hi, lo, val;
+	int ret;
 
 	shtx = skb_shinfo(skb);
 	if (unlikely(shtx->tx_flags & SKBTX_HW_TSTAMP && port->hwts_tx_en))
@@ -370,13 +372,10 @@ static void ixp_tx_timestamp(struct port *port, struct sk_buff *skb)
 	 * This really stinks, but we have to poll for the Tx time stamp.
 	 * Usually, the time stamp is ready after 4 to 6 microseconds.
 	 */
-	for (cnt = 0; cnt < 100; cnt++) {
-		val = __raw_readl(&regs->channel[ch].ch_event);
-		if (val & TX_SNAPSHOT_LOCKED)
-			break;
-		udelay(1);
-	}
-	if (!(val & TX_SNAPSHOT_LOCKED)) {
+	ret = read_poll_timeout_atomic(__raw_readl, val, val & TX_SNAPSHOT_LOCKED,
+				       1, 100, false,
+				       &regs->channel[ch].ch_event);
+	if (ret) {
 		shtx->tx_flags &= ~SKBTX_IN_PROGRESS;
 		return;
 	}
@@ -476,7 +475,7 @@ static int ixp4xx_hwtstamp_get(struct net_device *netdev,
 static int ixp4xx_mdio_cmd(struct mii_bus *bus, int phy_id, int location,
 			   int write, u16 cmd)
 {
-	int cycles = 0;
+	u32 val;
 
 	if (__raw_readl(&mdio_regs->mdio_command[3]) & 0x80) {
 		printk(KERN_ERR "%s: MII not ready to transmit\n", bus->name);
@@ -492,22 +491,12 @@ static int ixp4xx_mdio_cmd(struct mii_bus *bus, int phy_id, int location,
 	__raw_writel((phy_id >> 3) | (write << 2) | 0x80 /* GO */,
 		     &mdio_regs->mdio_command[3]);
 
-	while ((cycles < MAX_MDIO_RETRIES) &&
-	       (__raw_readl(&mdio_regs->mdio_command[3]) & 0x80)) {
-		udelay(1);
-		cycles++;
-	}
-
-	if (cycles == MAX_MDIO_RETRIES) {
+	if (readx_poll_timeout_atomic(__raw_readl, &mdio_regs->mdio_command[3],
+				      val, !(val & 0x80), 1, MAX_MDIO_RETRIES)) {
 		printk(KERN_ERR "%s #%i: MII write failed\n", bus->name,
 		       phy_id);
 		return -1;
 	}
-
-#if DEBUG_MDIO
-	printk(KERN_DEBUG "%s #%i: mdio_%s() took %i cycles\n", bus->name,
-	       phy_id, write ? "write" : "read", cycles);
-#endif
 
 	if (write)
 		return 0;
