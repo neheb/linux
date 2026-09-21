@@ -143,6 +143,26 @@
 		};
 
 		mdio@24520 {
+			phy_port1: ethernet-phy@0 {
+				reg = <0>;
+			};
+
+			phy_port2: ethernet-phy@1 {
+				reg = <1>;
+			};
+
+			phy_port3: ethernet-phy@2 {
+				reg = <2>;
+			};
+
+			phy_port4: ethernet-phy@3 {
+				reg = <3>;
+			};
+
+			phy_port5: ethernet-phy@4 {
+				reg = <4>;
+			};
+
 			/* KSZ9031RNXCA ethernet phy for WAN port */
 			phy: ethernet-phy@7 {
 				interrupts = <3 1 0 0>;
@@ -174,26 +194,31 @@
 					port@1 {
 						reg = <1>;
 						label = "lan5";
+						phy-handle = <&phy_port1>;
 					};
 
 					port@2 {
 						reg = <2>;
 						label = "lan4";
+						phy-handle = <&phy_port2>;
 					};
 
 					port@3 {
 						reg = <3>;
 						label = "lan3";
+						phy-handle = <&phy_port3>;
 					};
 
 					port@4 {
 						reg = <4>;
 						label = "lan2";
+						phy-handle = <&phy_port4>;
 					};
 
 					port@5 {
 						reg = <5>;
 						label = "lan1";
+						phy-handle = <&phy_port5>;
 					};
 
 					port@6 {
