@@ -37,11 +37,20 @@ struct mv_cesa_skcipher_dma_iter {
 	struct mv_cesa_sg_dma_iter dst;
 };
 
+static inline struct mv_cesa_dev *
+mv_cesa_skcipher_cesa(struct skcipher_request *req)
+{
+	struct mv_cesa_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
+
+	return ctx->cesa;
+}
+
 static inline void
 mv_cesa_skcipher_req_iter_init(struct mv_cesa_skcipher_dma_iter *iter,
 			       struct skcipher_request *req)
 {
-	mv_cesa_req_dma_iter_init(&iter->base, req->cryptlen);
+	mv_cesa_req_dma_iter_init(&iter->base, mv_cesa_skcipher_cesa(req),
+				  req->cryptlen);
 	mv_cesa_sg_dma_iter_init(&iter->src, req->src, DMA_TO_DEVICE);
 	mv_cesa_sg_dma_iter_init(&iter->dst, req->dst, DMA_FROM_DEVICE);
 }
@@ -59,15 +68,13 @@ static inline void
 mv_cesa_skcipher_dma_cleanup(struct skcipher_request *req)
 {
 	struct mv_cesa_skcipher_req *creq = skcipher_request_ctx(req);
+	struct device *dev = mv_cesa_skcipher_cesa(req)->dev;
 
 	if (req->dst != req->src) {
-		dma_unmap_sg(cesa_dev->dev, req->dst, creq->dst_nents,
-			     DMA_FROM_DEVICE);
-		dma_unmap_sg(cesa_dev->dev, req->src, creq->src_nents,
-			     DMA_TO_DEVICE);
+		dma_unmap_sg(dev, req->dst, creq->dst_nents, DMA_FROM_DEVICE);
+		dma_unmap_sg(dev, req->src, creq->src_nents, DMA_TO_DEVICE);
 	} else {
-		dma_unmap_sg(cesa_dev->dev, req->src, creq->src_nents,
-			     DMA_BIDIRECTIONAL);
+		dma_unmap_sg(dev, req->src, creq->src_nents, DMA_BIDIRECTIONAL);
 	}
 	mv_cesa_dma_cleanup(&creq->base);
 }
@@ -88,8 +95,8 @@ static void mv_cesa_skcipher_std_step(struct skcipher_request *req)
 	struct mv_cesa_skcipher_req *creq = skcipher_request_ctx(req);
 	struct mv_cesa_skcipher_std_req *sreq = &creq->std;
 	struct mv_cesa_engine *engine = creq->base.engine;
-	size_t  len = min_t(size_t, req->cryptlen - sreq->offset,
-			    CESA_SA_SRAM_PAYLOAD_SIZE);
+	size_t payload_size = mv_cesa_sram_payload_size(engine->cesa);
+	size_t len = min_t(size_t, req->cryptlen - sreq->offset, payload_size);
 
 	mv_cesa_adjust_op(engine, &sreq->op);
 	if (engine->pool)
@@ -251,6 +258,9 @@ static int mv_cesa_skcipher_cra_init(struct crypto_tfm *tfm)
 {
 	struct mv_cesa_ctx *ctx = crypto_tfm_ctx(tfm);
 
+	ctx->cesa = mv_cesa_first_dev();
+	if (!ctx->cesa)
+		return -ENODEV;
 	ctx->ops = &mv_cesa_skcipher_req_ops;
 
 	crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
@@ -318,33 +328,31 @@ static int mv_cesa_skcipher_dma_req_init(struct skcipher_request *req,
 	gfp_t flags = (req->base.flags & CRYPTO_TFM_REQ_MAY_SLEEP) ?
 		      GFP_KERNEL : GFP_ATOMIC;
 	struct mv_cesa_req *basereq = &creq->base;
+	struct mv_cesa_dev *cesa = mv_cesa_skcipher_cesa(req);
 	struct mv_cesa_skcipher_dma_iter iter;
 	bool skip_ctx = false;
 	int ret;
 
-	basereq->chain.first = NULL;
-	basereq->chain.last = NULL;
+	mv_cesa_tdma_desc_iter_init(&basereq->chain, cesa);
 
 	if (req->src != req->dst) {
-		ret = dma_map_sg(cesa_dev->dev, req->src, creq->src_nents,
+		ret = dma_map_sg(cesa->dev, req->src, creq->src_nents,
 				 DMA_TO_DEVICE);
 		if (!ret)
 			return -ENOMEM;
 
-		ret = dma_map_sg(cesa_dev->dev, req->dst, creq->dst_nents,
+		ret = dma_map_sg(cesa->dev, req->dst, creq->dst_nents,
 				 DMA_FROM_DEVICE);
 		if (!ret) {
 			ret = -ENOMEM;
 			goto err_unmap_src;
 		}
 	} else {
-		ret = dma_map_sg(cesa_dev->dev, req->src, creq->src_nents,
+		ret = dma_map_sg(cesa->dev, req->src, creq->src_nents,
 				 DMA_BIDIRECTIONAL);
 		if (!ret)
 			return -ENOMEM;
 	}
-
-	mv_cesa_tdma_desc_iter_init(&basereq->chain);
 	mv_cesa_skcipher_req_iter_init(&iter, req);
 
 	do {
@@ -395,11 +403,11 @@ static int mv_cesa_skcipher_dma_req_init(struct skcipher_request *req,
 err_free_tdma:
 	mv_cesa_dma_cleanup(basereq);
 	if (req->dst != req->src)
-		dma_unmap_sg(cesa_dev->dev, req->dst, creq->dst_nents,
+		dma_unmap_sg(cesa->dev, req->dst, creq->dst_nents,
 			     DMA_FROM_DEVICE);
 
 err_unmap_src:
-	dma_unmap_sg(cesa_dev->dev, req->src, creq->src_nents,
+	dma_unmap_sg(cesa->dev, req->src, creq->src_nents,
 		     req->dst != req->src ? DMA_TO_DEVICE : DMA_BIDIRECTIONAL);
 
 	return ret;
@@ -426,6 +434,7 @@ static int mv_cesa_skcipher_req_init(struct skcipher_request *req,
 {
 	struct mv_cesa_skcipher_req *creq = skcipher_request_ctx(req);
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
+	struct mv_cesa_dev *cesa = mv_cesa_skcipher_cesa(req);
 	unsigned int blksize = crypto_skcipher_blocksize(tfm);
 	int ret;
 
@@ -434,19 +443,19 @@ static int mv_cesa_skcipher_req_init(struct skcipher_request *req,
 
 	creq->src_nents = sg_nents_for_len(req->src, req->cryptlen);
 	if (creq->src_nents < 0) {
-		dev_err(cesa_dev->dev, "Invalid number of src SG");
+		dev_err(cesa->dev, "Invalid number of src SG");
 		return creq->src_nents;
 	}
 	creq->dst_nents = sg_nents_for_len(req->dst, req->cryptlen);
 	if (creq->dst_nents < 0) {
-		dev_err(cesa_dev->dev, "Invalid number of dst SG");
+		dev_err(cesa->dev, "Invalid number of dst SG");
 		return creq->dst_nents;
 	}
 
 	mv_cesa_update_op_cfg(tmpl, CESA_SA_DESC_CFG_OP_CRYPT_ONLY,
 			      CESA_SA_DESC_CFG_OP_MSK);
 
-	if (cesa_dev->caps->has_tdma)
+	if (cesa->caps->has_tdma)
 		ret = mv_cesa_skcipher_dma_req_init(req, tmpl);
 	else
 		ret = mv_cesa_skcipher_std_req_init(req, tmpl);
@@ -468,7 +477,8 @@ static int mv_cesa_skcipher_queue_req(struct skcipher_request *req,
 	if (ret)
 		return ret;
 
-	engine = mv_cesa_select_engine(req->cryptlen);
+	engine = mv_cesa_select_engine(mv_cesa_skcipher_cesa(req),
+				       req->cryptlen);
 	mv_cesa_skcipher_prepare(&req->base, engine);
 
 	ret = mv_cesa_queue_req(&req->base, &creq->base);

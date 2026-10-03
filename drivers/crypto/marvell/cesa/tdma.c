@@ -73,7 +73,7 @@ void mv_cesa_dma_cleanup(struct mv_cesa_req *dreq)
 		u32 type = tdma->flags & CESA_TDMA_TYPE_MSK;
 
 		if (type == CESA_TDMA_OP)
-			dma_pool_free(cesa_dev->dma->op_pool, tdma->op,
+			dma_pool_free(dreq->chain.cesa->dma->op_pool, tdma->op,
 				      le32_to_cpu(tdma->src));
 
 		/*
@@ -84,7 +84,7 @@ void mv_cesa_dma_cleanup(struct mv_cesa_req *dreq)
 		 * ran may still point at its successor.
 		 */
 		tdma = (old_tdma == dreq->chain.last) ? NULL : old_tdma->next;
-		dma_pool_free(cesa_dev->dma->tdma_desc_pool, old_tdma,
+		dma_pool_free(dreq->chain.cesa->dma->tdma_desc_pool, old_tdma,
 			      old_tdma->cur_dma);
 	}
 
@@ -212,7 +212,7 @@ mv_cesa_dma_add_desc(struct mv_cesa_tdma_chain *chain, gfp_t flags)
 	struct mv_cesa_tdma_desc *new_tdma = NULL;
 	dma_addr_t dma_handle;
 
-	new_tdma = dma_pool_zalloc(cesa_dev->dma->tdma_desc_pool, flags,
+	new_tdma = dma_pool_zalloc(chain->cesa->dma->tdma_desc_pool, flags,
 				   &dma_handle);
 	if (!new_tdma)
 		return ERR_PTR(-ENOMEM);
@@ -278,7 +278,7 @@ struct mv_cesa_op_ctx *mv_cesa_dma_add_op(struct mv_cesa_tdma_chain *chain,
 	if (IS_ERR(tdma))
 		return ERR_CAST(tdma);
 
-	op = dma_pool_alloc(cesa_dev->dma->op_pool, flags, &dma_handle);
+	op = dma_pool_alloc(chain->cesa->dma->op_pool, flags, &dma_handle);
 	if (!op)
 		return ERR_PTR(-ENOMEM);
 

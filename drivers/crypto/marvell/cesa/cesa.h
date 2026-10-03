@@ -7,6 +7,7 @@
 
 #include <linux/dma-direction.h>
 #include <linux/dmapool.h>
+#include <linux/list.h>
 #include <linux/wait.h>
 
 #define CESA_ENGINE_OFF(i)			(((i) * 0x2000))
@@ -197,8 +198,6 @@
 		    ((CESA_SA_MAC_OIV_SRAM_OFFSET + (offset)) << 16))
 
 #define CESA_SA_SRAM_SIZE			2048
-#define CESA_SA_SRAM_PAYLOAD_SIZE		(cesa_dev->sram_size - \
-						 CESA_SA_DATA_SRAM_OFFSET)
 
 #define CESA_SA_DEFAULT_SRAM_SIZE		2048
 #define CESA_SA_MIN_SRAM_SIZE			1024
@@ -345,6 +344,7 @@ struct mv_cesa_sg_dma_iter {
  * @offset:	current position in the crypto operation
  * @op_len:	sub-operation length (the crypto engine can only act on 2kb
  *		chunks)
+ * @max_op_len:	maximum sub-operation length, i.e. the usable SRAM payload
  *
  * Iterator used to create a TDMA chain for a given crypto operation.
  */
@@ -352,18 +352,23 @@ struct mv_cesa_dma_iter {
 	unsigned int len;
 	unsigned int offset;
 	unsigned int op_len;
+	unsigned int max_op_len;
 };
+
+struct mv_cesa_dev;
 
 /**
  * struct mv_cesa_tdma_chain - TDMA chain
  * @first:	first entry in the TDMA chain
  * @last:	last entry in the TDMA chain
+ * @cesa:	CESA device the descriptors are allocated from
  *
  * Stores a TDMA chain for a specific crypto operation.
  */
 struct mv_cesa_tdma_chain {
 	struct mv_cesa_tdma_desc *first;
 	struct mv_cesa_tdma_desc *last;
+	struct mv_cesa_dev *cesa;
 };
 
 struct mv_cesa_engine;
@@ -466,6 +471,7 @@ struct mv_cesa_engine {
  * @sram_size:	usable SRAM size
  * @lock:	device lock
  * @dma:	dma pools
+ * @list:	entry in the registered-device list
  * @engines:	array of engines
  *
  * Structure storing CESA device information.
@@ -477,6 +483,7 @@ struct mv_cesa_dev {
 	unsigned int sram_size;
 	spinlock_t lock;
 	struct mv_cesa_dev_dma *dma;
+	struct list_head list;
 	struct mv_cesa_engine engines[];
 };
 
@@ -500,11 +507,13 @@ struct mv_cesa_req_ops {
 /**
  * struct mv_cesa_ctx - CESA operation context
  * @ops:	crypto operations
+ * @cesa:	CESA device this transform was allocated from
  *
  * Base context structure inherited by operation specific ones.
  */
 struct mv_cesa_ctx {
 	const struct mv_cesa_req_ops *ops;
+	struct mv_cesa_dev *cesa;
 };
 
 /**
@@ -636,8 +645,13 @@ struct mv_cesa_ahash_req {
 
 /* CESA functions */
 
-extern struct mv_cesa_dev *cesa_dev;
+struct mv_cesa_dev *mv_cesa_first_dev(void);
 
+static inline unsigned int
+mv_cesa_sram_payload_size(struct mv_cesa_dev *cesa)
+{
+	return cesa->sram_size - CESA_SA_DATA_SRAM_OFFSET;
+}
 
 static inline void
 mv_cesa_engine_enqueue_complete_request(struct mv_cesa_engine *engine,
@@ -746,14 +760,15 @@ struct crypto_async_request *
 mv_cesa_dequeue_req_locked(struct mv_cesa_engine *engine,
 			   struct crypto_async_request **backlog);
 
-static inline struct mv_cesa_engine *mv_cesa_select_engine(int weight)
+static inline struct mv_cesa_engine *
+mv_cesa_select_engine(struct mv_cesa_dev *cesa, int weight)
 {
 	int i;
 	u32 min_load = U32_MAX;
 	struct mv_cesa_engine *selected = NULL;
 
-	for (i = 0; i < cesa_dev->caps->nengines; i++) {
-		struct mv_cesa_engine *engine = cesa_dev->engines + i;
+	for (i = 0; i < cesa->caps->nengines; i++) {
+		struct mv_cesa_engine *engine = cesa->engines + i;
 		u32 load = atomic_read(&engine->load);
 
 		if (load < min_load) {
@@ -797,10 +812,12 @@ static inline int mv_cesa_req_needs_cleanup(struct crypto_async_request *req,
 /* TDMA functions */
 
 static inline void mv_cesa_req_dma_iter_init(struct mv_cesa_dma_iter *iter,
+					     struct mv_cesa_dev *cesa,
 					     unsigned int len)
 {
 	iter->len = len;
-	iter->op_len = min(len, CESA_SA_SRAM_PAYLOAD_SIZE);
+	iter->max_op_len = mv_cesa_sram_payload_size(cesa);
+	iter->op_len = min(len, iter->max_op_len);
 	iter->offset = 0;
 }
 
@@ -829,8 +846,7 @@ bool mv_cesa_req_dma_iter_next_transfer(struct mv_cesa_dma_iter *chain,
 static inline bool mv_cesa_req_dma_iter_next_op(struct mv_cesa_dma_iter *iter)
 {
 	iter->offset += iter->op_len;
-	iter->op_len = min(iter->len - iter->offset,
-			   CESA_SA_SRAM_PAYLOAD_SIZE);
+	iter->op_len = min(iter->len - iter->offset, iter->max_op_len);
 
 	return iter->op_len;
 }
@@ -858,9 +874,11 @@ int mv_cesa_tdma_process(struct mv_cesa_engine *engine, u32 status);
 
 
 static inline void
-mv_cesa_tdma_desc_iter_init(struct mv_cesa_tdma_chain *chain)
+mv_cesa_tdma_desc_iter_init(struct mv_cesa_tdma_chain *chain,
+			    struct mv_cesa_dev *cesa)
 {
 	memset(chain, 0, sizeof(*chain));
+	chain->cesa = cesa;
 }
 
 int mv_cesa_dma_add_result_op(struct mv_cesa_tdma_chain *chain, dma_addr_t src,

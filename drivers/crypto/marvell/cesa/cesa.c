@@ -14,6 +14,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/genalloc.h>
 #include <linux/interrupt.h>
+#include <linux/list.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/kthread.h>
@@ -22,6 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/module.h>
 #include <linux/clk.h>
 #include <linux/of.h>
@@ -33,7 +35,19 @@
 /* Limit of the crypto queue before reaching the backlog */
 #define CESA_CRYPTO_DEFAULT_MAX_QLEN 128
 
-struct mv_cesa_dev *cesa_dev;
+static LIST_HEAD(cesa_list);
+static DEFINE_SPINLOCK(cesa_lock);
+
+struct mv_cesa_dev *mv_cesa_first_dev(void)
+{
+	struct mv_cesa_dev *cesa;
+
+	spin_lock_bh(&cesa_lock);
+	cesa = list_first_entry_or_null(&cesa_list, struct mv_cesa_dev, list);
+	spin_unlock_bh(&cesa_lock);
+
+	return cesa;
+}
 
 struct crypto_async_request *
 mv_cesa_dequeue_req_locked(struct mv_cesa_engine *engine,
@@ -457,7 +471,7 @@ static int mv_cesa_probe(struct platform_device *pdev)
 	int irq, ret, i, cpu;
 	u32 sram_size;
 
-	if (cesa_dev) {
+	if (mv_cesa_first_dev()) {
 		dev_err(&pdev->dev, "Only one CESA device authorized\n");
 		return -EEXIST;
 	}
@@ -559,11 +573,15 @@ static int mv_cesa_probe(struct platform_device *pdev)
 		INIT_LIST_HEAD(&engine->complete_queue);
 	}
 
-	cesa_dev = cesa;
+	spin_lock_bh(&cesa_lock);
+	list_add_tail(&cesa->list, &cesa_list);
+	spin_unlock_bh(&cesa_lock);
 
 	ret = mv_cesa_add_algs(cesa);
 	if (ret) {
-		cesa_dev = NULL;
+		spin_lock_bh(&cesa_lock);
+		list_del(&cesa->list);
+		spin_unlock_bh(&cesa_lock);
 		return ret;
 	}
 
@@ -684,11 +702,13 @@ static void mv_cesa_remove(struct platform_device *pdev)
 	}
 
 	/*
-	 * The completion callbacks above (and any concurrent submitter) rely
-	 * on the global cesa_dev pointer: only clear it once the engines are
-	 * fully drained.
+	 * cra_init() still looks the device up from this list.  Leave it
+	 * linked until teardown is complete so a transform allocated just
+	 * before unregister cannot observe an empty list.
 	 */
-	cesa_dev = NULL;
+	spin_lock_bh(&cesa_lock);
+	list_del(&cesa->list);
+	spin_unlock_bh(&cesa_lock);
 }
 
 static const struct platform_device_id mv_cesa_plat_id_table[] = {

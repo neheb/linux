@@ -23,6 +23,14 @@ struct mv_cesa_ahash_dma_iter {
 	struct mv_cesa_sg_dma_iter src;
 };
 
+static inline struct mv_cesa_dev *
+mv_cesa_ahash_cesa(struct ahash_request *req)
+{
+	struct mv_cesa_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
+
+	return ctx->cesa;
+}
+
 static inline void
 mv_cesa_ahash_req_iter_init(struct mv_cesa_ahash_dma_iter *iter,
 			    struct ahash_request *req)
@@ -33,7 +41,7 @@ mv_cesa_ahash_req_iter_init(struct mv_cesa_ahash_dma_iter *iter,
 	if (!creq->last_req)
 		len &= ~CESA_HASH_BLOCK_SIZE_MSK;
 
-	mv_cesa_req_dma_iter_init(&iter->base, len);
+	mv_cesa_req_dma_iter_init(&iter->base, mv_cesa_ahash_cesa(req), len);
 	mv_cesa_sg_dma_iter_init(&iter->src, req->src, DMA_TO_DEVICE);
 	iter->src.op_offset = creq->cache_ptr;
 }
@@ -47,9 +55,10 @@ mv_cesa_ahash_req_iter_next_op(struct mv_cesa_ahash_dma_iter *iter)
 }
 
 static inline int
-mv_cesa_ahash_dma_alloc_cache(struct mv_cesa_ahash_dma_req *req, gfp_t flags)
+mv_cesa_ahash_dma_alloc_cache(struct mv_cesa_dev *cesa,
+			      struct mv_cesa_ahash_dma_req *req, gfp_t flags)
 {
-	req->cache = dma_pool_alloc(cesa_dev->dma->cache_pool, flags,
+	req->cache = dma_pool_alloc(cesa->dma->cache_pool, flags,
 				    &req->cache_dma);
 	if (!req->cache)
 		return -ENOMEM;
@@ -58,22 +67,23 @@ mv_cesa_ahash_dma_alloc_cache(struct mv_cesa_ahash_dma_req *req, gfp_t flags)
 }
 
 static inline void
-mv_cesa_ahash_dma_free_cache(struct mv_cesa_ahash_dma_req *req)
+mv_cesa_ahash_dma_free_cache(struct mv_cesa_dev *cesa,
+			     struct mv_cesa_ahash_dma_req *req)
 {
 	if (!req->cache)
 		return;
 
-	dma_pool_free(cesa_dev->dma->cache_pool, req->cache,
-		      req->cache_dma);
+	dma_pool_free(cesa->dma->cache_pool, req->cache, req->cache_dma);
 }
 
-static int mv_cesa_ahash_dma_alloc_padding(struct mv_cesa_ahash_dma_req *req,
+static int mv_cesa_ahash_dma_alloc_padding(struct mv_cesa_dev *cesa,
+					   struct mv_cesa_ahash_dma_req *req,
 					   gfp_t flags)
 {
 	if (req->padding)
 		return 0;
 
-	req->padding = dma_pool_alloc(cesa_dev->dma->padding_pool, flags,
+	req->padding = dma_pool_alloc(cesa->dma->padding_pool, flags,
 				      &req->padding_dma);
 	if (!req->padding)
 		return -ENOMEM;
@@ -81,12 +91,13 @@ static int mv_cesa_ahash_dma_alloc_padding(struct mv_cesa_ahash_dma_req *req,
 	return 0;
 }
 
-static void mv_cesa_ahash_dma_free_padding(struct mv_cesa_ahash_dma_req *req)
+static void mv_cesa_ahash_dma_free_padding(struct mv_cesa_dev *cesa,
+					   struct mv_cesa_ahash_dma_req *req)
 {
 	if (!req->padding)
 		return;
 
-	dma_pool_free(cesa_dev->dma->padding_pool, req->padding,
+	dma_pool_free(cesa->dma->padding_pool, req->padding,
 		      req->padding_dma);
 	req->padding = NULL;
 }
@@ -95,15 +106,16 @@ static inline void mv_cesa_ahash_dma_last_cleanup(struct ahash_request *req)
 {
 	struct mv_cesa_ahash_req *creq = ahash_request_ctx(req);
 
-	mv_cesa_ahash_dma_free_padding(&creq->req.dma);
+	mv_cesa_ahash_dma_free_padding(mv_cesa_ahash_cesa(req), &creq->req.dma);
 }
 
 static inline void mv_cesa_ahash_dma_cleanup(struct ahash_request *req)
 {
 	struct mv_cesa_ahash_req *creq = ahash_request_ctx(req);
 
-	dma_unmap_sg(cesa_dev->dev, req->src, creq->src_nents, DMA_TO_DEVICE);
-	mv_cesa_ahash_dma_free_cache(&creq->req.dma);
+	dma_unmap_sg(mv_cesa_ahash_cesa(req)->dev, req->src, creq->src_nents,
+		     DMA_TO_DEVICE);
+	mv_cesa_ahash_dma_free_cache(mv_cesa_ahash_cesa(req), &creq->req.dma);
 	mv_cesa_dma_cleanup(&creq->base);
 }
 
@@ -165,8 +177,9 @@ static void mv_cesa_ahash_std_step(struct ahash_request *req)
 	struct mv_cesa_engine *engine = creq->base.engine;
 	struct mv_cesa_op_ctx *op;
 	unsigned int new_cache_ptr = 0;
+	unsigned int payload_size = mv_cesa_sram_payload_size(engine->cesa);
 	u32 frag_mode;
-	size_t  len;
+	size_t len;
 	unsigned int digsize;
 	int i;
 
@@ -195,7 +208,7 @@ static void mv_cesa_ahash_std_step(struct ahash_request *req)
 	}
 
 	len = min_t(size_t, req->nbytes + creq->cache_ptr - sreq->offset,
-		    CESA_SA_SRAM_PAYLOAD_SIZE);
+		    payload_size);
 
 	if (!creq->last_req) {
 		new_cache_ptr = len & CESA_HASH_BLOCK_SIZE_MSK;
@@ -228,7 +241,7 @@ static void mv_cesa_ahash_std_step(struct ahash_request *req)
 		} else {
 			int trailerlen = mv_cesa_ahash_pad_len(creq) + 8;
 
-			if (len + trailerlen > CESA_SA_SRAM_PAYLOAD_SIZE) {
+			if (len + trailerlen > payload_size) {
 				len &= CESA_HASH_BLOCK_SIZE_MSK;
 				new_cache_ptr = 64 - trailerlen;
 				if (engine->pool)
@@ -457,6 +470,9 @@ static inline int mv_cesa_ahash_cra_init(struct crypto_tfm *tfm)
 {
 	struct mv_cesa_hash_ctx *ctx = crypto_tfm_ctx(tfm);
 
+	ctx->base.cesa = mv_cesa_first_dev();
+	if (!ctx->base.cesa)
+		return -ENODEV;
 	ctx->base.ops = &mv_cesa_ahash_req_ops;
 
 	crypto_ahash_set_reqsize(__crypto_ahash_cast(tfm),
@@ -525,7 +541,7 @@ mv_cesa_ahash_dma_add_cache(struct mv_cesa_tdma_chain *chain,
 	if (!creq->cache_ptr)
 		return 0;
 
-	ret = mv_cesa_ahash_dma_alloc_cache(ahashdreq, flags);
+	ret = mv_cesa_ahash_dma_alloc_cache(chain->cesa, ahashdreq, flags);
 	if (ret)
 		return ret;
 
@@ -580,13 +596,14 @@ mv_cesa_ahash_dma_last_req(struct mv_cesa_tdma_chain *chain,
 	 * no data outstanding. Manually generate the padding, adding it
 	 * as a "mid" fragment.
 	 */
-	ret = mv_cesa_ahash_dma_alloc_padding(ahashdreq, flags);
+	ret = mv_cesa_ahash_dma_alloc_padding(chain->cesa, ahashdreq, flags);
 	if (ret)
 		return ERR_PTR(ret);
 
 	trailerlen = mv_cesa_ahash_pad_req(creq, ahashdreq->padding);
 
-	len = min(CESA_SA_SRAM_PAYLOAD_SIZE - frag_len, trailerlen);
+	len = min(mv_cesa_sram_payload_size(chain->cesa) - frag_len,
+		  trailerlen);
 	if (len) {
 		ret = mv_cesa_dma_add_data_transfer(chain,
 						CESA_SA_DATA_SRAM_OFFSET +
@@ -628,6 +645,7 @@ static int mv_cesa_ahash_dma_req_init(struct ahash_request *req)
 	gfp_t flags = (req->base.flags & CRYPTO_TFM_REQ_MAY_SLEEP) ?
 		      GFP_KERNEL : GFP_ATOMIC;
 	struct mv_cesa_req *basereq = &creq->base;
+	struct mv_cesa_dev *cesa = mv_cesa_ahash_cesa(req);
 	struct mv_cesa_ahash_dma_iter iter;
 	struct mv_cesa_op_ctx *op = NULL;
 	unsigned int frag_len;
@@ -635,22 +653,19 @@ static int mv_cesa_ahash_dma_req_init(struct ahash_request *req)
 	int ret;
 	u32 type;
 
-	basereq->chain.first = NULL;
-	basereq->chain.last = NULL;
+	mv_cesa_tdma_desc_iter_init(&basereq->chain, cesa);
 
 	if (!mv_cesa_mac_op_is_first_frag(&creq->op_tmpl))
 		set_state = true;
 
 	if (creq->src_nents) {
-		ret = dma_map_sg(cesa_dev->dev, req->src, creq->src_nents,
+		ret = dma_map_sg(cesa->dev, req->src, creq->src_nents,
 				 DMA_TO_DEVICE);
 		if (!ret) {
 			ret = -ENOMEM;
 			goto err;
 		}
 	}
-
-	mv_cesa_tdma_desc_iter_init(&basereq->chain);
 	mv_cesa_ahash_req_iter_init(&iter, req);
 
 	/*
@@ -748,7 +763,7 @@ static int mv_cesa_ahash_dma_req_init(struct ahash_request *req)
 
 err_free_tdma:
 	mv_cesa_dma_cleanup(basereq);
-	dma_unmap_sg(cesa_dev->dev, req->src, creq->src_nents, DMA_TO_DEVICE);
+	dma_unmap_sg(cesa->dev, req->src, creq->src_nents, DMA_TO_DEVICE);
 
 err:
 	mv_cesa_ahash_last_cleanup(req);
@@ -759,10 +774,11 @@ err:
 static int mv_cesa_ahash_req_init(struct ahash_request *req, bool *cached)
 {
 	struct mv_cesa_ahash_req *creq = ahash_request_ctx(req);
+	struct mv_cesa_dev *cesa = mv_cesa_ahash_cesa(req);
 
 	creq->src_nents = sg_nents_for_len(req->src, req->nbytes);
 	if (creq->src_nents < 0) {
-		dev_err(cesa_dev->dev, "Invalid number of src SG");
+		dev_err(cesa->dev, "Invalid number of src SG");
 		return creq->src_nents;
 	}
 
@@ -771,7 +787,7 @@ static int mv_cesa_ahash_req_init(struct ahash_request *req, bool *cached)
 	if (*cached)
 		return 0;
 
-	if (cesa_dev->caps->has_tdma)
+	if (cesa->caps->has_tdma)
 		return mv_cesa_ahash_dma_req_init(req);
 	else
 		return 0;
@@ -791,7 +807,7 @@ static int mv_cesa_ahash_queue_req(struct ahash_request *req)
 	if (cached)
 		return 0;
 
-	engine = mv_cesa_select_engine(req->nbytes);
+	engine = mv_cesa_select_engine(mv_cesa_ahash_cesa(req), req->nbytes);
 	mv_cesa_ahash_prepare(&req->base, engine);
 
 	ret = mv_cesa_queue_req(&req->base, &creq->base);
@@ -1233,6 +1249,9 @@ static int mv_cesa_ahmac_cra_init(struct crypto_tfm *tfm)
 {
 	struct mv_cesa_hmac_ctx *ctx = crypto_tfm_ctx(tfm);
 
+	ctx->base.cesa = mv_cesa_first_dev();
+	if (!ctx->base.cesa)
+		return -ENODEV;
 	ctx->base.ops = &mv_cesa_ahash_req_ops;
 
 	crypto_ahash_set_reqsize(__crypto_ahash_cast(tfm),
