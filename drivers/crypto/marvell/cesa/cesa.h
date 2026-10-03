@@ -7,6 +7,7 @@
 
 #include <linux/dma-direction.h>
 #include <linux/dmapool.h>
+#include <linux/wait.h>
 
 #define CESA_ENGINE_OFF(i)			(((i) * 0x2000))
 
@@ -452,6 +453,8 @@ struct mv_cesa_engine {
 	struct mv_cesa_tdma_chain chain_hw;
 	struct mv_cesa_tdma_chain chain_sw;
 	struct list_head complete_queue;
+	wait_queue_head_t idle_wq;
+	unsigned int rearmers;
 	int irq;
 	bool aborted;
 };

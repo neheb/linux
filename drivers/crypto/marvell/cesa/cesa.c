@@ -66,6 +66,8 @@ static void mv_cesa_rearm_engine(struct mv_cesa_engine *engine)
 		req = mv_cesa_dequeue_req_locked(engine, &backlog);
 		engine->req = req;
 	}
+	if (req)
+		engine->rearmers++;
 	spin_unlock_bh(&engine->lock);
 
 	if (!req)
@@ -76,6 +78,17 @@ static void mv_cesa_rearm_engine(struct mv_cesa_engine *engine)
 
 	ctx = crypto_tfm_ctx(req->tfm);
 	ctx->ops->step(req);
+
+	/*
+	 * engine->req may only be released once the caller no longer
+	 * dereferences it.  Drop the reference taken above so that
+	 * mv_cesa_remove() can tell when the engine is idle again instead of
+	 * completing a request that is still being stepped.
+	 */
+	spin_lock_bh(&engine->lock);
+	if (!--engine->rearmers)
+		wake_up(&engine->idle_wq);
+	spin_unlock_bh(&engine->lock);
 }
 
 static int mv_cesa_std_process(struct mv_cesa_engine *engine, u32 status)
@@ -490,6 +503,7 @@ static int mv_cesa_probe(struct platform_device *pdev)
 		engine->id = i;
 		engine->cesa = cesa;
 		spin_lock_init(&engine->lock);
+		init_waitqueue_head(&engine->idle_wq);
 
 		ret = mv_cesa_get_sram(pdev, i);
 		if (ret)
@@ -610,6 +624,17 @@ static void mv_cesa_remove(struct platform_device *pdev)
 					 1, CESA_ENGINE_STOP_TIMEOUT_US);
 
 		WARN_ON_ONCE(ret);
+
+		/*
+		 * A submitter that was already past the aborted check may be
+		 * holding a reference on the request it just dequeued and is
+		 * about to step it, i.e. to restart the engine and put it back
+		 * to work on descriptors we are about to release.  Wait for
+		 * those to return before touching engine->req.  This runs with
+		 * the lock dropped, and no new reference can be taken once
+		 * aborted is set.
+		 */
+		wait_event(engine->idle_wq, !engine->rearmers);
 
 		spin_lock_bh(&engine->lock);
 		/*
