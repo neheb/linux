@@ -32,6 +32,7 @@
 #include <linux/export.h>
 #include <linux/types.h>
 #include <linux/ethtool.h>
+#include <linux/of.h>
 #include <linux/phy.h>
 #include <linux/phy_fixed.h>
 #include <linux/ssb/ssb.h>
@@ -155,6 +156,10 @@ static void __init bcm47xx_register_bcma(void)
 void __init plat_mem_setup(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;
+	void *dtb = get_fdt();
+
+	if (dtb)
+		__dt_setup_arch(dtb);
 
 	if (c->cputype == CPU_74K) {
 		pr_info("Using bcma bus\n");
@@ -184,6 +189,7 @@ void __init plat_mem_setup(void)
 #ifdef CONFIG_BCM47XX_BCMA
 static struct device * __init bcm47xx_setup_device(void)
 {
+	struct device_node *np;
 	struct device *dev;
 	int err;
 
@@ -201,6 +207,16 @@ static struct device * __init bcm47xx_setup_device(void)
 	err = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
 	if (err)
 		pr_err("Failed to set SoC DMA mask: %d\n", err);
+
+	np = of_find_compatible_node(NULL, NULL, "brcm,bus-axi");
+	if (np) {
+		/*
+		 * The bus is registered here rather than by the bcma host
+		 * driver, so keep the DT core from creating a second one.
+		 */
+		of_node_set_flag(np, OF_POPULATED);
+		device_set_node(dev, of_fwnode_handle(np));
+	}
 
 	return dev;
 }
@@ -228,7 +244,8 @@ void __init bcm47xx_bus_setup(void)
 
 	/* With bus initialized we can access NVRAM and detect the board */
 	bcm47xx_board_detect();
-	mips_set_machine_name(bcm47xx_board_get_name());
+	if (!of_have_populated_dt())
+		mips_set_machine_name(bcm47xx_board_get_name());
 }
 
 static int __init bcm47xx_cpu_fixes(void)
@@ -272,6 +289,11 @@ static int __init bcm47xx_register_bus_complete(void)
 		break;
 #endif
 	}
+
+	/* With a device tree, the board peripherals are described there */
+	if (of_have_populated_dt())
+		return 0;
+
 	bcm47xx_buttons_register();
 	bcm47xx_leds_register();
 	bcm47xx_workarounds();
