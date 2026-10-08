@@ -27,6 +27,8 @@
 #include <linux/types.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/irqchip.h>
+#include <linux/of.h>
 #include <asm/setup.h>
 #include <asm/irq_cpu.h>
 #include <bcm47xx.h>
@@ -84,7 +86,10 @@ void __init arch_init_irq(void)
 		cp0_compare_irq = 7;
 	}
 #endif
-	mips_cpu_irq_init();
+	if (of_have_populated_dt())
+		irqchip_init();
+	else
+		mips_cpu_irq_init();
 
 	if (cpu_has_vint) {
 		pr_info("Setting up vectored interrupts\n");

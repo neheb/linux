@@ -310,6 +310,7 @@ config BCM47XX
 	select BCM47XX_NVRAM
 	select BCM47XX_SPROM
 	select BCM47XX_SSB if !BCM47XX_BCMA
+	select USE_OF
 	help
 	  Support for BCM47XX based boards
 
@@ -2970,7 +2971,8 @@ endchoice
 choice
 	prompt "Kernel command line type"
 	depends on !CMDLINE_OVERRIDE
-	default MIPS_CMDLINE_FROM_DTB if USE_OF && !ATH79 && !MACH_INGENIC && \
+	default MIPS_CMDLINE_FROM_DTB if USE_OF && !ATH79 && !BCM47XX && \
+					 !MACH_INGENIC && \
 					 !MACH_LOONGSON64 && !MACH_LOONGSON32 && \
 					 !MIPS_MALTA && !CAVIUM_OCTEON_SOC
 	default MIPS_CMDLINE_FROM_BOOTLOADER
