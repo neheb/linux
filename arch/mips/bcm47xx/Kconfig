@@ -37,4 +37,16 @@ config BCM47XX_BCMA
 
 	  This will generate an image with support for BCMA and MIPS32 R2 instruction set.
 
+config BCM47XX_OF
+	bool "Device Tree support for BCMA based BCM47XX boards"
+	depends on BCM47XX_BCMA
+	select USE_OF
+	select BUILTIN_DTB
+	help
+	  Describe the board with a device tree instead of the built-in
+	  tables selected by NVRAM. CFE does not pass a device tree, so
+	  the board's device tree is built into the kernel.
+
+	  If no device tree is found, the built-in board tables are used.
+
 endif
