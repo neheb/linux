@@ -251,12 +251,7 @@ void bcma_prepare_core(struct bcma_bus *bus, struct bcma_device *core)
 		core->irq = bus->host_pci->irq;
 		break;
 	case BCMA_HOSTTYPE_SOC:
-		if (IS_ENABLED(CONFIG_OF) && bus->dev) {
-			core->dma_dev = bus->dev;
-		} else {
-			core->dev.dma_mask = &core->dev.coherent_dma_mask;
-			core->dma_dev = &core->dev;
-		}
+		core->dma_dev = bus->dev;
 		break;
 	case BCMA_HOSTTYPE_SDIO:
 		break;
