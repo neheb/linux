@@ -20,6 +20,15 @@
 		stdout-path = "serial0:115200n8";
 	};
 
+	nvram@1dff8000 {
+		compatible = "brcm,nvram";
+		reg = <0x1dff8000 0x8000>;
+
+		et0macaddr: et0macaddr {
+			#nvmem-cell-cells = <1>;
+		};
+	};
+
 	keys {
 		compatible = "gpio-keys";
 
@@ -52,6 +61,11 @@
 			gpios = <&chipcommon 7 GPIO_ACTIVE_HIGH>;
 		};
 	};
+};
+
+&gmac {
+	nvmem-cells = <&et0macaddr 0>;
+	nvmem-cell-names = "mac-address";
 };
 
 &mdio {
