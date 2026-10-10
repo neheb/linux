@@ -970,12 +970,11 @@ static void b53_switch_reset_gpio(struct b53_device *dev)
 	if (IS_ERR(gpio))
 		return;
 
-	/* Reset sequence: RESET low(50ms)->high(20ms)
-	 */
-	gpiod_set_value(gpio, 0);
+	/* Reset sequence: assert (50ms) -> deassert (20ms) */
+	gpiod_set_value_cansleep(gpio, 1);
 	mdelay(50);
 
-	gpiod_set_value(gpio, 1);
+	gpiod_set_value_cansleep(gpio, 0);
 	mdelay(20);
 
 	dev->current_page = 0xff;
@@ -3172,7 +3171,14 @@ static int b53_switch_init(struct b53_device *dev)
 	if (!dev->vlans)
 		return -ENOMEM;
 
-	dev->reset_gpio = b53_switch_get_reset_gpio(dev);
+	dev->reset_gpio = devm_gpiod_get_optional(dev->dev, "reset",
+						  GPIOD_OUT_LOW);
+	if (IS_ERR(dev->reset_gpio))
+		return dev_err_probe(dev->dev, PTR_ERR(dev->reset_gpio),
+				     "failed to get reset GPIO\n");
+
+	if (!dev->reset_gpio)
+		dev->reset_gpio = b53_switch_get_reset_gpio(dev);
 
 	if (PTR_ERR(dev->reset_gpio) == -EPROBE_DEFER)
 		return -EPROBE_DEFER;
