@@ -178,7 +178,7 @@ config NVMEM_BCM_OCOTP
 
 config NVMEM_BRCM_NVRAM
 	tristate "Broadcom's NVRAM support"
-	depends on ARCH_BCM_5301X || COMPILE_TEST
+	depends on ARCH_BCM_5301X || BCM47XX || COMPILE_TEST
 	depends on HAS_IOMEM
 	select GENERIC_NET_UTILS
 	help
