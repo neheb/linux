@@ -69,6 +69,12 @@ DEFINE_HWx_IRQDISPATCH(7)
 
 void __init arch_init_irq(void)
 {
+	/* The bus scan maps the core interrupts, so set up the irqchips first */
+	if (of_have_populated_dt())
+		irqchip_init();
+	else
+		mips_cpu_irq_init();
+
 	/*
 	 * This is the first arch callback after mm_init (we can use kmalloc),
 	 * so let's finish bus initialization now.
@@ -86,10 +92,6 @@ void __init arch_init_irq(void)
 		cp0_compare_irq = 7;
 	}
 #endif
-	if (of_have_populated_dt())
-		irqchip_init();
-	else
-		mips_cpu_irq_init();
 
 	if (cpu_has_vint) {
 		pr_info("Setting up vectored interrupts\n");
