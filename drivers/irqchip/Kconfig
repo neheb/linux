@@ -161,6 +161,10 @@ config BCM2712_MIP
 
 	  If unsure say n.
 
+config BCM47XX_MIPS74K_IRQ
+	bool
+	select IRQ_DOMAIN
+
 config BCM6345_L1_IRQ
 	bool
 	select GENERIC_IRQ_CHIP
