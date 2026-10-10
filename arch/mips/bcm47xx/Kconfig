@@ -42,6 +42,7 @@ config BCM47XX_OF
 	depends on BCM47XX_BCMA
 	select USE_OF
 	select BUILTIN_DTB
+	imply SERIAL_OF_PLATFORM
 	help
 	  Describe the board with a device tree instead of the built-in
 	  tables selected by NVRAM. CFE does not pass a device tree, so

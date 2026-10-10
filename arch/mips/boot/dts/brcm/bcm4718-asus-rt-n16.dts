@@ -12,6 +12,14 @@
 	compatible = "asus,rt-n16", "brcm,bcm4718";
 	model = "ASUS RT-N16";
 
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
 	keys {
 		compatible = "gpio-keys";
 

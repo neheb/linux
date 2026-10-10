@@ -39,6 +39,14 @@
 
 			gpio-controller;
 			#gpio-cells = <2>;
+
+			uart0: serial@300 {
+				compatible = "ns16550a";
+				reg = <0x0300 0x100>;
+				interrupt-parent = <&cpuintc>;
+				interrupts = <2>;
+				clock-frequency = <20000000>;
+			};
 		};
 
 		gmac: ethernet@2000 {

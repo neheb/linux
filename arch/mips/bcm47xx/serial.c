@@ -10,6 +10,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/of.h>
 #include <linux/serial.h>
 #include <linux/serial_8250.h>
 #include <linux/ssb/ssb.h>
@@ -78,6 +79,10 @@ static int __init uart8250_init_bcma(void)
 
 static int __init uart8250_init(void)
 {
+	/* With a device tree, the UARTs are described there */
+	if (of_have_populated_dt())
+		return 0;
+
 	switch (bcm47xx_bus_type) {
 #ifdef CONFIG_BCM47XX_SSB
 	case BCM47XX_BUS_TYPE_SSB:
