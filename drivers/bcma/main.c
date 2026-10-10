@@ -211,6 +211,16 @@ static void bcma_of_fill_device(struct device *parent,
 	of_dma_configure(&core->dev, node, false);
 }
 
+/*
+ * Whether the device tree describes the core interrupts. Otherwise the
+ * MIPS core routes them to fixed CPU interrupt lines.
+ */
+bool bcma_core_irqs_from_of(struct bcma_bus *bus)
+{
+	return IS_ENABLED(CONFIG_OF_IRQ) && bus->dev &&
+	       of_property_present(bus->dev->of_node, "interrupt-map");
+}
+
 unsigned int bcma_core_irq(struct bcma_device *core, int num)
 {
 	struct bcma_bus *bus = core->bus;
@@ -220,7 +230,8 @@ unsigned int bcma_core_irq(struct bcma_device *core, int num)
 	case BCMA_HOSTTYPE_PCI:
 		return bus->host_pci->irq;
 	case BCMA_HOSTTYPE_SOC:
-		if (bus->drv_mips.core && num == 0) {
+		if (bus->drv_mips.core && num == 0 &&
+		    !bcma_core_irqs_from_of(bus)) {
 			mips_irq = bcma_core_mips_irq(core);
 			return mips_irq <= 4 ? mips_irq + 2 : 0;
 		}
