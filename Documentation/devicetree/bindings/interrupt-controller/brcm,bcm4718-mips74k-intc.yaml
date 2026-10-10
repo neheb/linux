@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/interrupt-controller/brcm,bcm4718-mips74k-intc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM47xx MIPS74K core interrupt router
+
+maintainers:
+  - Rosen Penev <rosenp@gmail.com>
+
+description:
+  The MIPS74K core of BCMA based BCM47xx SoCs routes the backplane interrupt
+  flags of the other cores to the CPU interrupt lines. Each of its INTMASK
+  registers selects the flags that raise one CPU line, and its INTSTATUS
+  register holds the state of all flags. The interrupt specifier is the
+  backplane flag of the core.
+
+properties:
+  compatible:
+    const: brcm,bcm4718-mips74k-intc
+
+  reg:
+    maxItems: 1
+
+  '#address-cells':
+    const: 0
+
+  interrupt-controller: true
+
+  '#interrupt-cells':
+    const: 1
+
+  interrupts:
+    description:
+      The CPU interrupt lines raised through the INTMASK registers, in
+      register order. Any number of flags can share the first line, the
+      others carry one flag each.
+    minItems: 1
+    items:
+      - description: CPU line of INTMASK0, shared
+      - description: CPU line of INTMASK1
+      - description: CPU line of INTMASK2
+      - description: CPU line of INTMASK3
+      - description: CPU line of INTMASK4
+
+required:
+  - compatible
+  - reg
+  - interrupt-controller
+  - '#interrupt-cells'
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    interrupt-controller@18003000 {
+        compatible = "brcm,bcm4718-mips74k-intc";
+        reg = <0x18003000 0x1000>;
+        #address-cells = <0>;
+        #interrupt-cells = <1>;
+        interrupt-controller;
+        interrupts = <2>, <3>, <4>, <5>, <6>;
+    };
