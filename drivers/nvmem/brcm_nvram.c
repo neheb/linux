@@ -69,9 +69,18 @@ static int brcm_nvram_copy_data(struct brcm_nvram *priv, struct platform_device 
 	struct resource *res;
 	void __iomem *base;
 
-	base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
-	if (IS_ERR(base))
-		return PTR_ERR(base);
+	/*
+	 * NVRAM is the last block of a flash that may be memory mapped and
+	 * owned by an MTD driver (e.g. physmap on MIPS BCM47xx), so map it
+	 * without claiming the region.
+	 */
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res)
+		return -EINVAL;
+
+	base = devm_ioremap(priv->dev, res->start, resource_size(res));
+	if (!base)
+		return -ENOMEM;
 
 	priv->nvmem_size = resource_size(res);
 
