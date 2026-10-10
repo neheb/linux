@@ -305,6 +305,10 @@ void bcma_core_mips_init(struct bcma_drv_mips *mcore)
 
 	bcma_fix_i2s_irqflag(bus);
 
+	/* The interrupt controller driver does the routing */
+	if (bcma_core_irqs_from_of(bus))
+		goto out;
+
 	switch (bus->chipinfo.id) {
 	case BCMA_CHIP_ID_BCM4716:
 	case BCMA_CHIP_ID_BCM4748:
@@ -350,5 +354,6 @@ void bcma_core_mips_init(struct bcma_drv_mips *mcore)
 	bcma_debug(bus, "IRQ reconfiguration done\n");
 	bcma_core_mips_dump_irq(bus);
 
+out:
 	mcore->setup_done = true;
 }

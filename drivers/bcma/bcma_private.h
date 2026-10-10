@@ -21,6 +21,7 @@
 struct bcma_bus;
 
 /* main.c */
+bool bcma_core_irqs_from_of(struct bcma_bus *bus);
 bool bcma_wait_value(struct bcma_device *core, u16 reg, u32 mask, u32 value,
 		     int timeout);
 void bcma_prepare_core(struct bcma_bus *bus, struct bcma_device *core);
