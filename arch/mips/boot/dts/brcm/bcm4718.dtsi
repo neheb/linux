@@ -40,5 +40,14 @@
 			gpio-controller;
 			#gpio-cells = <2>;
 		};
+
+		gmac: ethernet@2000 {
+			reg = <0x00002000 0x1000>;
+
+			mdio: mdio {
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
+		};
 	};
 };
