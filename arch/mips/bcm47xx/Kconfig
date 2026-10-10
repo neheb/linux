@@ -31,6 +31,7 @@ config BCM47XX_BCMA
 	select BCMA_DRIVER_PCI if PCI
 	select BCMA_DRIVER_PCI_HOSTMODE if PCI
 	select BCMA_DRIVER_GPIO
+	select BCM47XX_MIPS74K_IRQ
 	default y
 	help
 	  Add support for new Broadcom BCM47xx boards with Broadcom specific Advanced Microcontroller Bus.
