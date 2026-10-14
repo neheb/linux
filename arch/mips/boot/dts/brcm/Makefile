@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 dtb-$(CONFIG_BCM47XX)			+= bcm4718-asus-rt-n16.dtb
+dtb-$(CONFIG_BCM47XX)			+= bcm4718-linksys-e3000-v1.dtb
+dtb-$(CONFIG_BCM47XX)			+= bcm4718-linksys-wrt610n-v2.dtb
 dtb-$(CONFIG_BCM47XX)			+= bcm4718-netgear-wnr3500l-v1.dtb
 
 dtb-$(CONFIG_DT_BCM93384WVG)		+= bcm93384wvg.dtb
