@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+
+/* The WRT610N v2 is the same board as the E3000 v1. */
+#include "bcm4718-linksys-e3000-v1.dts"
+
+/ {
+	compatible = "linksys,wrt610n-v2", "brcm,bcm4718";
+	model = "Linksys WRT610N v2";
+};
