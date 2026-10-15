@@ -1,0 +1,146 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+
+#include <dt-bindings/clock/brcm,bcm4716-pmu-pll.h>
+
+/ {
+	#address-cells = <1>;
+	#size-cells = <1>;
+	compatible = "brcm,bcm4718";
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "mips,mips74Kc";
+			reg = <0>;
+		};
+	};
+
+	xtal: clock-20000000 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <20000000>;
+	};
+
+	cpuintc: interrupt-controller {
+		compatible = "mti,cpu-interrupt-controller";
+		#address-cells = <0>;
+		#interrupt-cells = <1>;
+		interrupt-controller;
+	};
+
+	axi@18000000 {
+		compatible = "brcm,bus-axi";
+		reg = <0x18000000 0x1000>;
+		ranges = <0x00000000 0x18000000 0x00200000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0x000fffff 0xffff>;
+		interrupt-map =
+			/* ChipCommon */
+			<0x00000000 0 &intc 0>,
+
+			/* IEEE 802.11 */
+			<0x00001000 0 &intc 1>,
+
+			/* PCIe */
+			<0x00005000 0 &intc 5>,
+
+			/* I2S */
+			<0x00008000 0 &intc 7>;
+
+		chipcommon: chipcommon@0 {
+			compatible = "brcm,bcm4716-chipcommon", "syscon", "simple-mfd";
+			reg = <0x00000000 0x1000>;
+			ranges;
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			gpio-controller;
+			#gpio-cells = <2>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+
+			pmu_pll: clock-controller {
+				compatible = "brcm,bcm4716-pmu-pll";
+				clocks = <&xtal>;
+				#clock-cells = <1>;
+			};
+
+			watchdog {
+				compatible = "brcm,bcm4716-wdt";
+			};
+
+			uart0: serial@300 {
+				compatible = "ns16550a";
+				reg = <0x0300 0x100>;
+				interrupt-parent = <&intc>;
+				interrupts = <0>;
+				clock-frequency = <20000000>;
+			};
+		};
+
+		wifi: wifi@1000 {
+			reg = <0x00001000 0x1000>;
+		};
+
+		gmac: ethernet@2000 {
+			compatible = "brcm,bcm4716-amac";
+			reg = <0x00002000 0x1000>,
+			      <0x00102000 0x1000>;
+			reg-names = "amac_base", "idm_base";
+			interrupt-parent = <&intc>;
+			interrupts = <2>;
+			clocks = <&pmu_pll BCM4716_PMU_PLL_BACKPLANE>;
+
+			mdio: mdio {
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
+		};
+
+		intc: interrupt-controller@3000 {
+			compatible = "brcm,bcm4718-mips74k-intc";
+			reg = <0x00003000 0x1000>;
+			#address-cells = <0>;
+			#interrupt-cells = <1>;
+			interrupt-controller;
+			interrupt-parent = <&cpuintc>;
+			interrupts = <2>, <3>, <4>, <5>, <6>;
+		};
+
+		ehci: usb@4000 {
+			compatible = "brcm,bcm4716-ehci", "generic-ehci";
+			reg = <0x00004000 0x200>;
+			interrupt-parent = <&intc>;
+			interrupts = <4>;
+			phys = <&usb_phy>;
+		};
+
+		usb_phy: phy@4200 {
+			compatible = "brcm,bcm4716-usb-phy";
+			reg = <0x00004200 0x400>;
+			clocks = <&pmu_pll BCM4716_PMU_PLL_CPU>;
+			resets = <&usb_wrapper>;
+			#phy-cells = <0>;
+		};
+
+		ohci: usb@9000 {
+			compatible = "brcm,bcm4716-ohci", "generic-ohci";
+			reg = <0x00009000 0x1000>;
+			interrupt-parent = <&intc>;
+			interrupts = <4>;
+			phys = <&usb_phy>;
+		};
+
+		usb_wrapper: reset-controller@104000 {
+			compatible = "brcm,bcm4716-wrapper-reset";
+			reg = <0x00104000 0x1000>;
+			#reset-cells = <0>;
+		};
+	};
+};
