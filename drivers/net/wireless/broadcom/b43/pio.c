@@ -587,7 +587,9 @@ void b43_pio_handle_txstatus(struct b43_wldev *dev,
 	list_add(&pack->list, &q->packets_list);
 
 	if (q->stopped) {
-		b43_wake_queue(dev, q->queue_prio);
+		/* b43_tx_work() wakes it once tx_queue has room */
+		if (!dev->wl->tx_queue_full[q->queue_prio])
+			b43_wake_queue(dev, q->queue_prio);
 		q->stopped = false;
 	}
 }

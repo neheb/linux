@@ -831,6 +831,41 @@ enum {
 		smp_wmb();					\
 					} while (0)
 
+/* Maximum number of MPDUs b43 puts in one A-MPDU */
+#define B43_AMPDU_MAX_FRAMES	16
+/* Times an MPDU missing from a block ack is sent again */
+#define B43_AMPDU_RETRY_LIMIT	5
+
+/* Resends of one MPDU of an A-MPDU */
+struct b43_ampdu_retry {
+	u16 seq;
+	u8 count;
+};
+
+/* Data private to b43 for each station */
+struct b43_sta {
+	/* Newest sequence number queued in an A-MPDU, by TID */
+	u16 ampdu_seq[IEEE80211_NUM_TIDS];
+	/* Resends of the MPDUs in the block ack window, by TID */
+	struct b43_ampdu_retry
+		ampdu_retry[IEEE80211_NUM_TIDS][IEEE80211_MAX_AMPDU_BUF_HT];
+	/* Oldest MPDU neither acked nor given up, by TID */
+	u16 baw_start[IEEE80211_NUM_TIDS];
+	/* MPDUs from baw_start sent and waiting for their final status */
+	u64 baw_pending[IEEE80211_NUM_TIDS];
+};
+
+/*
+ * Position of the frame being queued in an A-MPDU. b43_tx_work() sets it
+ * while it queues the frames of an A-MPDU, for b43_generate_txhdr().
+ */
+struct b43_ampdu_tx_ctx {
+	bool active;
+	bool first;
+	bool last;
+	u16 len;	/* Length of the whole A-MPDU, for the first frame */
+};
+
 /*
  * What the PHY reported for the PPDU being received. The firmware only
  * passes the HT-SIG with the first MPDU of an A-MPDU, and valid PHY
@@ -860,6 +895,7 @@ struct b43_wldev {
 	bool dfq_valid;		/* Directed frame queue valid (IBSS PS mode, ATIM) */
 	bool radio_hw_enable;	/* saved state of radio hardware enabled state */
 	bool qos_enabled;		/* TRUE, if QoS is used. */
+	struct b43_ampdu_tx_ctx ampdu_tx;
 	struct b43_rx_ppdu rx_ppdu;
 	bool hwcrypto_enabled;		/* TRUE, if HW crypto acceleration is enabled. */
 	bool use_pio;			/* TRUE if next init should use PIO */
@@ -933,6 +969,8 @@ struct b43_wl {
 	/* Set this if we call ieee80211_register_hw() and check if we call
 	 * ieee80211_unregister_hw(). */
 	bool hw_registered;
+	/* HT is enabled, and with it A-MPDU */
+	bool ampdu_tx;
 
 	/* We can only have one operating interface (802.11 core)
 	 * at a time. General information about this interface follows.
@@ -985,6 +1023,8 @@ struct b43_wl {
 
 	/* Flag that implement the queues stopping. */
 	bool tx_queue_stopped[B43_QOS_QUEUE_NUM];
+	/* The mac80211 queue is stopped as tx_queue is full */
+	bool tx_queue_full[B43_QOS_QUEUE_NUM];
 
 	/* firmware loading work */
 	struct work_struct firmware_load;
@@ -1144,5 +1184,10 @@ static inline bool __b43_warn_on_dummy(bool x) { return x; }
 /* Macros for printing a value in Q5.2 format */
 #define Q52_FMT		"%u.%u"
 #define Q52_ARG(q52)	Q52_TO_INT(q52), ((((q52) & 0x3) * 100) / 4)
+
+static inline bool b43_ampdu_tx_enabled(struct b43_wldev *dev)
+{
+	return dev->wl->ampdu_tx;
+}
 
 #endif /* B43_H_ */
