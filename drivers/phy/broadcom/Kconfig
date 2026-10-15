@@ -39,6 +39,20 @@ config BCM_KONA_USB2_PHY
 	help
 	  Enable this to support the Broadcom Kona USB 2.0 PHY.
 
+config PHY_BCM4716_USB
+	tristate "Broadcom BCM4716 USB 2.0 PHY Driver"
+	depends on BCM47XX || COMPILE_TEST
+	depends on HAS_IOMEM && OF
+	depends on COMMON_CLK
+	select GENERIC_PHY
+	select RESET_CONTROLLER
+	default BCM47XX
+	help
+	  Enable this to support the USB 2.0 PHY of the USB host core on
+	  Broadcom BCM4716, BCM4717 and BCM4718 SoCs. It brings the core
+	  out of reset and sets up the PHY for the generic EHCI and OHCI
+	  platform drivers.
+
 config PHY_BCM_NS_USB2
 	tristate "Broadcom Northstar USB 2.0 PHY Driver"
 	depends on ARCH_BCM_IPROC || COMPILE_TEST
