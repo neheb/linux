@@ -14,9 +14,11 @@
 #include <linux/bitops.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
+#include <linux/regmap.h>
 #include <linux/types.h>
 #include <linux/watchdog.h>
 #include <linux/timer.h>
@@ -28,6 +30,11 @@
 #define WDT_DEFAULT_TIME	30	/* seconds */
 #define WDT_SOFTTIMER_MAX	255	/* seconds */
 #define WDT_SOFTTIMER_THRESHOLD	60	/* seconds */
+
+/* ChipCommon PMU watchdog of BCM4716/BCM4717/BCM4718 */
+#define BCM4716_PMU_WATCHDOG	0x634
+#define BCM4716_WDT_MAX_TICKS	GENMASK(23, 0)
+#define BCM4716_WDT_TICKS_PER_MS 32	/* 32 kHz ILP clock */
 
 static int timeout = WDT_DEFAULT_TIME;
 static bool nowayout = WATCHDOG_NOWAYOUT;
@@ -175,11 +182,65 @@ static const struct watchdog_ops bcm47xx_wdt_soft_ops = {
 	.restart        = bcm47xx_wdt_restart,
 };
 
+static u32 bcm4716_wdt_timer_set(struct bcm47xx_wdt *wdt, u32 ticks)
+{
+	struct regmap *regmap = bcm47xx_wdt_get_drvdata(wdt);
+
+	/* A count of 1 doesn't fire, so use the shortest count that does */
+	if (ticks == 1)
+		ticks = 2;
+	else if (ticks > BCM4716_WDT_MAX_TICKS)
+		ticks = BCM4716_WDT_MAX_TICKS;
+
+	regmap_write(regmap, BCM4716_PMU_WATCHDOG, ticks);
+
+	return ticks;
+}
+
+static u32 bcm4716_wdt_timer_set_ms(struct bcm47xx_wdt *wdt, u32 ms)
+{
+	u32 ticks;
+
+	ticks = bcm4716_wdt_timer_set(wdt, ms * BCM4716_WDT_TICKS_PER_MS);
+
+	return ticks / BCM4716_WDT_TICKS_PER_MS;
+}
+
+/* Set up a watchdog described in device tree, in the ChipCommon syscon */
+static struct bcm47xx_wdt *bcm47xx_wdt_of_init(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct bcm47xx_wdt *wdt;
+	struct regmap *regmap;
+
+	regmap = syscon_node_to_regmap(dev->parent->of_node);
+	if (IS_ERR(regmap))
+		return ERR_CAST(regmap);
+
+	wdt = devm_kzalloc_obj(dev, *wdt);
+	if (!wdt)
+		return ERR_PTR(-ENOMEM);
+
+	wdt->driver_data = regmap;
+	wdt->timer_set = bcm4716_wdt_timer_set;
+	wdt->timer_set_ms = bcm4716_wdt_timer_set_ms;
+	wdt->max_timer_ms = BCM4716_WDT_MAX_TICKS / BCM4716_WDT_TICKS_PER_MS;
+
+	return wdt;
+}
+
 static int bcm47xx_wdt_probe(struct platform_device *pdev)
 {
 	int ret;
 	bool soft;
 	struct bcm47xx_wdt *wdt = dev_get_platdata(&pdev->dev);
+
+	if (!wdt && pdev->dev.of_node) {
+		wdt = bcm47xx_wdt_of_init(pdev);
+		if (IS_ERR(wdt))
+			return dev_err_probe(&pdev->dev, PTR_ERR(wdt),
+					     "failed to set up the watchdog\n");
+	}
 
 	if (!wdt)
 		return -ENXIO;
@@ -219,9 +280,16 @@ err_timer:
 	return ret;
 }
 
+static const struct of_device_id bcm47xx_wdt_of_match[] = {
+	{ .compatible = "brcm,bcm4716-wdt" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, bcm47xx_wdt_of_match);
+
 static struct platform_driver bcm47xx_wdt_driver = {
 	.driver		= {
 		.name	= "bcm47xx-wdt",
+		.of_match_table = bcm47xx_wdt_of_match,
 	},
 	.probe		= bcm47xx_wdt_probe,
 };

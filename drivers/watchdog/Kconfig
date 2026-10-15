@@ -1835,6 +1835,7 @@ config BCM47XX_WDT
 	tristate "Broadcom BCM47xx Watchdog Timer"
 	depends on BCM47XX || ARCH_BCM_5301X || COMPILE_TEST
 	select WATCHDOG_CORE
+	select MFD_SYSCON if OF
 	help
 	  Hardware driver for the Broadcom BCM47xx Watchdog Timer.
 
