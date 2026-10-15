@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/brcm,bcm4716-pmu-pll.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM4716 PMU main PLL
+
+maintainers:
+  - Rosen Penev <rosenp@gmail.com>
+
+description: >
+  The PMU (Power Management Unit) in the ChipCommon core of BCM4716, BCM4717
+  and BCM4718 SoCs contains a main PLL running off the crystal. It has
+  outputs for the CPU, the memory controller and the backplane. The boot
+  loader programs the PLL and the rates are read back from its control
+  words.
+
+  The PLL registers are part of ChipCommon, so this node must be a child of
+  the ChipCommon syscon node.
+
+  The clock specifier values are defined in
+  include/dt-bindings/clock/brcm,bcm4716-pmu-pll.h.
+
+properties:
+  compatible:
+    const: brcm,bcm4716-pmu-pll
+
+  clocks:
+    description: Crystal (ALP) clock
+    maxItems: 1
+
+  '#clock-cells':
+    const: 1
+
+required:
+  - compatible
+  - clocks
+  - '#clock-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    clock-controller {
+        compatible = "brcm,bcm4716-pmu-pll";
+        clocks = <&xtal>;
+        #clock-cells = <1>;
+    };
