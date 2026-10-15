@@ -5835,6 +5835,7 @@ static enum b43_txpwr_result b43_nphy_op_recalc_txpower(struct b43_wldev *dev,
 	struct b43_ppr *ppr = &nphy->tx_pwr_max_ppr;
 	enum b43_band band;
 	u8 max; /* qdBm */
+	int i;
 
 	if (nphy->tx_pwr_last_recalc_freq == channel->center_freq &&
 	    nphy->tx_pwr_last_recalc_limit == phy->desired_txpower)
@@ -5876,6 +5877,16 @@ static enum b43_txpwr_result b43_nphy_op_recalc_txpower(struct b43_wldev *dev,
 
 	/* Make sure we didn't go too low */
 	b43_ppr_apply_min(dev, ppr, INT_TO_Q52(8));
+
+	/*
+	 * The hardware power control aims at the highest per-rate target.
+	 * The adjusted power table backs other rates off from it, so that
+	 * e.g. 64-QAM isn't sent at the power allowed for CCK.
+	 */
+	max = b43_ppr_get_max(dev, ppr);
+	memset(nphy->tx_power_offset, 0, sizeof(nphy->tx_power_offset));
+	for (i = 0; i < B43_PPR_RATES_NUM; i++)
+		nphy->tx_power_offset[i] = max - ppr->__all_rates[i];
 
 	/* Apply */
 	b43_mac_suspend(dev);
