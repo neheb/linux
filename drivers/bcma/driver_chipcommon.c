@@ -12,6 +12,7 @@
 #include "bcma_private.h"
 #include <linux/bcm47xx_wdt.h>
 #include <linux/export.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/bcma/bcma.h>
 
@@ -110,6 +111,21 @@ static int bcma_chipco_watchdog_ticks_per_ms(struct bcma_drv_cc *cc)
 	}
 }
 
+/* A watchdog described in device tree is driven by its own driver */
+static bool bcma_chipco_watchdog_in_of(struct bcma_drv_cc *cc)
+{
+	static const struct of_device_id matches[] = {
+		{ .compatible = "brcm,bcm4716-wdt" },
+		{ }
+	};
+
+	for_each_available_child_of_node_scoped(cc->core->dev.of_node, np)
+		if (of_match_node(matches, np))
+			return true;
+
+	return false;
+}
+
 int bcma_chipco_watchdog_register(struct bcma_drv_cc *cc)
 {
 	struct bcma_bus *bus = cc->core->bus;
@@ -121,6 +137,9 @@ int bcma_chipco_watchdog_register(struct bcma_drv_cc *cc)
 		pr_debug("No watchdog on 53573A0 / 53573A1\n");
 		return 0;
 	}
+
+	if (bcma_chipco_watchdog_in_of(cc))
+		return 0;
 
 	wdt.driver_data = cc;
 	wdt.timer_set = bcma_chipco_watchdog_timer_set_wdt;
