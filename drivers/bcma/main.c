@@ -294,6 +294,16 @@ static void bcma_register_core(struct bcma_bus *bus, struct bcma_device *core)
 	core->dev_registered = true;
 }
 
+/*
+ * Cores described with one of these compatibles are driven by a platform
+ * driver, created by of_platform_default_populate(). Don't also register
+ * them as bcma devices.
+ */
+static const struct of_device_id bcma_of_platform_cores[] = {
+	{ .compatible = "brcm,bcm4716-amac" },
+	{ }
+};
+
 static int bcma_register_devices(struct bcma_bus *bus)
 {
 	struct bcma_device *core;
@@ -321,6 +331,9 @@ static int bcma_register_devices(struct bcma_bus *bus)
 
 		np = core->dev.of_node;
 		if (np && !of_device_is_available(np))
+			continue;
+
+		if (np && of_match_node(bcma_of_platform_cores, np))
 			continue;
 
 		/* Only first GMAC core on BCM4706 is connected and working */
