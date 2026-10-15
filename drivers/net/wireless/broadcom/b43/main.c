@@ -740,6 +740,16 @@ static void b43_write_mac_bssid_templates(struct b43_wldev *dev)
 		tmp |= (u32) (mac_bssid[i + 3]) << 24;
 		b43_ram_write(dev, 0x20 + i, tmp);
 	}
+
+	/*
+	 * The firmware sends block acks from a template, and takes their
+	 * transmitter address from offset 16 of it. Without it, block acks
+	 * go out with a zero TA and the peer drops them.
+	 */
+	if (dev->fw.hdr_format == B43_FW_HDR_598) {
+		b43_ram_write(dev, B43_TPL_BA + 16, get_unaligned_le32(mac));
+		b43_ram_write(dev, B43_TPL_BA + 20, get_unaligned_le16(mac + 4));
+	}
 }
 
 static void b43_upload_card_macaddress(struct b43_wldev *dev)
