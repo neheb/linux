@@ -129,8 +129,12 @@
 #define B43_MMIO_XMTFIFO_WR_PTR		0x52A	/* core rev>= 16 only */
 #define B43_MMIO_XMTFIFODEF1		0x52C	/* core rev>= 16 only */
 #define B43_MMIO_XMTFIFOCMD		0x540
+#define  B43_TXFIFOCMD_FIFOSEL_SHIFT	8
+#define  B43_TXFIFOCMD_RESET		0x8000
 #define B43_MMIO_XMTFIFOFLUSH		0x542
 #define B43_MMIO_XMTFIFOTHRESH		0x544
+/* The TX FIFOs start after the templates, in blocks of 256 bytes */
+#define B43_TXFIFO_START_BLK		6
 #define B43_MMIO_XMTFIFORDY		0x546
 #define B43_MMIO_XMTFIFOPRIRDY		0x548
 #define B43_MMIO_XMTFIFORQPRI		0x54A
