@@ -5280,6 +5280,7 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/interrupt-controller/brcm,bcm4718-mips74k-intc.yaml
 F:	Documentation/devicetree/bindings/mips/brcm/
 F:	arch/mips/bcm47xx/*
+F:	arch/mips/boot/dts/brcm/bcm47*
 F:	arch/mips/include/asm/mach-bcm47xx/*
 F:	drivers/irqchip/irq-bcm47xx-mips74k.c
 
