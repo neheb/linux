@@ -364,10 +364,11 @@ static struct ieee80211_supported_band b43_band_2ghz_limited = {
 	.n_bitrates	= b43_g_ratetable_size,
 };
 
-/* HT20 with one spatial stream, receiving A-MPDUs only */
+/* HT20 with one spatial stream */
 #define B43_HT_CAP {							\
 	.ht_supported	= true,						\
-	.cap		= IEEE80211_HT_CAP_SM_PS,			\
+	.cap		= IEEE80211_HT_CAP_SM_PS |			\
+			  IEEE80211_HT_CAP_SGI_20,			\
 	.ampdu_factor	= IEEE80211_HT_MAX_AMPDU_8K,			\
 	.ampdu_density	= IEEE80211_HT_MPDU_DENSITY_8,			\
 	.mcs = {							\
@@ -5572,8 +5573,11 @@ static int b43_setup_bands(struct b43_wldev *dev,
 	limited_5g = phy->radio_ver == 0x2057 &&
 		     phy->radio_rev == 9;
 
-	/* HT needs the 598 firmware TX header, which N-PHY firmware has */
-	ht = modparam_ht && phy->type == B43_PHYTYPE_N;
+	/*
+	 * HT needs the 598 firmware TX header, which N-PHY firmware has.
+	 * The short guard interval needs N-PHY rev 3 or later.
+	 */
+	ht = modparam_ht && phy->type == B43_PHYTYPE_N && phy->rev >= 3;
 
 	if (have_2ghz_phy && ht)
 		hw->wiphy->bands[NL80211_BAND_2GHZ] = limited_2g ?
