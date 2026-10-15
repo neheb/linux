@@ -13,8 +13,8 @@ description: >
   ChipCommon is the first core on the AXI backplane of BCM4716, BCM4717 and
   BCM4718 SoCs. Among others it holds the GPIO controller, the UART, the
   watchdog, the flash controller and the PMU. The bcma bus driver handles
-  the GPIO controller. The UART and the PMU clocks are described as child
-  nodes.
+  the GPIO controller. The UART, the PMU clocks and the watchdog are
+  described as child nodes.
 
 properties:
   compatible:
@@ -47,6 +47,9 @@ properties:
   clock-controller:
     $ref: /schemas/clock/brcm,bcm4716-pmu-pll.yaml#
 
+  watchdog:
+    $ref: /schemas/watchdog/brcm,bcm4716-wdt.yaml#
+
 patternProperties:
   '^serial@[0-9a-f]+$':
     type: object
@@ -72,6 +75,10 @@ examples:
             compatible = "brcm,bcm4716-pmu-pll";
             clocks = <&xtal>;
             #clock-cells = <1>;
+        };
+
+        watchdog {
+            compatible = "brcm,bcm4716-wdt";
         };
 
         serial@300 {
