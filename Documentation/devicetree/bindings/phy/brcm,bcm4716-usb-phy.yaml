@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/brcm,bcm4716-usb-phy.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM4716 USB 2.0 PHY
+
+maintainers:
+  - Rosen Penev <rosenp@gmail.com>
+
+description: >
+  The USB 2.0 host core of BCM4716, BCM4717 and BCM4718 SoCs contains an
+  EHCI and an OHCI controller sharing one PHY. The host control register
+  and the shim MDIO interface to the PHY follow the EHCI registers, from
+  offset 0x200 of the core. The PHY driver also takes the core out of
+  reset, once for both controllers.
+
+properties:
+  compatible:
+    const: brcm,bcm4716-usb-phy
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    description: CPU clock, which sets the clock and data recovery mode
+    maxItems: 1
+
+  resets:
+    description: Reset of the USB host core wrapper
+    maxItems: 1
+
+  phy-supply:
+    description: Regulator switching the VBUS of the USB ports
+
+  '#phy-cells':
+    const: 0
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - resets
+  - '#phy-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/brcm,bcm4716-pmu-pll.h>
+
+    phy@18004200 {
+        compatible = "brcm,bcm4716-usb-phy";
+        reg = <0x18004200 0x400>;
+        clocks = <&pmu_pll BCM4716_PMU_PLL_CPU>;
+        resets = <&usb_wrapper>;
+        #phy-cells = <0>;
+    };
