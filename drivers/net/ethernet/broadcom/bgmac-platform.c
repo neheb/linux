@@ -15,7 +15,9 @@
 
 #include <linux/bcma/bcma.h>
 #include <linux/brcmphy.h>
+#include <linux/clk.h>
 #include <linux/etherdevice.h>
+#include <linux/iopoll.h>
 #include <linux/of_address.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
@@ -37,10 +39,12 @@
  * struct bgmac_platform_data - per-compatible bgmac setup
  * @feature_flags: BGMAC_FEAT_* flags of the MAC
  * @direct_flags: extra flags when connected without a PHY
+ * @internal_mdio: the MDIO controller of the MAC drives the "mdio" child
  */
 struct bgmac_platform_data {
 	u32 feature_flags;
 	u32 direct_flags;
+	bool internal_mdio;
 };
 
 static u32 platform_bgmac_read(struct bgmac *bgmac, u16 offset)
@@ -112,10 +116,11 @@ static void platform_bgmac_cco_ctl_maskset(struct bgmac *bgmac, u32 offset,
 
 static u32 platform_bgmac_get_bus_clock(struct bgmac *bgmac)
 {
-	/* This shouldn't be encountered */
-	WARN_ON(1);
+	/* Only reached with BGMAC_FEAT_SET_RXQ_CLK, which needs the clock */
+	if (WARN_ON(!bgmac->plat.bus_clk))
+		return 0;
 
-	return 0;
+	return clk_get_rate(bgmac->plat.bus_clk);
 }
 
 static void platform_bgmac_cmn_maskset32(struct bgmac *bgmac, u16 offset,
@@ -156,6 +161,91 @@ static void bgmac_nicpm_speed_set(struct net_device *net_dev)
 	writel(val, bgmac->plat.nicpm_base + NICPM_IOMUX_CTRL);
 
 	bgmac_adjust_link(bgmac->net_dev);
+}
+
+static int platform_mdio_wait(struct bgmac *bgmac)
+{
+	u32 val;
+
+	return readl_poll_timeout(bgmac->plat.base + BGMAC_PHY_ACCESS, val,
+				  !(val & BGMAC_PA_START), 10, 1000);
+}
+
+static void platform_mdio_select(struct bgmac *bgmac, int addr)
+{
+	u32 ctl;
+
+	ctl = bgmac_read(bgmac, BGMAC_PHY_CNTL);
+	ctl &= ~BGMAC_PC_EPA_MASK;
+	ctl |= addr;
+	bgmac_write(bgmac, BGMAC_PHY_CNTL, ctl);
+}
+
+static int platform_mdio_read(struct mii_bus *bus, int addr, int regnum)
+{
+	struct bgmac *bgmac = bus->priv;
+	int ret;
+
+	platform_mdio_select(bgmac, addr);
+
+	bgmac_write(bgmac, BGMAC_PHY_ACCESS, BGMAC_PA_START |
+		    addr << BGMAC_PA_ADDR_SHIFT |
+		    regnum << BGMAC_PA_REG_SHIFT);
+
+	ret = platform_mdio_wait(bgmac);
+	if (ret)
+		return ret;
+
+	return bgmac_read(bgmac, BGMAC_PHY_ACCESS) & BGMAC_PA_DATA_MASK;
+}
+
+static int platform_mdio_write(struct mii_bus *bus, int addr, int regnum,
+			       u16 val)
+{
+	struct bgmac *bgmac = bus->priv;
+
+	platform_mdio_select(bgmac, addr);
+
+	/* Clear the MDIO interrupt status before starting the write */
+	bgmac_write(bgmac, BGMAC_INT_STATUS, BGMAC_IS_MDIO);
+
+	bgmac_write(bgmac, BGMAC_PHY_ACCESS, BGMAC_PA_START | BGMAC_PA_WRITE |
+		    addr << BGMAC_PA_ADDR_SHIFT |
+		    regnum << BGMAC_PA_REG_SHIFT | val);
+
+	return platform_mdio_wait(bgmac);
+}
+
+static int platform_mdio_register(struct bgmac *bgmac)
+{
+	struct device *dev = bgmac->dev;
+	struct device_node *np;
+	struct mii_bus *bus;
+	int ret;
+
+	np = of_get_child_by_name(dev->of_node, "mdio");
+	if (!np)
+		return 0;
+
+	bus = devm_mdiobus_alloc(dev);
+	if (!bus) {
+		of_node_put(np);
+		return -ENOMEM;
+	}
+
+	bus->name = "bgmac MDIO bus";
+	snprintf(bus->id, MII_BUS_ID_SIZE, "%s-mii", dev_name(dev));
+	bus->priv = bgmac;
+	bus->read = platform_mdio_read;
+	bus->write = platform_mdio_write;
+	bus->parent = dev;
+
+	ret = devm_of_mdiobus_register(dev, bus, np);
+	of_node_put(np);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to register MDIO bus\n");
+
+	return 0;
 }
 
 static int platform_phy_connect(struct bgmac *bgmac)
@@ -235,6 +325,11 @@ static int bgmac_probe(struct platform_device *pdev)
 			return PTR_ERR(bgmac->plat.nicpm_base);
 	}
 
+	bgmac->plat.bus_clk = devm_clk_get_optional_enabled(&pdev->dev, NULL);
+	if (IS_ERR(bgmac->plat.bus_clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(bgmac->plat.bus_clk),
+				     "failed to get the bus clock\n");
+
 	bgmac->read = platform_bgmac_read;
 	bgmac->write = platform_bgmac_write;
 	bgmac->idm_read = platform_bgmac_idm_read;
@@ -251,6 +346,12 @@ static int bgmac_probe(struct platform_device *pdev)
 	} else {
 		bgmac->phy_connect = bgmac_phy_connect_direct;
 		bgmac->feature_flags |= data->direct_flags;
+	}
+
+	if (data->internal_mdio) {
+		ret = platform_mdio_register(bgmac);
+		if (ret)
+			return ret;
 	}
 
 	return bgmac_enet_probe(bgmac);
@@ -296,10 +397,17 @@ static const struct bgmac_platform_data bgmac_iproc_data = {
 	.direct_flags = BGMAC_FEAT_FORCE_SPEED_2500,
 };
 
+static const struct bgmac_platform_data bgmac_bcm4716_data = {
+	.feature_flags = BGMAC_FEAT_CLKCTLST | BGMAC_FEAT_FLW_CTRL2 |
+			 BGMAC_FEAT_SET_RXQ_CLK,
+	.internal_mdio = true,
+};
+
 static const struct of_device_id bgmac_of_enet_match[] = {
 	{.compatible = "brcm,amac", .data = &bgmac_iproc_data},
 	{.compatible = "brcm,nsp-amac", .data = &bgmac_iproc_data},
 	{.compatible = "brcm,ns2-amac", .data = &bgmac_iproc_data},
+	{.compatible = "brcm,bcm4716-amac", .data = &bgmac_bcm4716_data},
 	{},
 };
 
