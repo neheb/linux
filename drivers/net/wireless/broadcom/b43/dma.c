@@ -1501,9 +1501,12 @@ static bool b43_dma_ampdu_may_retry(struct b43_wldev *dev,
 /*
  * Complete an MPDU of an A-MPDU, or put it on @retry to be sent again if
  * the block ack does not cover it. Must be called with the RCU read lock
- * held.
+ * held. Returns whether the block ack covered the MPDU.
+ *
+ * Rate control learns about the A-MPDU from b43_dma_ampdu_rate_status(),
+ * so the status of the MPDU itself carries no A-MPDU information.
  */
-static void b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
+static bool b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
 					 struct b43_dmaring *ring,
 					 struct b43_dmadesc_meta *meta,
 					 const struct b43_txstatus *status,
@@ -1514,6 +1517,7 @@ static void b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
 	struct b43_private_tx_info *priv_info = b43_get_priv_tx_info(info);
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	bool acked = b43_dma_ampdu_frame_acked(status, skb);
+	int i;
 
 	unmap_descbuffer(ring, meta->dmaaddr, skb->len, 1);
 	kfree(priv_info->bouncebuffer);
@@ -1524,24 +1528,66 @@ static void b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
 		hdr->frame_control |= cpu_to_le16(IEEE80211_FCTL_RETRY);
 		/* The bounce buffer pointer took the place of the vif */
 		info->control.vif = dev->wl->vif;
+		/* Send it again at the rates rate control picks now */
+		for (i = 0; i < ARRAY_SIZE(info->control.rates); i++) {
+			info->control.rates[i].idx = -1;
+			info->control.rates[i].count = 0;
+		}
+		info->flags &= ~IEEE80211_TX_CTL_RATE_CTRL_PROBE;
+		ieee80211_get_tx_rates(info->control.vif,
+				       ieee80211_find_sta_by_ifaddr(dev->wl->hw,
+								    hdr->addr1,
+								    NULL),
+				       skb, info->control.rates,
+				       ARRAY_SIZE(info->control.rates));
 		__skb_queue_tail(retry, skb);
-		return;
+		return false;
 	}
 
 	ieee80211_tx_info_clear_status(info);
 	info->status.rates[0].count = 1;
 	info->status.rates[1].idx = -1;
-	info->flags |= IEEE80211_TX_STAT_AMPDU;
-	info->status.ampdu_len = 1;
-	if (acked) {
+	if (acked)
 		info->flags |= IEEE80211_TX_STAT_ACK;
-		info->status.ampdu_ack_len = 1;
-	} else {
+	else
 		/* Makes mac80211 send a block ack request */
 		info->flags |= IEEE80211_TX_STAT_AMPDU_NO_BACK;
-	}
 
 	ieee80211_tx_status_skb(dev->wl->hw, skb);
+	return acked;
+}
+
+/*
+ * Tell rate control how an A-MPDU of @len MPDUs, sent at the rate of its
+ * first MPDU @first, went. This covers every transmission, including
+ * those of MPDUs that are sent again, so that rate control notices a rate
+ * that stopped working within a few A-MPDUs.
+ */
+static void b43_dma_ampdu_rate_status(struct b43_wldev *dev,
+				      struct ieee80211_sta *sta,
+				      const struct ieee80211_tx_info *first,
+				      unsigned int len, unsigned int acked)
+{
+	struct ieee80211_tx_info info = {};
+	struct ieee80211_tx_status status = {
+		.sta = sta,
+		.info = &info,
+	};
+	int i;
+
+	info.band = first->band;
+	info.flags = IEEE80211_TX_CTL_AMPDU | IEEE80211_TX_STAT_AMPDU |
+		     (first->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE);
+	if (acked)
+		info.flags |= IEEE80211_TX_STAT_ACK;
+	for (i = 0; i < ARRAY_SIZE(info.status.rates); i++)
+		info.status.rates[i].idx = -1;
+	info.status.rates[0] = first->control.rates[0];
+	info.status.rates[0].count = 1;
+	info.status.ampdu_len = len;
+	info.status.ampdu_ack_len = acked;
+
+	ieee80211_tx_status_ext(dev->wl->hw, &status);
 }
 
 /*
@@ -1625,6 +1671,9 @@ static void b43_dma_handle_ampdu_txstatus(struct b43_wldev *dev,
 	size_t hdrsize = b43_txhdr_size(dev);
 	struct b43_dmadesc_meta *meta;
 	struct sk_buff_head retry, *queue;
+	struct ieee80211_tx_info first = {};
+	struct ieee80211_sta *sta = NULL;
+	unsigned int len = 0, acked = 0;
 	struct b43_txhdr *txhdr;
 	unsigned long flags;
 	bool last;
@@ -1654,11 +1703,23 @@ static void b43_dma_handle_ampdu_txstatus(struct b43_wldev *dev,
 			       slot, ring->index);
 			break;
 		}
-		b43_dma_complete_ampdu_frame(dev, ring, meta, status, &retry);
+		if (!len++) {
+			struct ieee80211_hdr *hdr =
+				(struct ieee80211_hdr *)meta->skb->data;
+
+			first = *IEEE80211_SKB_CB(meta->skb);
+			sta = ieee80211_find_sta_by_ifaddr(dev->wl->hw,
+							   hdr->addr1, NULL);
+		}
+		if (b43_dma_complete_ampdu_frame(dev, ring, meta, status,
+						 &retry))
+			acked++;
 		ring->used_slots--;
 
 		slot = next_slot(ring, slot);
 	} while (!last && ring->used_slots);
+	if (sta && first.control.rates[0].idx >= 0)
+		b43_dma_ampdu_rate_status(dev, sta, &first, len, acked);
 	rcu_read_unlock();
 
 	if (skb_queue_empty(&retry))
