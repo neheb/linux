@@ -33,6 +33,16 @@
 #define NICPM_IOMUX_CTRL_SPD_100M	1
 #define NICPM_IOMUX_CTRL_SPD_1000M	2
 
+/**
+ * struct bgmac_platform_data - per-compatible bgmac setup
+ * @feature_flags: BGMAC_FEAT_* flags of the MAC
+ * @direct_flags: extra flags when connected without a PHY
+ */
+struct bgmac_platform_data {
+	u32 feature_flags;
+	u32 direct_flags;
+};
+
 static u32 platform_bgmac_read(struct bgmac *bgmac, u16 offset)
 {
 	return readl(bgmac->plat.base + offset);
@@ -170,11 +180,14 @@ static int platform_phy_connect(struct bgmac *bgmac)
 
 static int bgmac_probe(struct platform_device *pdev)
 {
+	const struct bgmac_platform_data *data;
 	struct device_node *np = pdev->dev.of_node;
 	struct device_node *phy_node;
 	struct bgmac *bgmac;
 	struct resource *regs;
 	int ret;
+
+	data = of_device_get_match_data(&pdev->dev);
 
 	bgmac = bgmac_alloc(&pdev->dev);
 	if (!bgmac)
@@ -182,13 +195,7 @@ static int bgmac_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, bgmac);
 
-	/* Set the features of the 4707 family */
-	bgmac->feature_flags |= BGMAC_FEAT_CLKCTLST;
-	bgmac->feature_flags |= BGMAC_FEAT_NO_RESET;
-	bgmac->feature_flags |= BGMAC_FEAT_CMDCFG_SR_REV4;
-	bgmac->feature_flags |= BGMAC_FEAT_TX_MASK_SETUP;
-	bgmac->feature_flags |= BGMAC_FEAT_RX_MASK_SETUP;
-	bgmac->feature_flags |= BGMAC_FEAT_IDM_MASK;
+	bgmac->feature_flags = data->feature_flags | BGMAC_FEAT_IDM_MASK;
 
 	bgmac->dev = &pdev->dev;
 	bgmac->dma_dev = &pdev->dev;
@@ -243,7 +250,7 @@ static int bgmac_probe(struct platform_device *pdev)
 		bgmac->phy_connect = platform_phy_connect;
 	} else {
 		bgmac->phy_connect = bgmac_phy_connect_direct;
-		bgmac->feature_flags |= BGMAC_FEAT_FORCE_SPEED_2500;
+		bgmac->feature_flags |= data->direct_flags;
 	}
 
 	return bgmac_enet_probe(bgmac);
@@ -281,10 +288,18 @@ static const struct dev_pm_ops bgmac_pm_ops = {
 #define BGMAC_PM_OPS NULL
 #endif /* CONFIG_PM */
 
+/* The features of the 4707 family */
+static const struct bgmac_platform_data bgmac_iproc_data = {
+	.feature_flags = BGMAC_FEAT_CLKCTLST | BGMAC_FEAT_NO_RESET |
+			 BGMAC_FEAT_CMDCFG_SR_REV4 | BGMAC_FEAT_TX_MASK_SETUP |
+			 BGMAC_FEAT_RX_MASK_SETUP,
+	.direct_flags = BGMAC_FEAT_FORCE_SPEED_2500,
+};
+
 static const struct of_device_id bgmac_of_enet_match[] = {
-	{.compatible = "brcm,amac",},
-	{.compatible = "brcm,nsp-amac",},
-	{.compatible = "brcm,ns2-amac",},
+	{.compatible = "brcm,amac", .data = &bgmac_iproc_data},
+	{.compatible = "brcm,nsp-amac", .data = &bgmac_iproc_data},
+	{.compatible = "brcm,ns2-amac", .data = &bgmac_iproc_data},
 	{},
 };
 
