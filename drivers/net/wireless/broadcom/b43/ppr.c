@@ -74,6 +74,7 @@ bool b43_ppr_load_max_from_sprom(struct b43_wldev *dev, struct b43_ppr *ppr,
 	u8 maxpwr, off;
 	u32 sprom_ofdm_po;
 	u16 *sprom_mcs_po;
+	/* Further offsets of CDD and STBC, also in 0.5 dB steps */
 	u8 extra_cdd_po, extra_stbc_po;
 	int i;
 
@@ -143,13 +144,13 @@ bool b43_ppr_load_max_from_sprom(struct b43_wldev *dev, struct b43_ppr *ppr,
 		off = ((sprom_mcs_po[0] >> (i * 4)) & 0xf) * 2;
 		rates->mcs_20_cdd[i] = maxpwr - off;
 		if (phy->type == B43_PHYTYPE_N && phy->rev >= 3)
-			rates->mcs_20_cdd[i] -= extra_cdd_po;
+			rates->mcs_20_cdd[i] -= extra_cdd_po * 2;
 	}
 	for (i = 0; i < 4; i++) {
 		off = ((sprom_mcs_po[1] >> (i * 4)) & 0xf) * 2;
 		rates->mcs_20_cdd[4 + i] = maxpwr - off;
 		if (phy->type == B43_PHYTYPE_N && phy->rev >= 3)
-			rates->mcs_20_cdd[4 + i] -= extra_cdd_po;
+			rates->mcs_20_cdd[4 + i] -= extra_cdd_po * 2;
 	}
 
 	/* OFDM 20 CDD */
@@ -167,13 +168,13 @@ bool b43_ppr_load_max_from_sprom(struct b43_wldev *dev, struct b43_ppr *ppr,
 		off = ((sprom_mcs_po[0] >> (i * 4)) & 0xf) * 2;
 		rates->mcs_20_stbc[i] = maxpwr - off;
 		if (phy->type == B43_PHYTYPE_N && phy->rev >= 3)
-			rates->mcs_20_stbc[i] -= extra_stbc_po;
+			rates->mcs_20_stbc[i] -= extra_stbc_po * 2;
 	}
 	for (i = 0; i < 4; i++) {
 		off = ((sprom_mcs_po[1] >> (i * 4)) & 0xf) * 2;
 		rates->mcs_20_stbc[4 + i] = maxpwr - off;
 		if (phy->type == B43_PHYTYPE_N && phy->rev >= 3)
-			rates->mcs_20_stbc[4 + i] -= extra_stbc_po;
+			rates->mcs_20_stbc[4 + i] -= extra_stbc_po * 2;
 	}
 
 	/* MCS 20 SDM */
