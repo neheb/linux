@@ -42,6 +42,16 @@ config RESET_AXS10X
 	help
 	  This enables the reset controller driver for AXS10x.
 
+config RESET_BCM4716_WRAPPER
+	tristate "Broadcom BCM4716 core wrapper reset controller"
+	depends on BCM47XX || COMPILE_TEST
+	default BCM47XX
+	help
+	  This enables the reset controller driver for the agent wrappers
+	  of the backplane cores on Broadcom BCM4716, BCM4717 and BCM4718
+	  SoCs. It lets device tree based drivers reset and clock a core
+	  without the bcma bus driver.
+
 config RESET_BCM6345
 	bool "BCM6345 Reset Controller"
 	depends on BMIPS_GENERIC || COMPILE_TEST
