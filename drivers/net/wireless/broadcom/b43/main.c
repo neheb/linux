@@ -1375,6 +1375,37 @@ void b43_wireless_core_reset(struct b43_wldev *dev, bool gmode)
 	b43_write32(dev, B43_MMIO_MACCTL, macctl);
 }
 
+/* Read the second status package of an A-MPDU with a block ack */
+static bool b43_read_ampdu_txstatus(struct b43_wldev *dev, u16 status,
+				    struct b43_txstatus *stat)
+{
+	u32 s1, s2;
+	int i;
+
+	for (i = 0; i < 10; i++) {
+		s1 = b43_read32(dev, B43_MMIO_XMITSTAT_0);
+		if (s1 & 0x00000001)
+			break;
+		udelay(1);
+	}
+	if (!(s1 & 0x00000001)) {
+		b43dbg(dev->wl, "A-MPDU block ack status missing\n");
+		return false;
+	}
+	s2 = b43_read32(dev, B43_MMIO_XMITSTAT_1);
+
+	stat->ba_valid = true;
+	stat->for_ampdu = 1;
+	stat->frame_count = 1;
+	stat->ba_ssn = stat->seq >> 4;
+	stat->ba_bitmap = ((status & 0xf000) >> 12) |
+			  ((s1 & 0x001e) << 3) |
+			  ((u64)(s1 >> 8) << 8) |
+			  ((u64)s2 << 32);
+
+	return true;
+}
+
 static void handle_irq_transmit_status(struct b43_wldev *dev)
 {
 	u32 v0, v1;
@@ -1398,6 +1429,20 @@ static void handle_irq_transmit_status(struct b43_wldev *dev)
 		stat.intermediate = !!(tmp & 0x0040);
 		stat.for_ampdu = !!(tmp & 0x0020);
 		stat.acked = !!(tmp & 0x0002);
+		stat.ba_valid = false;
+
+		/*
+		 * The status of an A-MPDU is marked intermediate. When the
+		 * A-MPDU was answered with a block ack, it carries bits 0-3
+		 * of the block ack bitmap instead of the frame count, and a
+		 * second package with the rest of the bitmap follows.
+		 */
+		if (b43_ampdu_tx_enabled(dev) && stat.intermediate &&
+		    stat.for_ampdu) {
+			if (stat.acked)
+				b43_read_ampdu_txstatus(dev, tmp, &stat);
+			stat.intermediate = 0;
+		}
 
 		b43_handle_txstatus(dev, &stat);
 	}
@@ -3675,6 +3720,114 @@ static int b43_rng_init(struct b43_wl *wl)
 	return err;
 }
 
+static bool b43_tx_ampdu_candidate(struct b43_wldev *dev,
+				   struct sk_buff *skb)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+
+	return b43_ampdu_tx_enabled(dev) &&
+	       !b43_using_pio_transfers(dev) &&
+	       (info->flags & IEEE80211_TX_CTL_AMPDU) &&
+	       !(info->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM) &&
+	       (info->control.rates[0].flags & IEEE80211_TX_RC_MCS) &&
+	       ieee80211_is_data_qos(hdr->frame_control);
+}
+
+static unsigned int b43_tx_mpdu_len(struct sk_buff *skb)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	unsigned int len = skb->len + FCS_LEN;
+
+	if (info->control.hw_key)
+		len += info->control.hw_key->icv_len;
+
+	return len;
+}
+
+/*
+ * Whether the frame at the head of @queue can join @skb in an A-MPDU:
+ * the same receiver and TID.
+ */
+static bool b43_tx_ampdu_continues(struct b43_wldev *dev,
+				   struct sk_buff_head *queue,
+				   struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	struct sk_buff *next = skb_peek(queue);
+	struct ieee80211_hdr *nhdr;
+
+	if (!next || !b43_tx_ampdu_candidate(dev, next))
+		return false;
+
+	nhdr = (struct ieee80211_hdr *)next->data;
+	return ether_addr_equal(nhdr->addr1, hdr->addr1) &&
+	       ieee80211_get_tid(nhdr) == ieee80211_get_tid(hdr);
+}
+
+/* The A-MPDU length the peer accepts, as announced in its HT capabilities */
+static unsigned int b43_tx_ampdu_peer_max(struct sk_buff *skb)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	struct ieee80211_sta *sta;
+	unsigned int max = 0;
+
+	rcu_read_lock();
+	sta = ieee80211_find_sta(info->control.vif, hdr->addr1);
+	if (sta)
+		max = (1 << (IEEE80211_HT_MAX_AMPDU_FACTOR +
+			     sta->deflink.ht_cap.ampdu_factor)) - 1;
+	rcu_read_unlock();
+
+	return min(max, 0xffffU);
+}
+
+/*
+ * Send @skb and the frames following it in @queue for the same receiver
+ * and TID as one A-MPDU. Each MPDU but the last is padded to 4 bytes,
+ * and each is preceded by a 4 byte delimiter.
+ */
+static int b43_tx_ampdu(struct b43_wldev *dev, struct sk_buff_head *queue,
+			struct sk_buff *skb)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct sk_buff *skbs[B43_AMPDU_MAX_FRAMES];
+	unsigned int max_len, len, n = 1, i;
+	int err;
+
+	max_len = min(b43_tx_ampdu_peer_max(skb),
+		      b43_ht_max_ampdu_len(info->control.rates[0].idx));
+	skbs[0] = skb;
+	len = b43_tx_mpdu_len(skb) + 4;
+
+	while (n < B43_AMPDU_MAX_FRAMES &&
+	       b43_tx_ampdu_continues(dev, queue, skb)) {
+		struct sk_buff *next = skb_peek(queue);
+		unsigned int nlen;
+
+		nlen = b43_tx_mpdu_len(next) + 4;
+		if (ALIGN(len, 4) + nlen > max_len)
+			break;
+
+		len = ALIGN(len, 4) + nlen;
+		skbs[n++] = skb_dequeue(queue);
+	}
+
+	err = b43_dma_tx_ampdu(dev, skbs, n, len);
+	if (err == -ENOSPC) {
+		for (i = n; i > 0; i--)
+			skb_queue_head(queue, skbs[i - 1]);
+	} else if (err) {
+		ieee80211_free_txskb(dev->wl->hw, skbs[0]);
+		for (i = n - 1; i > 0; i--)
+			skb_queue_head(queue, skbs[i]);
+		err = 0;
+	}
+
+	return err;
+}
+
 static void b43_tx_work(struct work_struct *work)
 {
 	struct b43_wl *wl = container_of(work, struct b43_wl, tx_work);
@@ -3693,6 +3846,16 @@ static void b43_tx_work(struct work_struct *work)
 	for (queue_num = 0; queue_num < B43_QOS_QUEUE_NUM; queue_num++) {
 		while (skb_queue_len(&wl->tx_queue[queue_num])) {
 			skb = skb_dequeue(&wl->tx_queue[queue_num]);
+			if (b43_tx_ampdu_candidate(dev, skb)) {
+				err = b43_tx_ampdu(dev, &wl->tx_queue[queue_num],
+						   skb);
+				if (err == -ENOSPC) {
+					wl->tx_queue_stopped[queue_num] = true;
+					b43_stop_queue(dev, queue_num);
+					break;
+				}
+				continue;
+			}
 			if (b43_using_pio_transfers(dev))
 				err = b43_pio_tx(dev, skb);
 			else
@@ -5258,6 +5421,8 @@ static int b43_op_ampdu_action(struct ieee80211_hw *hw,
 			       struct ieee80211_vif *vif,
 			       struct ieee80211_ampdu_params *params)
 {
+	struct b43_wl *wl = hw_to_b43_wl(hw);
+
 	switch (params->action) {
 	case IEEE80211_AMPDU_RX_START:
 	case IEEE80211_AMPDU_RX_STOP:
@@ -5265,6 +5430,25 @@ static int b43_op_ampdu_action(struct ieee80211_hw *hw,
 		 * The firmware sends the block acks, and mac80211 reorders
 		 * the frames, so there is nothing to set up.
 		 */
+		return 0;
+	case IEEE80211_AMPDU_TX_START: {
+		struct b43_sta *bsta = (struct b43_sta *)params->sta->drv_priv;
+
+		if (!wl->ampdu_tx)
+			return -EOPNOTSUPP;
+		/* The window starts at the first MPDU of the session */
+		bsta->ampdu_seq[params->tid] =
+			ieee80211_sn_sub(params->ssn, 1);
+		return IEEE80211_AMPDU_TX_START_IMMEDIATE;
+	}
+	case IEEE80211_AMPDU_TX_STOP_CONT:
+		ieee80211_stop_tx_ba_cb_irqsafe(vif, params->sta->addr,
+						params->tid);
+		return 0;
+	case IEEE80211_AMPDU_TX_STOP_FLUSH:
+	case IEEE80211_AMPDU_TX_STOP_FLUSH_CONT:
+	case IEEE80211_AMPDU_TX_OPERATIONAL:
+		/* Frames are aggregated as they are queued */
 		return 0;
 	default:
 		return -EOPNOTSUPP;
@@ -5704,8 +5888,12 @@ static struct b43_wl *b43_wireless_init(struct b43_bus_dev *dev)
 	ieee80211_hw_set(hw, RX_INCLUDES_FCS);
 	ieee80211_hw_set(hw, SIGNAL_DBM);
 	ieee80211_hw_set(hw, MFP_CAPABLE);
-	if (modparam_ht)
+	if (modparam_ht) {
 		ieee80211_hw_set(hw, AMPDU_AGGREGATION);
+		hw->max_tx_aggregation_subframes = B43_AMPDU_MAX_FRAMES;
+		hw->sta_data_size = sizeof(struct b43_sta);
+		wl->ampdu_tx = true;
+	}
 	hw->wiphy->interface_modes =
 		BIT(NL80211_IFTYPE_AP) |
 		BIT(NL80211_IFTYPE_MESH_POINT) |

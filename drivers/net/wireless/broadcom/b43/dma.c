@@ -1184,7 +1184,7 @@ struct b43_dmaring *parse_cookie(struct b43_wldev *dev, u16 cookie, int *slot)
 }
 
 static int dma_tx_fragment(struct b43_dmaring *ring,
-			   struct sk_buff *skb)
+			   struct sk_buff *skb, bool poke)
 {
 	const struct b43_dma_ops *ops = ring->ops;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
@@ -1271,9 +1271,12 @@ static int dma_tx_fragment(struct b43_dmaring *ring,
 		b43_shm_write16(ring->dev, B43_SHM_SHARED,
 				B43_SHM_SH_MCASTCOOKIE, cookie);
 	}
-	/* Now transfer the whole frame. */
-	wmb();
-	ops->poke_tx(ring, next_slot(ring, slot));
+	/* Now transfer the whole frame, or the A-MPDU it ends. */
+	if (poke) {
+		/* Descriptors and buffers must be visible before the poke */
+		wmb();
+		ops->poke_tx(ring, next_slot(ring, slot));
+	}
 	return 0;
 
 out_unmap_hdr:
@@ -1380,7 +1383,7 @@ int b43_dma_tx(struct b43_wldev *dev, struct sk_buff *skb)
 	 * static, so we don't need to store it per frame. */
 	ring->queue_prio = skb_get_queue_mapping(skb);
 
-	err = dma_tx_fragment(ring, skb);
+	err = dma_tx_fragment(ring, skb, true);
 	if (unlikely(err == -ENOKEY)) {
 		/* Drop this packet, as we don't have the encryption key
 		 * anymore and must not transmit it unencrypted. */
@@ -1406,6 +1409,266 @@ int b43_dma_tx(struct b43_wldev *dev, struct sk_buff *skb)
 out:
 
 	return err;
+}
+
+/* Mark the frame queued last as the last MPDU of the A-MPDU */
+static void b43_dma_end_ampdu(struct b43_dmaring *ring)
+{
+	size_t hdrsize = b43_txhdr_size(ring->dev);
+	struct b43_dmadesc_meta *meta;
+	struct b43_txhdr *txhdr;
+	int slot;
+
+	/* The header slot of the last frame */
+	slot = prev_slot(ring, ring->current_slot);
+	ring->ops->idx2desc(ring, slot, &meta);
+	txhdr = (struct b43_txhdr *)
+		&ring->txhdr_cache[(slot / TX_SLOTS_PER_FRAME) * hdrsize];
+	txhdr->mac_ctl = cpu_to_le32((le32_to_cpu(txhdr->mac_ctl) &
+				      ~B43_TXH_MAC_AMPDU) |
+				     B43_TXH_MAC_AMPDU_LAST);
+	sync_descbuffer_for_device(ring, meta->dmaaddr, hdrsize);
+
+	/* The updated header must be visible before the poke */
+	wmb();
+	ring->ops->poke_tx(ring, next_slot(ring, ring->current_slot));
+}
+
+/* The b43 data of the receiver of @skb, NULL if it is gone */
+static struct b43_sta *b43_dma_ampdu_sta(struct b43_wldev *dev,
+					 struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	struct ieee80211_sta *sta;
+
+	sta = ieee80211_find_sta_by_ifaddr(dev->wl->hw, hdr->addr1, NULL);
+
+	return sta ? (struct b43_sta *)sta->drv_priv : NULL;
+}
+
+static u16 b43_dma_ampdu_seq(struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+
+	return IEEE80211_SEQ_TO_SN(le16_to_cpu(hdr->seq_ctrl));
+}
+
+/* Whether the block ack in @status covers the MPDU in @skb */
+static bool b43_dma_ampdu_frame_acked(const struct b43_txstatus *status,
+				      struct sk_buff *skb)
+{
+	u16 idx = ieee80211_sn_sub(b43_dma_ampdu_seq(skb), status->ba_ssn);
+
+	return status->ba_valid && idx < IEEE80211_MAX_AMPDU_BUF_HT &&
+	       (status->ba_bitmap & BIT_ULL(idx));
+}
+
+/*
+ * Whether the MPDU in @skb may be sent again. It must still be in the
+ * block ack window, which follows the newest MPDU queued: once it falls
+ * behind, the receiver takes it for an old frame, or for a new one once
+ * the sequence numbers wrap.
+ */
+static bool b43_dma_ampdu_may_retry(struct b43_wldev *dev,
+				    struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	u16 seq = b43_dma_ampdu_seq(skb);
+	u8 tid = ieee80211_get_tid(hdr);
+	struct b43_ampdu_retry *retry;
+	struct b43_sta *bsta;
+
+	bsta = b43_dma_ampdu_sta(dev, skb);
+	if (!bsta || !dev->wl->vif)
+		return false;
+
+	if (ieee80211_sn_sub(bsta->ampdu_seq[tid], seq) >=
+	    IEEE80211_MAX_AMPDU_BUF_HT)
+		return false;
+
+	retry = &bsta->ampdu_retry[tid][seq % IEEE80211_MAX_AMPDU_BUF_HT];
+	if (retry->seq != seq) {
+		retry->seq = seq;
+		retry->count = 0;
+	}
+	if (retry->count >= B43_AMPDU_RETRY_LIMIT)
+		return false;
+
+	retry->count++;
+	return true;
+}
+
+/*
+ * Complete an MPDU of an A-MPDU, or put it on @retry to be sent again if
+ * the block ack does not cover it. Must be called with the RCU read lock
+ * held.
+ */
+static void b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
+					 struct b43_dmaring *ring,
+					 struct b43_dmadesc_meta *meta,
+					 const struct b43_txstatus *status,
+					 struct sk_buff_head *retry)
+{
+	struct sk_buff *skb = meta->skb;
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct b43_private_tx_info *priv_info = b43_get_priv_tx_info(info);
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	bool acked = b43_dma_ampdu_frame_acked(status, skb);
+
+	unmap_descbuffer(ring, meta->dmaaddr, skb->len, 1);
+	kfree(priv_info->bouncebuffer);
+	priv_info->bouncebuffer = NULL;
+	meta->skb = B43_DMA_PTR_POISON;
+
+	if (!acked && b43_dma_ampdu_may_retry(dev, skb)) {
+		hdr->frame_control |= cpu_to_le16(IEEE80211_FCTL_RETRY);
+		/* The bounce buffer pointer took the place of the vif */
+		info->control.vif = dev->wl->vif;
+		__skb_queue_tail(retry, skb);
+		return;
+	}
+
+	ieee80211_tx_info_clear_status(info);
+	info->status.rates[0].count = 1;
+	info->status.rates[1].idx = -1;
+	info->flags |= IEEE80211_TX_STAT_AMPDU;
+	info->status.ampdu_len = 1;
+	if (acked) {
+		info->flags |= IEEE80211_TX_STAT_ACK;
+		info->status.ampdu_ack_len = 1;
+	} else {
+		/* Makes mac80211 send a block ack request */
+		info->flags |= IEEE80211_TX_STAT_AMPDU_NO_BACK;
+	}
+
+	ieee80211_tx_status_skb(dev->wl->hw, skb);
+}
+
+/*
+ * Queue the MPDUs of an A-MPDU. The firmware sends frames marked first,
+ * intermediate and last back to back as one PPDU, so the DMA engine is
+ * only started once the last one is in the ring.
+ */
+int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
+		     unsigned int n, u16 ampdu_len)
+{
+	struct b43_ampdu_tx_ctx *ampdu = &dev->ampdu_tx;
+	struct b43_dmaring *ring;
+	struct b43_sta *bsta;
+	unsigned int i, queued = 0;
+	int err;
+
+	ring = select_ring_by_priority(dev, skb_get_queue_mapping(skbs[0]));
+	if (unlikely(ring->stopped) ||
+	    free_slots(ring) < n * TX_SLOTS_PER_FRAME)
+		return -ENOSPC;
+
+	ring->queue_prio = skb_get_queue_mapping(skbs[0]);
+
+	rcu_read_lock();
+	bsta = b43_dma_ampdu_sta(dev, skbs[0]);
+	if (bsta) {
+		u8 tid = ieee80211_get_tid((struct ieee80211_hdr *)skbs[0]->data);
+
+		for (i = 0; i < n; i++) {
+			u16 seq = b43_dma_ampdu_seq(skbs[i]);
+
+			if (ieee80211_sn_less(bsta->ampdu_seq[tid], seq))
+				bsta->ampdu_seq[tid] = seq;
+		}
+	}
+	rcu_read_unlock();
+
+	ampdu->active = true;
+	ampdu->len = ampdu_len;
+	for (i = 0; i < n; i++) {
+		ampdu->first = queued == 0;
+		ampdu->last = i == n - 1;
+
+		err = dma_tx_fragment(ring, skbs[i], ampdu->last);
+		if (likely(!err)) {
+			queued++;
+			continue;
+		}
+
+		if (!queued) {
+			ampdu->active = false;
+			return err;
+		}
+		/* Drop this frame and end the A-MPDU with the one before */
+		ieee80211_free_txskb(dev->wl->hw, skbs[i]);
+		if (ampdu->last)
+			b43_dma_end_ampdu(ring);
+	}
+	ampdu->active = false;
+
+	if (free_slots(ring) < TX_SLOTS_PER_FRAME) {
+		unsigned int skb_mapping = skb_get_queue_mapping(skbs[0]);
+
+		b43_stop_queue(dev, skb_mapping);
+		dev->wl->tx_queue_stopped[skb_mapping] = true;
+		ring->stopped = true;
+	}
+
+	return 0;
+}
+
+/*
+ * One TX status covers all MPDUs of an A-MPDU. Complete each of them with
+ * its bit from the block ack, up to the one marked last.
+ */
+static void b43_dma_handle_ampdu_txstatus(struct b43_wldev *dev,
+					  struct b43_dmaring *ring, int slot,
+					  const struct b43_txstatus *status)
+{
+	const struct b43_dma_ops *ops = ring->ops;
+	size_t hdrsize = b43_txhdr_size(dev);
+	struct b43_dmadesc_meta *meta;
+	struct sk_buff_head retry, *queue;
+	struct b43_txhdr *txhdr;
+	unsigned long flags;
+	bool last;
+
+	__skb_queue_head_init(&retry);
+	rcu_read_lock();
+	do {
+		/* Header slot */
+		ops->idx2desc(ring, slot, &meta);
+		if (unlikely(meta->skb)) {
+			b43dbg(dev->wl, "A-MPDU TX status: no header at slot %d on ring %d\n",
+			       slot, ring->index);
+			break;
+		}
+		txhdr = (struct b43_txhdr *)
+			&ring->txhdr_cache[(slot / TX_SLOTS_PER_FRAME) * hdrsize];
+		last = (le32_to_cpu(txhdr->mac_ctl) & B43_TXH_MAC_AMPDU) ==
+		       B43_TXH_MAC_AMPDU_LAST;
+		unmap_descbuffer(ring, meta->dmaaddr, hdrsize, 1);
+		ring->used_slots--;
+
+		/* Payload slot */
+		slot = next_slot(ring, slot);
+		ops->idx2desc(ring, slot, &meta);
+		if (unlikely(!meta->skb || b43_dma_ptr_is_poisoned(meta->skb))) {
+			b43dbg(dev->wl, "A-MPDU TX status: no frame at slot %d on ring %d\n",
+			       slot, ring->index);
+			break;
+		}
+		b43_dma_complete_ampdu_frame(dev, ring, meta, status, &retry);
+		ring->used_slots--;
+
+		slot = next_slot(ring, slot);
+	} while (!last && ring->used_slots);
+	rcu_read_unlock();
+
+	if (skb_queue_empty(&retry))
+		return;
+
+	/* Resend the MPDUs ahead of the frames queued since */
+	queue = &dev->wl->tx_queue[skb_get_queue_mapping(retry.next)];
+	spin_lock_irqsave(&queue->lock, flags);
+	skb_queue_splice(&retry, queue);
+	spin_unlock_irqrestore(&queue->lock, flags);
 }
 
 void b43_dma_handle_txstatus(struct b43_wldev *dev,
@@ -1463,6 +1726,17 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 			if (dev->fw.opensource)
 				b43_controller_restart(dev, "Out of order TX");
 			return;
+		}
+	}
+
+	if (!skip && b43_ampdu_tx_enabled(dev)) {
+		size_t hdrsize = b43_txhdr_size(dev);
+		const struct b43_txhdr *txhdr = (const struct b43_txhdr *)
+			&ring->txhdr_cache[(slot / TX_SLOTS_PER_FRAME) * hdrsize];
+
+		if (le32_to_cpu(txhdr->mac_ctl) & B43_TXH_MAC_AMPDU) {
+			b43_dma_handle_ampdu_txstatus(dev, ring, slot, status);
+			goto out_wake;
 		}
 	}
 
@@ -1557,6 +1831,7 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 		if (skip > 0)
 			--skip;
 	}
+out_wake:
 	if (ring->stopped) {
 		B43_WARN_ON(free_slots(ring) < TX_SLOTS_PER_FRAME);
 		ring->stopped = false;

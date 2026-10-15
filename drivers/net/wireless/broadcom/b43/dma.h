@@ -291,6 +291,8 @@ void b43_dma_free(struct b43_wldev *dev);
 void b43_dma_tx_suspend(struct b43_wldev *dev);
 void b43_dma_tx_resume(struct b43_wldev *dev);
 
+int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
+		     unsigned int n, u16 ampdu_len);
 int b43_dma_tx(struct b43_wldev *dev,
 	       struct sk_buff *skb);
 void b43_dma_handle_txstatus(struct b43_wldev *dev,
