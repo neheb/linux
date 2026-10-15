@@ -52,12 +52,34 @@ allOf:
         reg-names:
           minItems: 3
 
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - brcm,bcm4716-amac
+    then:
+      properties:
+        reg:
+          minItems: 2
+          maxItems: 2
+        reg-names:
+          minItems: 2
+          maxItems: 2
+      required:
+        - clocks
+    else:
+      properties:
+        clocks: false
+        mdio: false
+
 properties:
   compatible:
     enum:
       - brcm,amac
       - brcm,nsp-amac
       - brcm,ns2-amac
+      - brcm,bcm4716-amac
 
   interrupts:
     maxItems: 1
@@ -73,7 +95,16 @@ properties:
       - const: idm_base
       - const: nicpm_base
 
+  clocks:
+    description: Backplane clock, used to scale the RX queue timing
+    maxItems: 1
+
   dma-coherent: true
+
+  mdio:
+    $ref: /schemas/net/mdio.yaml#
+    unevaluatedProperties: false
+    description: MDIO bus driven by the MDIO controller of the MAC
 
 unevaluatedProperties: false
 
