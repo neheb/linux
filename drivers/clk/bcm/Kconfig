@@ -46,6 +46,17 @@ config CLK_BCM63268_TIMER
 	  Enable timer clock and reset support for Broadcom BCM63268 DSL SoCs
 	  based on the MIPS architecture.
 
+config CLK_BCM_4716_PMU_PLL
+	tristate "Broadcom BCM4716 PMU main PLL support"
+	depends on BCM47XX || COMPILE_TEST
+	select MFD_SYSCON
+	default BCM47XX
+	help
+	  Enable the main PLL clocks of the ChipCommon PMU on Broadcom
+	  BCM4716, BCM4717 and BCM4718 SoCs. The PLL clocks the CPU, the
+	  memory controller and the backplane. The boot loader sets it up,
+	  so the driver only reports the rates.
+
 config CLK_BCM_KONA
 	bool "Broadcom Kona CCU clock support"
 	depends on ARCH_BCM_MOBILE || COMPILE_TEST
