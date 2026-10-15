@@ -741,11 +741,25 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 		break;
 	}
 
-	if (phystat0 & B43_RX_PHYST0_OFDM)
+	switch (phystat0 & B43_RX_PHYST0_FTYPE) {
+	case B43_RX_PHYST0_PRE_N:
+	case B43_RX_PHYST0_STD_N:
+		/* The HT-SIG holds the MCS, bandwidth and guard interval */
+		status.encoding = RX_ENC_HT;
+		rate_idx = plcp->raw[0] & 0x7f;
+		if (plcp->raw[0] & 0x80)
+			status.bw = RATE_INFO_BW_40;
+		if (plcp->raw[3] & 0x80)
+			status.enc_flags |= RX_ENC_FLAG_SHORT_GI;
+		break;
+	case B43_RX_PHYST0_OFDM:
 		rate_idx = b43_plcp_get_bitrate_idx_ofdm(plcp,
 					!!(chanstat & B43_RX_CHAN_5GHZ));
-	else
+		break;
+	default:
 		rate_idx = b43_plcp_get_bitrate_idx_cck(plcp);
+		break;
+	}
 	if (unlikely(rate_idx == -1)) {
 		/* PLCP seems to be corrupted.
 		 * Drop the frame, if we are not interested in corrupted frames. */
