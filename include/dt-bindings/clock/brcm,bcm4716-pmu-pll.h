@@ -1,0 +1,10 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+
+#ifndef _DT_BINDINGS_CLOCK_BRCM_BCM4716_PMU_PLL_H
+#define _DT_BINDINGS_CLOCK_BRCM_BCM4716_PMU_PLL_H
+
+#define BCM4716_PMU_PLL_CPU		0
+#define BCM4716_PMU_PLL_MEM		1
+#define BCM4716_PMU_PLL_BACKPLANE	2
+
+#endif
