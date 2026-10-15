@@ -129,6 +129,8 @@
 #define B43_MMIO_XMTFIFO_WR_PTR		0x52A	/* core rev>= 16 only */
 #define B43_MMIO_XMTFIFODEF1		0x52C	/* core rev>= 16 only */
 #define B43_MMIO_XMTFIFOCMD		0x540
+#define  B43_TXFIFOCMD_FIFOSEL_SHIFT	8
+#define  B43_TXFIFOCMD_RESET		0x8000
 #define B43_MMIO_XMTFIFOFLUSH		0x542
 #define B43_MMIO_XMTFIFOTHRESH		0x544
 #define B43_MMIO_XMTFIFORDY		0x546
@@ -165,6 +167,9 @@
 #define B43_MMIO_BTCOEX_STAT		0x6B6 /* Bluetooth Coexistence Status */
 #define B43_MMIO_BTCOEX_TXCTL		0x6B8 /* Bluetooth Coexistence Transmit Control */
 #define B43_MMIO_WEPCTL			0x7C0
+
+/* The TX FIFOs start after the templates, in blocks of 256 bytes */
+#define B43_TXFIFO_START_BLK		6
 
 /* SPROM boardflags_lo values */
 #define B43_BFL_BTCOEXIST		0x0001	/* implements Bluetooth coexistance */
