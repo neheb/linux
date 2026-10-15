@@ -869,16 +869,44 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 		break;
 	}
 
+	/*
+	 * Only the last MPDU of an A-MPDU has valid PHY status. The MPDUs
+	 * before it get the signal strength of the last PPDU that had it.
+	 */
+	if (dev->fw.hdr_format == B43_FW_HDR_598) {
+		if (macstat & B43_RX_MAC_RXST_VALID) {
+			dev->rx_ppdu.signal = status.signal;
+			dev->rx_ppdu.signal_valid = true;
+		} else if (dev->rx_ppdu.signal_valid) {
+			status.signal = dev->rx_ppdu.signal;
+		}
+	}
+
 	switch (phystat0 & B43_RX_PHYST0_FTYPE) {
 	case B43_RX_PHYST0_PRE_N:
 	case B43_RX_PHYST0_STD_N:
-		/* The HT-SIG holds the MCS, bandwidth and guard interval */
+		/*
+		 * The HT-SIG holds the MCS, bandwidth and guard interval.
+		 * Only the first MPDU of an A-MPDU comes with it, the
+		 * others have zeros there and get the rate of the first.
+		 */
 		status.encoding = RX_ENC_HT;
+		if (!(plcp->raw[0] | plcp->raw[1] | plcp->raw[2]) &&
+		    dev->rx_ppdu.ht_valid) {
+			rate_idx = dev->rx_ppdu.rate_idx;
+			status.bw = dev->rx_ppdu.bw;
+			status.enc_flags = dev->rx_ppdu.enc_flags;
+			break;
+		}
 		rate_idx = plcp->raw[0] & 0x7f;
 		if (plcp->raw[0] & 0x80)
 			status.bw = RATE_INFO_BW_40;
 		if (plcp->raw[3] & 0x80)
 			status.enc_flags |= RX_ENC_FLAG_SHORT_GI;
+		dev->rx_ppdu.ht_valid = true;
+		dev->rx_ppdu.rate_idx = rate_idx;
+		dev->rx_ppdu.bw = status.bw;
+		dev->rx_ppdu.enc_flags = status.enc_flags;
 		break;
 	case B43_RX_PHYST0_OFDM:
 		rate_idx = b43_plcp_get_bitrate_idx_ofdm(plcp,

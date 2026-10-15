@@ -826,6 +826,20 @@ enum {
 		smp_wmb();					\
 					} while (0)
 
+/*
+ * What the PHY reported for the PPDU being received. The firmware only
+ * passes the HT-SIG with the first MPDU of an A-MPDU, and valid PHY
+ * status, such as the signal strength, with the last one.
+ */
+struct b43_rx_ppdu {
+	bool ht_valid;
+	u8 rate_idx;
+	u8 enc_flags;
+	u8 bw;
+	bool signal_valid;
+	s8 signal;
+};
+
 /* Data structure for one wireless device (802.11 core) */
 struct b43_wldev {
 	struct b43_bus_dev *dev;
@@ -841,6 +855,7 @@ struct b43_wldev {
 	bool dfq_valid;		/* Directed frame queue valid (IBSS PS mode, ATIM) */
 	bool radio_hw_enable;	/* saved state of radio hardware enabled state */
 	bool qos_enabled;		/* TRUE, if QoS is used. */
+	struct b43_rx_ppdu rx_ppdu;
 	bool hwcrypto_enabled;		/* TRUE, if HW crypto acceleration is enabled. */
 	bool use_pio;			/* TRUE if next init should use PIO */
 
