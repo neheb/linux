@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/reset/brcm,bcm4716-wrapper-reset.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM4716 core wrapper reset controller
+
+maintainers:
+  - Rosen Penev <rosenp@gmail.com>
+
+description: >
+  Each core on the AXI backplane of BCM4716, BCM4717 and BCM4718 SoCs has
+  an agent wrapper, in the 0x18100000 region, that gates the clock of the
+  core and holds it in reset. Each wrapper is one reset line, released
+  together with the core clock.
+
+properties:
+  compatible:
+    const: brcm,bcm4716-wrapper-reset
+
+  reg:
+    maxItems: 1
+
+  '#reset-cells':
+    const: 0
+
+required:
+  - compatible
+  - reg
+  - '#reset-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    reset-controller@18104000 {
+        compatible = "brcm,bcm4716-wrapper-reset";
+        reg = <0x18104000 0x1000>;
+        #reset-cells = <0>;
+    };
