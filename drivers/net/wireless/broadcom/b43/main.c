@@ -360,6 +360,46 @@ static struct ieee80211_supported_band b43_band_2ghz_limited = {
 	.n_bitrates	= b43_g_ratetable_size,
 };
 
+/* HT20 with one spatial stream and no A-MPDU */
+#define B43_HT_CAP {							\
+	.ht_supported	= true,						\
+	.cap		= IEEE80211_HT_CAP_SM_PS,			\
+	.ampdu_factor	= IEEE80211_HT_MAX_AMPDU_8K,			\
+	.ampdu_density	= IEEE80211_HT_MPDU_DENSITY_NONE,		\
+	.mcs = {							\
+		.rx_mask	= { 0xff },				\
+		.tx_params	= IEEE80211_HT_MCS_TX_DEFINED,		\
+	},								\
+}
+
+static struct ieee80211_supported_band b43_band_2ghz_ht = {
+	.band		= NL80211_BAND_2GHZ,
+	.channels	= b43_2ghz_chantable,
+	.n_channels	= ARRAY_SIZE(b43_2ghz_chantable),
+	.bitrates	= b43_g_ratetable,
+	.n_bitrates	= b43_g_ratetable_size,
+	.ht_cap		= B43_HT_CAP,
+};
+
+static struct ieee80211_supported_band b43_band_2ghz_limited_ht = {
+	.band		= NL80211_BAND_2GHZ,
+	.channels	= b43_2ghz_chantable,
+	.n_channels	= b43_2ghz_chantable_limited_size,
+	.bitrates	= b43_g_ratetable,
+	.n_bitrates	= b43_g_ratetable_size,
+	.ht_cap		= B43_HT_CAP,
+};
+
+/*
+ * Whether b43 enables HT on the PHY of @dev. HT needs the 598 firmware TX
+ * header. The firmware is not loaded when the bands are set up: with an
+ * older one, b43_generate_txhdr() sends legacy rates.
+ */
+static bool b43_ht_supported(struct b43_wldev *dev)
+{
+	return dev->phy.type == B43_PHYTYPE_N;
+}
+
 static void b43_wireless_core_exit(struct b43_wldev *dev);
 static int b43_wireless_core_init(struct b43_wldev *dev);
 static struct b43_wldev * b43_wireless_core_stop(struct b43_wldev *dev);
@@ -2703,6 +2743,9 @@ static int b43_upload_microcode(struct b43_wldev *dev)
 	else
 		dev->fw.hdr_format = B43_FW_HDR_351;
 	WARN_ON(dev->fw.opensource != (fwdate == 0xFFFF));
+
+	if (b43_ht_supported(dev) && dev->fw.hdr_format != B43_FW_HDR_598)
+		b43warn(dev->wl, "HT needs firmware 598 or newer, sending legacy rates only\n");
 
 	dev->qos_enabled = dev->wl->hw->queues > 1;
 	/* Default to firmware/hardware crypto acceleration. */
@@ -5314,6 +5357,7 @@ static int b43_setup_bands(struct b43_wldev *dev,
 	struct b43_phy *phy = &dev->phy;
 	bool limited_2g;
 	bool limited_5g;
+	bool ht;
 
 	/* We don't support all 2 GHz channels on some devices */
 	limited_2g = phy->radio_ver == 0x2057 &&
@@ -5321,7 +5365,12 @@ static int b43_setup_bands(struct b43_wldev *dev,
 	limited_5g = phy->radio_ver == 0x2057 &&
 		     phy->radio_rev == 9;
 
-	if (have_2ghz_phy)
+	ht = b43_ht_supported(dev);
+
+	if (have_2ghz_phy && ht)
+		hw->wiphy->bands[NL80211_BAND_2GHZ] = limited_2g ?
+			&b43_band_2ghz_limited_ht : &b43_band_2ghz_ht;
+	else if (have_2ghz_phy)
 		hw->wiphy->bands[NL80211_BAND_2GHZ] = limited_2g ?
 			&b43_band_2ghz_limited : &b43_band_2GHz;
 	if (dev->phy.type == B43_PHYTYPE_N) {
