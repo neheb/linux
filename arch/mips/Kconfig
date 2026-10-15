@@ -292,6 +292,7 @@ config BCM47XX
 	bool "Broadcom BCM47XX based boards"
 	select BOOT_RAW
 	select CEVT_R4K
+	select COMMON_CLK
 	select CSRC_R4K
 	select DMA_NONCOHERENT
 	select HAVE_PCI
