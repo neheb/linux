@@ -293,6 +293,17 @@ void b43_dma_free(struct b43_wldev *dev);
 void b43_dma_tx_suspend(struct b43_wldev *dev);
 void b43_dma_tx_resume(struct b43_wldev *dev);
 
+enum b43_ampdu_window {
+	B43_AMPDU_IN_WINDOW,
+	B43_AMPDU_AHEAD,	/* Not yet: the window is full */
+	B43_AMPDU_STALE,	/* Behind the window: never send it */
+};
+
+enum b43_ampdu_window b43_dma_ampdu_window(struct b43_wldev *dev,
+					   struct sk_buff *skb, bool first);
+bool b43_dma_ampdu_bar_valid(struct ieee80211_sta *sta, struct sk_buff *skb);
+int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
+		     unsigned int n, u16 ampdu_len);
 int b43_dma_tx(struct b43_wldev *dev,
 	       struct sk_buff *skb);
 void b43_dma_handle_txstatus(struct b43_wldev *dev,

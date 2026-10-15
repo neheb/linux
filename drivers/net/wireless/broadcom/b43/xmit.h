@@ -221,6 +221,10 @@ struct b43_txstatus {
 	u8 intermediate;	/* Intermediate status notification (not final) */
 	u8 for_ampdu;		/* Status is for an AMPDU (afterburner) */
 	u8 acked;		/* Wireless ACK received */
+	/* A-MPDU block ack, from the two status packages */
+	bool ba_valid;		/* A block ack was received */
+	u16 ba_ssn;		/* Starting sequence number of the block ack */
+	u64 ba_bitmap;		/* Block ack bitmap, bit 0 is ba_ssn */
 };
 
 /* txstatus supp_reason values */
@@ -356,6 +360,9 @@ void b43_generate_plcp_hdr(struct b43_plcp_hdr4 *plcp,
 
 void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr);
 
+unsigned int b43_ht_max_ampdu_len(u8 mcs);
+unsigned int b43_tx_mpdu_len(struct sk_buff *skb);
+void b43_ampdu_txhdr_set_len(struct b43_txhdr *txhdr, u16 len);
 void b43_handle_txstatus(struct b43_wldev *dev,
 			 const struct b43_txstatus *status);
 bool b43_fill_txstatus_report(struct b43_wldev *dev,
