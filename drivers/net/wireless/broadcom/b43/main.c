@@ -360,10 +360,11 @@ static struct ieee80211_supported_band b43_band_2ghz_limited = {
 	.n_bitrates	= b43_g_ratetable_size,
 };
 
-/* HT20 with one spatial stream, receiving A-MPDUs only */
+/* HT20 with one spatial stream */
 #define B43_HT_CAP {							\
 	.ht_supported	= true,						\
-	.cap		= IEEE80211_HT_CAP_SM_PS,			\
+	.cap		= IEEE80211_HT_CAP_SM_PS |			\
+			  IEEE80211_HT_CAP_SGI_20,			\
 	.ampdu_factor	= IEEE80211_HT_MAX_AMPDU_8K,			\
 	.ampdu_density	= IEEE80211_HT_MPDU_DENSITY_8,			\
 	.mcs = {							\
@@ -393,11 +394,12 @@ static struct ieee80211_supported_band b43_band_2ghz_limited_ht = {
 /*
  * Whether b43 enables HT on the PHY of @dev. HT needs the 598 firmware TX
  * header. The firmware is not loaded when the bands are set up: with an
- * older one, b43_generate_txhdr() sends legacy rates.
+ * older one, b43_generate_txhdr() sends legacy rates. The short guard
+ * interval needs N-PHY rev 3 or later.
  */
 static bool b43_ht_supported(struct b43_wldev *dev)
 {
-	return dev->phy.type == B43_PHYTYPE_N;
+	return dev->phy.type == B43_PHYTYPE_N && dev->phy.rev >= 3;
 }
 
 static void b43_wireless_core_exit(struct b43_wldev *dev);
