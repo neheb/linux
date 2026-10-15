@@ -874,7 +874,9 @@ struct b43_dmaring *b43_setup_dmaring(struct b43_wldev *dev,
 		if (ring->index == 0) {
 			switch (dev->fw.hdr_format) {
 			case B43_FW_HDR_598:
-				ring->rx_buffersize = B43_DMA0_RX_FW598_BUFSIZE;
+				ring->rx_buffersize = b43_ht_supported(dev) ?
+						      B43_DMA0_RX_FW598_HT_BUFSIZE :
+						      B43_DMA0_RX_FW598_BUFSIZE;
 				ring->frameoffset = B43_DMA0_RX_FW598_FO;
 				break;
 			case B43_FW_HDR_410:

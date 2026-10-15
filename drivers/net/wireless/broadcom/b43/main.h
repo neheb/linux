@@ -92,6 +92,8 @@ void b43_mac_switch_freq(struct b43_wldev *dev, u8 spurmode);
 
 
 struct b43_request_fw_context;
+bool b43_ht_supported(struct b43_wldev *dev);
+
 int b43_do_request_fw(struct b43_request_fw_context *ctx, const char *name,
 		      struct b43_firmware_file *fw, bool async);
 void b43_do_release_fw(struct b43_firmware_file *fw);

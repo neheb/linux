@@ -173,6 +173,11 @@ struct b43_dmadesc_generic {
 #define B43_RXRING_SLOTS		256
 #define B43_DMA0_RX_FW598_BUFSIZE	(B43_DMA0_RX_FW598_FO + IEEE80211_MAX_FRAME_LEN)
 #define B43_DMA0_RX_FW351_BUFSIZE	(B43_DMA0_RX_FW351_FO + IEEE80211_MAX_FRAME_LEN)
+/*
+ * With HT, a station may send A-MSDUs of up to 3839 bytes, which with
+ * their headers stay within the MPDU length of an HT block ack session.
+ */
+#define B43_DMA0_RX_FW598_HT_BUFSIZE	(B43_DMA0_RX_FW598_FO + IEEE80211_MAX_MPDU_LEN_HT_BA)
 
 /* Pointer poison */
 #define B43_DMA_PTR_POISON		((void *)ERR_PTR(-ENOMEM))
