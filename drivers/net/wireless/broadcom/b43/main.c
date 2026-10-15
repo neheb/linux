@@ -364,12 +364,12 @@ static struct ieee80211_supported_band b43_band_2ghz_limited = {
 	.n_bitrates	= b43_g_ratetable_size,
 };
 
-/* HT20 with one spatial stream and no A-MPDU */
+/* HT20 with one spatial stream, receiving A-MPDUs only */
 #define B43_HT_CAP {							\
 	.ht_supported	= true,						\
 	.cap		= IEEE80211_HT_CAP_SM_PS,			\
 	.ampdu_factor	= IEEE80211_HT_MAX_AMPDU_8K,			\
-	.ampdu_density	= IEEE80211_HT_MPDU_DENSITY_NONE,		\
+	.ampdu_density	= IEEE80211_HT_MPDU_DENSITY_8,			\
 	.mcs = {							\
 		.rx_mask	= { 0xff },				\
 		.tx_params	= IEEE80211_HT_MCS_TX_DEFINED,		\
@@ -5212,6 +5212,23 @@ static void b43_op_sw_scan_complete_notifier(struct ieee80211_hw *hw,
 	mutex_unlock(&wl->mutex);
 }
 
+static int b43_op_ampdu_action(struct ieee80211_hw *hw,
+			       struct ieee80211_vif *vif,
+			       struct ieee80211_ampdu_params *params)
+{
+	switch (params->action) {
+	case IEEE80211_AMPDU_RX_START:
+	case IEEE80211_AMPDU_RX_STOP:
+		/*
+		 * The firmware sends the block acks, and mac80211 reorders
+		 * the frames, so there is nothing to set up.
+		 */
+		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
 static int b43_op_get_survey(struct ieee80211_hw *hw, int idx,
 			     struct survey_info *survey)
 {
@@ -5251,6 +5268,7 @@ static const struct ieee80211_ops b43_hw_ops = {
 	.stop			= b43_op_stop,
 	.set_tim		= b43_op_beacon_set_tim,
 	.sta_notify		= b43_op_sta_notify,
+	.ampdu_action		= b43_op_ampdu_action,
 	.sw_scan_start		= b43_op_sw_scan_start_notifier,
 	.sw_scan_complete	= b43_op_sw_scan_complete_notifier,
 	.get_survey		= b43_op_get_survey,
@@ -5644,6 +5662,8 @@ static struct b43_wl *b43_wireless_init(struct b43_bus_dev *dev)
 	ieee80211_hw_set(hw, RX_INCLUDES_FCS);
 	ieee80211_hw_set(hw, SIGNAL_DBM);
 	ieee80211_hw_set(hw, MFP_CAPABLE);
+	if (modparam_ht)
+		ieee80211_hw_set(hw, AMPDU_AGGREGATION);
 	hw->wiphy->interface_modes =
 		BIT(NL80211_IFTYPE_AP) |
 		BIT(NL80211_IFTYPE_MESH_POINT) |
