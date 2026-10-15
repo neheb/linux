@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/brcm,bcm4716-chipcommon.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM4716 ChipCommon
+
+maintainers:
+  - Rosen Penev <rosenp@gmail.com>
+
+description: >
+  ChipCommon is the first core on the AXI backplane of BCM4716, BCM4717 and
+  BCM4718 SoCs. Among others it holds the GPIO controller, the UART, the
+  watchdog, the flash controller and the PMU. The bcma bus driver handles
+  the GPIO controller. The UART and the PMU clocks are described as child
+  nodes.
+
+properties:
+  compatible:
+    items:
+      - const: brcm,bcm4716-chipcommon
+      - const: syscon
+      - const: simple-mfd
+
+  reg:
+    maxItems: 1
+
+  ranges: true
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+  gpio-controller: true
+
+  '#gpio-cells':
+    const: 2
+
+  interrupt-controller: true
+
+  '#interrupt-cells':
+    const: 2
+
+  clock-controller:
+    $ref: /schemas/clock/brcm,bcm4716-pmu-pll.yaml#
+
+patternProperties:
+  '^serial@[0-9a-f]+$':
+    type: object
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    chipcommon@18000000 {
+        compatible = "brcm,bcm4716-chipcommon", "syscon", "simple-mfd";
+        reg = <0x18000000 0x1000>;
+        ranges = <0 0x18000000 0x1000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        gpio-controller;
+        #gpio-cells = <2>;
+
+        clock-controller {
+            compatible = "brcm,bcm4716-pmu-pll";
+            clocks = <&xtal>;
+            #clock-cells = <1>;
+        };
+
+        serial@300 {
+            compatible = "ns16550a";
+            reg = <0x300 0x100>;
+            clock-frequency = <20000000>;
+        };
+    };
