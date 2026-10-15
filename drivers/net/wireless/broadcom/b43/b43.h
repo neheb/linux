@@ -396,6 +396,9 @@ enum {
 #define B43_FWCAPA_QOS		0x0002
 
 /* MacFilter offsets. */
+/* Block ack template in template RAM */
+#define B43_TPL_BA			0x0038
+
 #define B43_MACFILTER_SELF		0x0000
 #define B43_MACFILTER_BSSID		0x0003
 
