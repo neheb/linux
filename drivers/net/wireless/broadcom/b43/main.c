@@ -113,6 +113,10 @@ static int modparam_allhwsupport = !IS_ENABLED(CONFIG_BRCMSMAC);
 module_param_named(allhwsupport, modparam_allhwsupport, int, 0444);
 MODULE_PARM_DESC(allhwsupport, "Enable support for all hardware (even it if overlaps with the brcmsmac driver)");
 
+static bool modparam_ht;
+module_param_named(ht, modparam_ht, bool, 0444);
+MODULE_PARM_DESC(ht, "Enable 802.11n (HT20, MCS 0-7) in the 2.4 GHz band on N-PHY devices (experimental)");
+
 #ifdef CONFIG_B43_BCMA
 static const struct bcma_device_id b43_bcma_tbl[] = {
 	BCMA_CORE(BCMA_MANUF_BCM, BCMA_CORE_80211, 0x11, BCMA_ANY_CLASS),
@@ -358,6 +362,36 @@ static struct ieee80211_supported_band b43_band_2ghz_limited = {
 	.n_channels	= b43_2ghz_chantable_limited_size,
 	.bitrates	= b43_g_ratetable,
 	.n_bitrates	= b43_g_ratetable_size,
+};
+
+/* HT20 with one spatial stream and no A-MPDU */
+#define B43_HT_CAP {							\
+	.ht_supported	= true,						\
+	.cap		= IEEE80211_HT_CAP_SM_PS,			\
+	.ampdu_factor	= IEEE80211_HT_MAX_AMPDU_8K,			\
+	.ampdu_density	= IEEE80211_HT_MPDU_DENSITY_NONE,		\
+	.mcs = {							\
+		.rx_mask	= { 0xff },				\
+		.tx_params	= IEEE80211_HT_MCS_TX_DEFINED,		\
+	},								\
+}
+
+static struct ieee80211_supported_band b43_band_2ghz_ht = {
+	.band		= NL80211_BAND_2GHZ,
+	.channels	= b43_2ghz_chantable,
+	.n_channels	= ARRAY_SIZE(b43_2ghz_chantable),
+	.bitrates	= b43_g_ratetable,
+	.n_bitrates	= b43_g_ratetable_size,
+	.ht_cap		= B43_HT_CAP,
+};
+
+static struct ieee80211_supported_band b43_band_2ghz_limited_ht = {
+	.band		= NL80211_BAND_2GHZ,
+	.channels	= b43_2ghz_chantable,
+	.n_channels	= b43_2ghz_chantable_limited_size,
+	.bitrates	= b43_g_ratetable,
+	.n_bitrates	= b43_g_ratetable_size,
+	.ht_cap		= B43_HT_CAP,
 };
 
 static void b43_wireless_core_exit(struct b43_wldev *dev);
@@ -5276,6 +5310,7 @@ static int b43_setup_bands(struct b43_wldev *dev,
 	struct b43_phy *phy = &dev->phy;
 	bool limited_2g;
 	bool limited_5g;
+	bool ht;
 
 	/* We don't support all 2 GHz channels on some devices */
 	limited_2g = phy->radio_ver == 0x2057 &&
@@ -5283,7 +5318,13 @@ static int b43_setup_bands(struct b43_wldev *dev,
 	limited_5g = phy->radio_ver == 0x2057 &&
 		     phy->radio_rev == 9;
 
-	if (have_2ghz_phy)
+	/* HT needs the 598 firmware TX header, which N-PHY firmware has */
+	ht = modparam_ht && phy->type == B43_PHYTYPE_N;
+
+	if (have_2ghz_phy && ht)
+		hw->wiphy->bands[NL80211_BAND_2GHZ] = limited_2g ?
+			&b43_band_2ghz_limited_ht : &b43_band_2ghz_ht;
+	else if (have_2ghz_phy)
 		hw->wiphy->bands[NL80211_BAND_2GHZ] = limited_2g ?
 			&b43_band_2ghz_limited : &b43_band_2GHz;
 	if (dev->phy.type == B43_PHYTYPE_N) {
