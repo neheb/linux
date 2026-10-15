@@ -365,7 +365,7 @@ static struct ieee80211_supported_band b43_band_2ghz_limited = {
 	.ht_supported	= true,						\
 	.cap		= IEEE80211_HT_CAP_SM_PS |			\
 			  IEEE80211_HT_CAP_SGI_20,			\
-	.ampdu_factor	= IEEE80211_HT_MAX_AMPDU_8K,			\
+	.ampdu_factor	= IEEE80211_HT_MAX_AMPDU_32K,			\
 	.ampdu_density	= IEEE80211_HT_MPDU_DENSITY_8,			\
 	.mcs = {							\
 		.rx_mask	= { 0xff },				\
