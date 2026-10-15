@@ -250,6 +250,77 @@ static u16 b43_ht_lsig_len(u8 mcs, bool sgi, unsigned int octets)
 	return 3 * nsyms - 3;
 }
 
+/* Longest A-MPDU at an MCS that stays within 4 ms of airtime */
+unsigned int b43_ht_max_ampdu_len(u8 mcs)
+{
+	if (mcs >= ARRAY_SIZE(b43_ht_rate_kbps))
+		return 0;
+
+	/* kbit/s * 4 ms / 8 bits */
+	return b43_ht_rate_kbps[mcs] / 2;
+}
+
+/* Length of an MPDU on the air */
+unsigned int b43_tx_mpdu_len(struct sk_buff *skb)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	unsigned int len = skb->len + FCS_LEN;
+
+	if (info->control.hw_key)
+		len += info->control.hw_key->icv_len;
+
+	return len;
+}
+
+/*
+ * Set the length of the whole A-MPDU in the TX header of its first MPDU:
+ * in the HT-SIG, and in the L-SIG of the main and the fallback rate. The
+ * fallback PLCP header keeps the length of the MPDU itself, as the
+ * hardware takes the MPDU length for the delimiters from it. MPDUs of an
+ * A-MPDU always have an HT fallback rate.
+ */
+void b43_ampdu_txhdr_set_len(struct b43_txhdr *txhdr, u16 len)
+{
+	struct b43_plcp_hdr6 *plcp = &txhdr->format_598.plcp;
+	const struct b43_plcp_hdr6 *plcp_fb = &txhdr->plcp_fb;
+
+	plcp->raw[1] = len & 0xff;
+	plcp->raw[2] = (len >> 8) & 0xff;
+	txhdr->mimo_modelen =
+		cpu_to_le16(b43_ht_lsig_len(plcp->raw[0], plcp->raw[3] & 0x80,
+					    len));
+	txhdr->mimo_ratelen_fb =
+		cpu_to_le16(b43_ht_lsig_len(plcp_fb->raw[0],
+					    plcp_fb->raw[3] & 0x80, len));
+}
+
+/* Mark a frame's position in the A-MPDU being queued */
+static void b43_generate_ampdu_txhdr(struct b43_wldev *dev,
+				     struct b43_txhdr *txhdr, u32 *mac_ctl)
+{
+	const struct b43_ampdu_tx_ctx *ampdu = &dev->ampdu_tx;
+	struct b43_plcp_hdr6 *plcp = &txhdr->format_598.plcp;
+
+	*mac_ctl &= ~B43_TXH_MAC_AMPDU;
+	if (ampdu->last)
+		*mac_ctl |= B43_TXH_MAC_AMPDU_LAST;
+	else if (ampdu->first)
+		*mac_ctl |= B43_TXH_MAC_AMPDU_FIRST;
+	else
+		*mac_ctl |= B43_TXH_MAC_AMPDU_INTER;
+
+	if (!ampdu->first) {
+		/* Only the first MPDU starts the PPDU */
+		*mac_ctl &= ~(B43_TXH_MAC_STMSDU | B43_TXH_MAC_SENDRTS |
+			      B43_TXH_MAC_SENDCTS);
+		return;
+	}
+
+	/* The first MPDU starts the A-MPDU and announces its length */
+	plcp->raw[3] |= 0x08;
+	b43_ampdu_txhdr_set_len(txhdr, ampdu->len);
+}
+
 static u8 b43_calc_fallback_rate(u8 bitrate, int gmode)
 {
 	switch (bitrate) {
@@ -327,6 +398,10 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 	/* HT rates are MCS indices, not indices into the bitrate table */
 	ht = rates[0].flags & IEEE80211_TX_RC_MCS;
 	rate_fb_ctl = rates[1].idx >= 0 ? &rates[1] : &rates[0];
+	/* MPDUs of an A-MPDU need an HT fallback rate as well */
+	if (ht && dev->ampdu_tx.active &&
+	    !(rate_fb_ctl->flags & IEEE80211_TX_RC_MCS))
+		rate_fb_ctl = &rates[0];
 	ht_fb = rate_fb_ctl->flags & IEEE80211_TX_RC_MCS;
 	sgi = rates[0].flags & IEEE80211_TX_RC_SHORT_GI;
 	sgi_fb = rate_fb_ctl->flags & IEEE80211_TX_RC_SHORT_GI;
@@ -687,6 +762,9 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 		}
 	}
 
+	if (ht && dev->ampdu_tx.active)
+		b43_generate_ampdu_txhdr(dev, txhdr, &mac_ctl);
+
 	/* Apply the bitfields */
 	txhdr->mac_ctl = cpu_to_le32(mac_ctl);
 	txhdr->phy_ctl = cpu_to_le16(phy_ctl);
@@ -992,7 +1070,12 @@ void b43_handle_txstatus(struct b43_wldev *dev,
 
 	if (status->intermediate)
 		return;
-	if (status->for_ampdu)
+	/*
+	 * The DMA code tells A-MPDU statuses from others by the TX header
+	 * of the first frame. Without A-MPDU support, nothing else uses
+	 * them.
+	 */
+	if (status->for_ampdu && !b43_ampdu_tx_enabled(dev))
 		return;
 	if (!status->acked)
 		dev->wl->ieee_stats.dot11ACKFailureCount++;
@@ -1060,6 +1143,19 @@ bool b43_fill_txstatus_report(struct b43_wldev *dev,
 			report->status.rates[0].count = status->frame_count;
 			report->status.rates[1].idx = -1;
 		}
+	}
+
+	/*
+	 * A frame of a block ack session sent on its own. Report it like
+	 * an A-MPDU of one for rate control, and have mac80211 move the
+	 * peer's window on with a block ack request if it was lost.
+	 */
+	if (report->flags & IEEE80211_TX_CTL_AMPDU) {
+		report->flags |= IEEE80211_TX_STAT_AMPDU;
+		report->status.ampdu_len = 1;
+		report->status.ampdu_ack_len = status->acked;
+		if (!status->acked)
+			report->flags |= IEEE80211_TX_STAT_AMPDU_NO_BACK;
 	}
 
 	return frame_success;

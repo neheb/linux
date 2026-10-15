@@ -1192,7 +1192,7 @@ struct b43_dmaring *parse_cookie(struct b43_wldev *dev, u16 cookie, int *slot)
 }
 
 static int dma_tx_fragment(struct b43_dmaring *ring,
-			   struct sk_buff *skb)
+			   struct sk_buff *skb, bool poke)
 {
 	const struct b43_dma_ops *ops = ring->ops;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
@@ -1279,9 +1279,12 @@ static int dma_tx_fragment(struct b43_dmaring *ring,
 		b43_shm_write16(ring->dev, B43_SHM_SHARED,
 				B43_SHM_SH_MCASTCOOKIE, cookie);
 	}
-	/* Now transfer the whole frame. */
-	wmb();
-	ops->poke_tx(ring, next_slot(ring, slot));
+	/* Now transfer the whole frame, or the A-MPDU it ends. */
+	if (poke) {
+		/* Descriptors and buffers must be visible before the poke */
+		wmb();
+		ops->poke_tx(ring, next_slot(ring, slot));
+	}
 	return 0;
 
 out_unmap_hdr:
@@ -1388,7 +1391,7 @@ int b43_dma_tx(struct b43_wldev *dev, struct sk_buff *skb)
 	 * static, so we don't need to store it per frame. */
 	ring->queue_prio = skb_get_queue_mapping(skb);
 
-	err = dma_tx_fragment(ring, skb);
+	err = dma_tx_fragment(ring, skb, true);
 	if (unlikely(err == -ENOKEY)) {
 		/* Drop this packet, as we don't have the encryption key
 		 * anymore and must not transmit it unencrypted. */
@@ -1416,17 +1419,579 @@ out:
 	return err;
 }
 
+/* The cached TX header of the frame whose header is at @slot */
+static struct b43_txhdr *b43_dma_txhdr(struct b43_dmaring *ring, int slot)
+{
+	size_t hdrsize = b43_txhdr_size(ring->dev);
+
+	return (struct b43_txhdr *)
+		&ring->txhdr_cache[(slot / TX_SLOTS_PER_FRAME) * hdrsize];
+}
+
+static void b43_dma_sync_txhdr(struct b43_dmaring *ring, int slot)
+{
+	struct b43_dmadesc_meta *meta;
+
+	ring->ops->idx2desc(ring, slot, &meta);
+	dma_sync_single_for_device(ring->dev->dev->dma_dev, meta->dmaaddr,
+				   b43_txhdr_size(ring->dev), DMA_TO_DEVICE);
+}
+
+/*
+ * Start the DMA engine on the A-MPDU queued last. If frames of it were
+ * dropped, the frame queued last may not be marked last, and the length
+ * in the header of the first frame, at @first_slot, must become @len.
+ */
+static void b43_dma_end_ampdu(struct b43_dmaring *ring, int first_slot,
+			      u16 len, bool fixup)
+{
+	struct b43_txhdr *txhdr;
+	int slot;
+
+	if (fixup) {
+		b43_ampdu_txhdr_set_len(b43_dma_txhdr(ring, first_slot), len);
+		b43_dma_sync_txhdr(ring, first_slot);
+
+		/* The header slot of the last frame */
+		slot = prev_slot(ring, ring->current_slot);
+		txhdr = b43_dma_txhdr(ring, slot);
+		txhdr->mac_ctl = cpu_to_le32((le32_to_cpu(txhdr->mac_ctl) &
+					      ~B43_TXH_MAC_AMPDU) |
+					     B43_TXH_MAC_AMPDU_LAST);
+		b43_dma_sync_txhdr(ring, slot);
+	}
+
+	/* Descriptors, buffers and headers must be visible before the poke */
+	wmb();
+	ring->ops->poke_tx(ring, next_slot(ring, ring->current_slot));
+}
+
+/* The b43 data of the receiver of @skb, NULL if it is gone */
+static struct b43_sta *b43_dma_ampdu_sta(struct b43_wldev *dev,
+					 struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	struct ieee80211_sta *sta;
+
+	sta = ieee80211_find_sta_by_ifaddr(dev->wl->hw, hdr->addr1, NULL);
+
+	return sta ? (struct b43_sta *)sta->drv_priv : NULL;
+}
+
+static u16 b43_dma_ampdu_seq(struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+
+	return IEEE80211_SEQ_TO_SN(le16_to_cpu(hdr->seq_ctrl));
+}
+
+/*
+ * The TX block ack window: the receiver flushes the MPDUs it waits for when
+ * it gets one as far beyond the oldest of them as its reorder buffer holds,
+ * the size it answered the ADDBA request with, so no MPDU may be sent that
+ * far beyond the oldest one neither acked nor given up.
+ */
+static void b43_dma_baw_add(struct b43_sta *bsta, u8 tid, u16 seq)
+{
+	u16 idx = ieee80211_sn_sub(seq, bsta->baw_start[tid]);
+
+	if (idx < IEEE80211_MAX_AMPDU_BUF_HT)
+		bsta->baw_pending[tid] |= BIT_ULL(idx);
+}
+
+/* The MPDU @seq is done: move the window past the MPDUs that are done */
+static void b43_dma_baw_complete(struct b43_sta *bsta, u8 tid, u16 seq)
+{
+	u16 idx = ieee80211_sn_sub(seq, bsta->baw_start[tid]);
+	u16 next = ieee80211_sn_inc(bsta->ampdu_seq[tid]);
+
+	if (idx < IEEE80211_MAX_AMPDU_BUF_HT)
+		bsta->baw_pending[tid] &= ~BIT_ULL(idx);
+	while (bsta->baw_start[tid] != next && !(bsta->baw_pending[tid] & 1)) {
+		bsta->baw_pending[tid] >>= 1;
+		bsta->baw_start[tid] = ieee80211_sn_inc(bsta->baw_start[tid]);
+	}
+}
+
+/*
+ * Where the MPDU in @skb is relative to the TX block ack window. The
+ * receiver takes an MPDU more than 2048 behind its window for one ahead
+ * of it, and moves its window there, so an MPDU behind the window must
+ * never be sent. If the first MPDU of an A-MPDU is ahead of a full window
+ * and nothing is on the ring anymore, no TX status will move the window,
+ * so it moves to @skb.
+ */
+enum b43_ampdu_window b43_dma_ampdu_window(struct b43_wldev *dev,
+					   struct sk_buff *skb, bool first)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	enum b43_ampdu_window ret = B43_AMPDU_IN_WINDOW;
+	u16 seq = b43_dma_ampdu_seq(skb);
+	u8 tid = ieee80211_get_tid(hdr);
+	struct b43_dmaring *ring;
+	struct b43_sta *bsta;
+
+	rcu_read_lock();
+	bsta = b43_dma_ampdu_sta(dev, skb);
+	if (!bsta)
+		goto out;
+	if (ieee80211_sn_less(seq, bsta->baw_start[tid])) {
+		ret = B43_AMPDU_STALE;
+	} else if (ieee80211_sn_sub(seq, bsta->baw_start[tid]) >=
+		   bsta->ampdu_buf[tid]) {
+		ring = select_ring_by_priority(dev, skb_get_queue_mapping(skb));
+		if (first && !ring->used_slots) {
+			bsta->baw_start[tid] = seq;
+			bsta->baw_pending[tid] = 0;
+		} else {
+			ret = B43_AMPDU_AHEAD;
+		}
+	}
+out:
+	rcu_read_unlock();
+
+	return ret;
+}
+
+/*
+ * Whether the block ack request in @skb moves the receiver's window to at
+ * most just past the newest MPDU sent, and not further back than a window
+ * behind the TX window, where the BAR for an MPDU given up after the ones
+ * following it lands. A BAR anywhere else would make the receiver jump
+ * its window there, and drop everything sent afterwards as out of range.
+ */
+bool b43_dma_ampdu_bar_valid(struct ieee80211_sta *sta, struct sk_buff *skb)
+{
+	const struct ieee80211_bar *bar = (const void *)skb->data;
+	struct b43_sta *bsta = (struct b43_sta *)sta->drv_priv;
+	u16 control = le16_to_cpu(bar->control);
+	u8 tid = (control & IEEE80211_BAR_CTRL_TID_INFO_MASK) >>
+		 IEEE80211_BAR_CTRL_TID_INFO_SHIFT;
+	u16 ssn = IEEE80211_SEQ_TO_SN(le16_to_cpu(bar->start_seq_num));
+	u16 next = ieee80211_sn_inc(bsta->ampdu_seq[tid]);
+
+	if (control & IEEE80211_BAR_CTRL_MULTI_TID)
+		return true;
+
+	return ieee80211_sn_sub(next, ssn) <=
+	       ieee80211_sn_sub(next, bsta->baw_start[tid]) +
+	       bsta->ampdu_buf[tid];
+}
+
+/*
+ * @skb is about to be sent on its own. If it belongs to a TX block ack
+ * session, e.g. EAPOL at a legacy rate, mac80211 sends a block ack request
+ * past it if it is lost, which b43_dma_ampdu_bar_valid() only lets through
+ * if the window knows the frame was sent.
+ */
+void b43_dma_ampdu_tx_single(struct b43_wldev *dev, struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	struct b43_sta *bsta;
+	u16 seq;
+	u8 tid;
+
+	if (!(IEEE80211_SKB_CB(skb)->flags & IEEE80211_TX_CTL_AMPDU) ||
+	    !ieee80211_is_data_qos(hdr->frame_control))
+		return;
+	seq = b43_dma_ampdu_seq(skb);
+	tid = ieee80211_get_tid(hdr);
+
+	rcu_read_lock();
+	bsta = b43_dma_ampdu_sta(dev, skb);
+	if (bsta && ieee80211_sn_less(bsta->ampdu_seq[tid], seq)) {
+		bsta->ampdu_seq[tid] = seq;
+		/* It is not waited for, the window may move past it */
+		b43_dma_baw_complete(bsta, tid, seq);
+	}
+	rcu_read_unlock();
+}
+
+/* The MPDU in @skb is done without a TX status */
+static void b43_dma_ampdu_dropped(struct b43_wldev *dev, struct sk_buff *skb)
+{
+	struct b43_sta *bsta;
+
+	rcu_read_lock();
+	bsta = b43_dma_ampdu_sta(dev, skb);
+	if (bsta)
+		b43_dma_baw_complete(bsta,
+				     ieee80211_get_tid((struct ieee80211_hdr *)skb->data),
+				     b43_dma_ampdu_seq(skb));
+	rcu_read_unlock();
+}
+
+/* Whether the block ack in @status covers the MPDU in @skb */
+static bool b43_dma_ampdu_frame_acked(const struct b43_txstatus *status,
+				      struct sk_buff *skb)
+{
+	u16 idx = ieee80211_sn_sub(b43_dma_ampdu_seq(skb), status->ba_ssn);
+
+	return status->ba_valid && idx < IEEE80211_MAX_AMPDU_BUF_HT &&
+	       (status->ba_bitmap & BIT_ULL(idx));
+}
+
+/*
+ * How many times the MPDU in @skb is sent again, counting this time, or
+ * 0 if it may not be sent again. It must still be in the block ack
+ * window, which follows the newest MPDU queued: once it falls behind,
+ * the receiver takes it for an old frame, or for a new one once the
+ * sequence numbers wrap.
+ */
+static unsigned int b43_dma_ampdu_may_retry(struct b43_wldev *dev,
+					    struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	u16 seq = b43_dma_ampdu_seq(skb);
+	u8 tid = ieee80211_get_tid(hdr);
+	struct b43_ampdu_retry *retry;
+	struct b43_sta *bsta;
+
+	bsta = b43_dma_ampdu_sta(dev, skb);
+	if (!bsta || !dev->wl->vif)
+		return 0;
+
+	if (ieee80211_sn_sub(bsta->ampdu_seq[tid], seq) >=
+	    bsta->ampdu_buf[tid])
+		return 0;
+
+	retry = &bsta->ampdu_retry[tid][seq % IEEE80211_MAX_AMPDU_BUF_HT];
+	if (retry->seq != seq) {
+		retry->seq = seq;
+		retry->count = 0;
+	}
+	if (retry->count >= B43_AMPDU_RETRY_LIMIT)
+		return 0;
+
+	return ++retry->count;
+}
+
+/*
+ * Complete an MPDU of an A-MPDU, or put it on @retry to be sent again if
+ * the block ack does not cover it. Must be called with the RCU read lock
+ * held. Returns whether the block ack covered the MPDU.
+ *
+ * Rate control learns about the A-MPDU from b43_dma_ampdu_rate_status(),
+ * so the status of the MPDU itself carries no A-MPDU information.
+ */
+static bool b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
+					 struct b43_dmaring *ring,
+					 struct b43_dmadesc_meta *meta,
+					 const struct b43_txstatus *status,
+					 struct sk_buff_head *retry)
+{
+	struct sk_buff *skb = meta->skb;
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct b43_private_tx_info *priv_info = b43_get_priv_tx_info(info);
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	bool acked = b43_dma_ampdu_frame_acked(status, skb);
+	unsigned int resend;
+	struct b43_sta *bsta;
+	int i;
+
+	unmap_descbuffer(ring, meta->dmaaddr, skb->len, 1);
+	kfree(priv_info->bouncebuffer);
+	priv_info->bouncebuffer = NULL;
+	meta->skb = B43_DMA_PTR_POISON;
+
+	resend = acked ? 0 : b43_dma_ampdu_may_retry(dev, skb);
+	if (resend) {
+		hdr->frame_control |= cpu_to_le16(IEEE80211_FCTL_RETRY);
+		/* The bounce buffer pointer took the place of the vif */
+		info->control.vif = dev->wl->vif;
+		/* Send it again at the rates rate control picks now */
+		for (i = 0; i < ARRAY_SIZE(info->control.rates); i++) {
+			info->control.rates[i].idx = -1;
+			info->control.rates[i].count = 0;
+		}
+		info->flags &= ~IEEE80211_TX_CTL_RATE_CTRL_PROBE;
+		ieee80211_get_tx_rates(info->control.vif,
+				       ieee80211_find_sta_by_ifaddr(dev->wl->hw,
+								    hdr->addr1,
+								    NULL),
+				       skb, info->control.rates,
+				       ARRAY_SIZE(info->control.rates));
+		/*
+		 * That is nearly always the rate that just failed. Send it
+		 * again once at it, with the RTS/CTS of an A-MPDU against a
+		 * collision, and then at the second rate, which minstrel
+		 * picks as its most reliable one with max_rates = 2, as
+		 * multi-rate retry hardware does.
+		 */
+		if (resend > 1 && info->control.rates[1].idx >= 0 &&
+		    (info->control.rates[1].flags & IEEE80211_TX_RC_MCS))
+			info->control.rates[0] = info->control.rates[1];
+		__skb_queue_tail(retry, skb);
+		return false;
+	}
+
+	bsta = b43_dma_ampdu_sta(dev, skb);
+	if (bsta)
+		b43_dma_baw_complete(bsta, ieee80211_get_tid(hdr),
+				     b43_dma_ampdu_seq(skb));
+
+	ieee80211_tx_info_clear_status(info);
+	info->status.rates[0].count = 1;
+	info->status.rates[1].idx = -1;
+	if (acked)
+		info->flags |= IEEE80211_TX_STAT_ACK;
+	else
+		/* Makes mac80211 send a block ack request */
+		info->flags |= IEEE80211_TX_STAT_AMPDU_NO_BACK;
+
+	ieee80211_tx_status_skb(dev->wl->hw, skb);
+	return acked;
+}
+
+/*
+ * Tell rate control how an A-MPDU of @len MPDUs, sent at the rate of its
+ * first MPDU @first, went. This covers every transmission, including
+ * those of MPDUs that are sent again, so that rate control notices a rate
+ * that stopped working within a few A-MPDUs.
+ */
+static void b43_dma_ampdu_rate_status(struct b43_wldev *dev,
+				      struct ieee80211_sta *sta,
+				      const struct ieee80211_tx_info *first,
+				      unsigned int len, unsigned int acked)
+{
+	struct ieee80211_tx_info info = {};
+	struct ieee80211_tx_status status = {
+		.sta = sta,
+		.info = &info,
+	};
+	int i;
+
+	/*
+	 * Rate control only looks at ampdu_len and ampdu_ack_len. The MPDUs
+	 * missing from the block ack are sent again, and each MPDU's own
+	 * status tells whether it got through in the end, so this one
+	 * transmission must not count as a failed frame in the station
+	 * statistics.
+	 */
+	info.band = first->band;
+	info.flags = IEEE80211_TX_CTL_AMPDU | IEEE80211_TX_STAT_AMPDU |
+		     IEEE80211_TX_STAT_ACK |
+		     (first->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE);
+	for (i = 0; i < ARRAY_SIZE(info.status.rates); i++)
+		info.status.rates[i].idx = -1;
+	info.status.rates[0] = first->control.rates[0];
+	info.status.rates[0].count = 1;
+	info.status.ampdu_len = len;
+	info.status.ampdu_ack_len = acked;
+
+	ieee80211_tx_status_ext(dev->wl->hw, &status);
+}
+
+/*
+ * Queue the MPDUs of an A-MPDU. The firmware sends frames marked first,
+ * intermediate and last back to back as one PPDU, so the DMA engine is
+ * only started once the last one is in the ring.
+ */
+int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
+		     unsigned int n, u16 ampdu_len)
+{
+	struct b43_ampdu_tx_ctx *ampdu = &dev->ampdu_tx;
+	struct b43_dmaring *ring;
+	struct b43_sta *bsta;
+	unsigned int i, queued = 0, len = 0, mpdu_len;
+	int first_slot = -1;
+	int err;
+
+	ring = select_ring_by_priority(dev, skb_get_queue_mapping(skbs[0]));
+	if (unlikely(ring->stopped) ||
+	    free_slots(ring) < n * TX_SLOTS_PER_FRAME)
+		return -ENOSPC;
+
+	ring->queue_prio = skb_get_queue_mapping(skbs[0]);
+
+	rcu_read_lock();
+	bsta = b43_dma_ampdu_sta(dev, skbs[0]);
+	if (bsta) {
+		u8 tid = ieee80211_get_tid((struct ieee80211_hdr *)skbs[0]->data);
+
+		for (i = 0; i < n; i++) {
+			u16 seq = b43_dma_ampdu_seq(skbs[i]);
+
+			if (ieee80211_sn_less(bsta->ampdu_seq[tid], seq))
+				bsta->ampdu_seq[tid] = seq;
+			b43_dma_baw_add(bsta, tid, seq);
+		}
+	}
+	rcu_read_unlock();
+
+	ampdu->active = true;
+	ampdu->len = ampdu_len;
+	for (i = 0; i < n; i++) {
+		ampdu->first = queued == 0;
+		ampdu->last = i == n - 1;
+		mpdu_len = b43_tx_mpdu_len(skbs[i]) + 4;
+
+		err = dma_tx_fragment(ring, skbs[i], false);
+		if (unlikely(err)) {
+			if (!queued) {
+				ampdu->active = false;
+				/* The caller drops this frame */
+				b43_dma_ampdu_dropped(dev, skbs[i]);
+				return err;
+			}
+			/* Drop this frame, the A-MPDU goes on without it */
+			b43_dma_ampdu_dropped(dev, skbs[i]);
+			ieee80211_free_txskb(dev->wl->hw, skbs[i]);
+			continue;
+		}
+
+		if (!queued)
+			first_slot = prev_slot(ring, ring->current_slot);
+		len = queued ? ALIGN(len, 4) + mpdu_len : mpdu_len;
+		queued++;
+	}
+	ampdu->active = false;
+
+	b43_dma_end_ampdu(ring, first_slot, len, queued < n);
+
+	if (free_slots(ring) < TX_SLOTS_PER_FRAME) {
+		unsigned int skb_mapping = skb_get_queue_mapping(skbs[0]);
+
+		b43_stop_queue(dev, skb_mapping);
+		dev->wl->tx_queue_stopped[skb_mapping] = true;
+		ring->stopped = true;
+	}
+
+	return 0;
+}
+
+/*
+ * One TX status covers all MPDUs of an A-MPDU. Complete each of them with
+ * its bit from the block ack, up to the one marked last.
+ */
+static void b43_dma_handle_ampdu_txstatus(struct b43_wldev *dev,
+					  struct b43_dmaring *ring, int slot,
+					  const struct b43_txstatus *status)
+{
+	const struct b43_dma_ops *ops = ring->ops;
+	size_t hdrsize = b43_txhdr_size(dev);
+	struct b43_dmadesc_meta *meta;
+	struct sk_buff_head retry, *queue;
+	struct ieee80211_tx_info first = {};
+	struct ieee80211_sta *sta = NULL;
+	unsigned int len = 0, acked = 0;
+	unsigned long flags;
+	bool last;
+
+	__skb_queue_head_init(&retry);
+	rcu_read_lock();
+	do {
+		/* Header slot */
+		ops->idx2desc(ring, slot, &meta);
+		if (unlikely(meta->skb)) {
+			b43dbg(dev->wl, "A-MPDU TX status: no header at slot %d on ring %d\n",
+			       slot, ring->index);
+			break;
+		}
+		last = (le32_to_cpu(b43_dma_txhdr(ring, slot)->mac_ctl) &
+			B43_TXH_MAC_AMPDU) == B43_TXH_MAC_AMPDU_LAST;
+		unmap_descbuffer(ring, meta->dmaaddr, hdrsize, 1);
+		ring->used_slots--;
+
+		/* Payload slot */
+		slot = next_slot(ring, slot);
+		ops->idx2desc(ring, slot, &meta);
+		if (unlikely(!meta->skb || b43_dma_ptr_is_poisoned(meta->skb))) {
+			b43dbg(dev->wl, "A-MPDU TX status: no frame at slot %d on ring %d\n",
+			       slot, ring->index);
+			break;
+		}
+		if (!len++) {
+			struct ieee80211_hdr *hdr =
+				(struct ieee80211_hdr *)meta->skb->data;
+
+			first = *IEEE80211_SKB_CB(meta->skb);
+			sta = ieee80211_find_sta_by_ifaddr(dev->wl->hw,
+							   hdr->addr1, NULL);
+		}
+		if (b43_dma_complete_ampdu_frame(dev, ring, meta, status,
+						 &retry))
+			acked++;
+		ring->used_slots--;
+
+		slot = next_slot(ring, slot);
+	} while (!last && ring->used_slots);
+	if (sta && first.control.rates[0].idx >= 0)
+		b43_dma_ampdu_rate_status(dev, sta, &first, len, acked);
+	rcu_read_unlock();
+
+	if (skb_queue_empty(&retry))
+		return;
+
+	/* Resend the MPDUs ahead of the frames queued since */
+	queue = &dev->wl->tx_queue[skb_get_queue_mapping(retry.next)];
+	spin_lock_irqsave(&queue->lock, flags);
+	skb_queue_splice(&retry, queue);
+	spin_unlock_irqrestore(&queue->lock, flags);
+}
+
+/*
+ * The TX status of the @count slots from @slot never came. Complete their
+ * frames as not sent, A-MPDU ones as given up so that mac80211 moves the
+ * receiver's window past them. Returns whether the slots held what they
+ * should.
+ */
+static bool b43_dma_tx_missed(struct b43_wldev *dev, struct b43_dmaring *ring,
+			      int slot, int count)
+{
+	static const struct b43_txstatus fake; /* filled with 0 */
+	const struct b43_dma_ops *ops = ring->ops;
+	struct b43_dmadesc_meta *meta;
+	struct ieee80211_tx_info *info;
+	bool ampdu = false;
+	u32 mac_ctl;
+
+	for (; count > 0; count--, slot = next_slot(ring, slot)) {
+		ops->idx2desc(ring, slot, &meta);
+		if (b43_dma_ptr_is_poisoned(meta->skb))
+			return false;
+
+		if (!meta->skb) {
+			/* Header slot */
+			mac_ctl = le32_to_cpu(b43_dma_txhdr(ring, slot)->mac_ctl);
+			ampdu = b43_ampdu_tx_enabled(dev) &&
+				(mac_ctl & B43_TXH_MAC_AMPDU);
+			unmap_descbuffer(ring, meta->dmaaddr,
+					 b43_txhdr_size(dev), 1);
+			ring->used_slots--;
+			continue;
+		}
+
+		unmap_descbuffer(ring, meta->dmaaddr, meta->skb->len, 1);
+		info = IEEE80211_SKB_CB(meta->skb);
+		kfree(b43_get_priv_tx_info(info)->bouncebuffer);
+		b43_get_priv_tx_info(info)->bouncebuffer = NULL;
+		if (ampdu) {
+			b43_dma_ampdu_dropped(dev, meta->skb);
+			ieee80211_tx_info_clear_status(info);
+			info->status.rates[0].count = 1;
+			info->status.rates[1].idx = -1;
+			/* Makes mac80211 send a block ack request */
+			info->flags |= IEEE80211_TX_STAT_AMPDU_NO_BACK;
+		} else {
+			b43_fill_txstatus_report(dev, info, &fake);
+		}
+		ieee80211_tx_status_skb(dev->wl->hw, meta->skb);
+		meta->skb = B43_DMA_PTR_POISON;
+		ring->used_slots--;
+	}
+
+	return true;
+}
+
 void b43_dma_handle_txstatus(struct b43_wldev *dev,
 			     const struct b43_txstatus *status)
 {
 	const struct b43_dma_ops *ops;
 	struct b43_dmaring *ring;
 	struct b43_dmadesc_meta *meta;
-	static const struct b43_txstatus fake; /* filled with 0 */
-	const struct b43_txstatus *txstat;
-	int slot, firstused;
+	int slot, firstused, missed;
 	bool frame_succeed;
-	int skip;
 	static u8 err_out1;
 
 	ring = parse_cookie(dev, status->cookie, &slot);
@@ -1441,28 +2006,36 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 	if (firstused < 0)
 		firstused = ring->nr_slots + firstused;
 
-	skip = 0;
 	if (unlikely(slot != firstused)) {
 		/* This possibly is a firmware bug and will result in
 		 * malfunction, memory leaks and/or stall of DMA functionality.
 		 */
-		if (slot == next_slot(ring, next_slot(ring, firstused))) {
-			/* If a single header/data pair was missed, skip over
-			 * the first two slots in an attempt to recover.
+		missed = slot - firstused;
+		if (missed < 0)
+			missed += ring->nr_slots;
+		if (missed < ring->used_slots &&
+		    !(missed % TX_SLOTS_PER_FRAME) &&
+		    (!dev->fw.opensource || missed == TX_SLOTS_PER_FRAME)) {
+			/*
+			 * The status of the frames ahead of this one was
+			 * missed, of a single frame or of an A-MPDU of
+			 * several. Complete them as not sent in an attempt
+			 * to recover.
 			 */
-			slot = firstused;
-			skip = 2;
 			if (!err_out1) {
 				/* Report the error once. */
 				b43dbg(dev->wl,
-				       "Skip on DMA ring %d slot %d.\n",
-				       ring->index, slot);
+				       "Skip on DMA ring %d slot %d, %d slots.\n",
+				       ring->index, firstused, missed);
 				err_out1 = 1;
 			}
+			if (!b43_dma_tx_missed(dev, ring, firstused, missed))
+				return;
 		} else {
-			/* More than a single header/data pair were missed.
-			 * Report this error. If running with open-source
-			 * firmware, then reset the controller to
+			/* The slot is not in use, or more than a single
+			 * header/data pair were missed with the open-source
+			 * firmware. Report this error. If running with
+			 * open-source firmware, then reset the controller to
 			 * revive operation.
 			 */
 			b43dbg(dev->wl,
@@ -1472,6 +2045,13 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 				b43_controller_restart(dev, "Out of order TX");
 			return;
 		}
+	}
+
+	if (b43_ampdu_tx_enabled(dev) &&
+	    (le32_to_cpu(b43_dma_txhdr(ring, slot)->mac_ctl) &
+	     B43_TXH_MAC_AMPDU)) {
+		b43_dma_handle_ampdu_txstatus(dev, ring, slot, status);
+		goto out_wake;
 	}
 
 	ops = ring->ops;
@@ -1517,18 +2097,10 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 
 			/*
 			 * Call back to inform the ieee80211 subsystem about
-			 * the status of the transmission. When skipping over
-			 * a missed TX status report, use a status structure
-			 * filled with zeros to indicate that the frame was not
-			 * sent (frame_count 0) and not acknowledged
+			 * the status of the transmission.
 			 */
-			if (unlikely(skip))
-				txstat = &fake;
-			else
-				txstat = status;
-
 			frame_succeed = b43_fill_txstatus_report(dev, info,
-								 txstat);
+								 status);
 #ifdef CONFIG_B43_DEBUG
 			if (frame_succeed)
 				ring->nr_succeed_tx_packets++;
@@ -1556,15 +2128,14 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 		/* Everything unmapped and free'd. So it's not used anymore. */
 		ring->used_slots--;
 
-		if (meta->is_last_fragment && !skip) {
+		if (meta->is_last_fragment) {
 			/* This is the last scatter-gather
 			 * fragment of the frame. We are done. */
 			break;
 		}
 		slot = next_slot(ring, slot);
-		if (skip > 0)
-			--skip;
 	}
+out_wake:
 	if (ring->stopped) {
 		B43_WARN_ON(free_slots(ring) < TX_SLOTS_PER_FRAME);
 		ring->stopped = false;
@@ -1572,9 +2143,11 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 
 	if (dev->wl->tx_queue_stopped[ring->queue_prio]) {
 		dev->wl->tx_queue_stopped[ring->queue_prio] = false;
-	} else {
-		/* If the driver queue is running wake the corresponding
-		 * mac80211 queue. */
+	} else if (!dev->wl->tx_queue_full[ring->queue_prio]) {
+		/*
+		 * If the driver queue is running and has room, wake the
+		 * corresponding mac80211 queue.
+		 */
 		b43_wake_queue(dev, ring->queue_prio);
 		if (b43_debug(dev, B43_DBG_DMAVERBOSE)) {
 			b43dbg(dev->wl, "Woke up TX ring %d\n", ring->index);
