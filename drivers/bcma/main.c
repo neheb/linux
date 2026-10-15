@@ -301,6 +301,7 @@ static void bcma_register_core(struct bcma_bus *bus, struct bcma_device *core)
  */
 static const struct of_device_id bcma_of_platform_cores[] = {
 	{ .compatible = "brcm,bcm4716-amac" },
+	{ .compatible = "brcm,bcm4716-ehci" },
 	{ }
 };
 
