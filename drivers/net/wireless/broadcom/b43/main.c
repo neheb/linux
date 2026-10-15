@@ -360,12 +360,12 @@ static struct ieee80211_supported_band b43_band_2ghz_limited = {
 	.n_bitrates	= b43_g_ratetable_size,
 };
 
-/* HT20 with one spatial stream and no A-MPDU */
+/* HT20 with one spatial stream, receiving A-MPDUs only */
 #define B43_HT_CAP {							\
 	.ht_supported	= true,						\
 	.cap		= IEEE80211_HT_CAP_SM_PS,			\
 	.ampdu_factor	= IEEE80211_HT_MAX_AMPDU_8K,			\
-	.ampdu_density	= IEEE80211_HT_MPDU_DENSITY_NONE,		\
+	.ampdu_density	= IEEE80211_HT_MPDU_DENSITY_8,			\
 	.mcs = {							\
 		.rx_mask	= { 0xff },				\
 		.tx_params	= IEEE80211_HT_MCS_TX_DEFINED,		\
@@ -5010,6 +5010,7 @@ static int b43_wireless_core_init(struct b43_wldev *dev)
 
 	b43_rate_memory_init(dev);
 	b43_set_phytxctl_defaults(dev);
+	memset(&dev->rx_ppdu, 0, sizeof(dev->rx_ppdu));
 
 	/* Minimum Contention Window */
 	if (phy->type == B43_PHYTYPE_B)
@@ -5259,6 +5260,44 @@ static void b43_op_sw_scan_complete_notifier(struct ieee80211_hw *hw,
 	mutex_unlock(&wl->mutex);
 }
 
+/* Whether the firmware sends HT frames and block acks */
+static bool b43_ht_fw_loaded(struct b43_wl *wl)
+{
+	struct b43_wldev *dev;
+	bool ret;
+
+	mutex_lock(&wl->mutex);
+	dev = wl->current_dev;
+	ret = dev && b43_status(dev) >= B43_STAT_INITIALIZED &&
+	      dev->fw.hdr_format == B43_FW_HDR_598;
+	mutex_unlock(&wl->mutex);
+
+	return ret;
+}
+
+static int b43_op_ampdu_action(struct ieee80211_hw *hw,
+			       struct ieee80211_vif *vif,
+			       struct ieee80211_ampdu_params *params)
+{
+	struct b43_wl *wl = hw_to_b43_wl(hw);
+
+	switch (params->action) {
+	case IEEE80211_AMPDU_RX_START:
+		/* b43 fills in the block ack template of firmware 598 only */
+		if (!b43_ht_fw_loaded(wl))
+			return -EOPNOTSUPP;
+		fallthrough;
+	case IEEE80211_AMPDU_RX_STOP:
+		/*
+		 * The firmware sends the block acks, and mac80211 reorders
+		 * the frames, so there is nothing to set up.
+		 */
+		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
 static int b43_op_get_survey(struct ieee80211_hw *hw, int idx,
 			     struct survey_info *survey)
 {
@@ -5298,6 +5337,7 @@ static const struct ieee80211_ops b43_hw_ops = {
 	.stop			= b43_op_stop,
 	.set_tim		= b43_op_beacon_set_tim,
 	.sta_notify		= b43_op_sta_notify,
+	.ampdu_action		= b43_op_ampdu_action,
 	.sw_scan_start		= b43_op_sw_scan_start_notifier,
 	.sw_scan_complete	= b43_op_sw_scan_complete_notifier,
 	.get_survey		= b43_op_get_survey,
@@ -5690,6 +5730,7 @@ static struct b43_wl *b43_wireless_init(struct b43_bus_dev *dev)
 	ieee80211_hw_set(hw, RX_INCLUDES_FCS);
 	ieee80211_hw_set(hw, SIGNAL_DBM);
 	ieee80211_hw_set(hw, MFP_CAPABLE);
+	ieee80211_hw_set(hw, AMPDU_AGGREGATION);
 	hw->wiphy->interface_modes =
 		BIT(NL80211_IFTYPE_AP) |
 		BIT(NL80211_IFTYPE_MESH_POINT) |
