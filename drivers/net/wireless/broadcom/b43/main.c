@@ -3295,6 +3295,47 @@ static void b43_chip_exit(struct b43_wldev *dev)
 	/* firmware is released later */
 }
 
+/*
+ * The initvals of core rev 17 split 60 blocks of 256 bytes about evenly
+ * between the six TX FIFOs, which leaves 3.5 KiB for best effort. That is
+ * too small to send an A-MPDU at high rates: the FIFO runs dry in the
+ * middle of the PPDU, all the more so with encryption. Give most of the
+ * same space to best effort instead, and tell the firmware. Without HT,
+ * b43 sends no A-MPDUs and the initvals layout is enough.
+ */
+static void b43_fifo_fixup(struct b43_wldev *dev)
+{
+	/* BK, BE, VI, VO, broadcast/multicast, ATIM */
+	static const u8 sizes[] = { 6, 30, 10, 8, 4, 2 };
+	unsigned int start = B43_TXFIFO_START_BLK, end, i;
+	u16 cmd;
+
+	if (!b43_ht_supported(dev) || dev->dev->core_rev != 17)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(sizes); i++) {
+		end = start + sizes[i] - 1;
+		cmd = B43_TXFIFOCMD_RESET | (i << B43_TXFIFOCMD_FIFOSEL_SHIFT);
+
+		/* Reset the FIFO, resize it, and reset it again */
+		b43_write16(dev, B43_MMIO_XMTFIFOCMD, cmd);
+		b43_write16(dev, B43_MMIO_XMTFIFODEF,
+			    (start & 0xff) | ((end & 0xff) << 8));
+		b43_write16(dev, B43_MMIO_XMTFIFODEF1,
+			    ((start >> 8) & 1) | (((end >> 8) & 1) << 8));
+		b43_write16(dev, B43_MMIO_XMTFIFOCMD, cmd);
+
+		start += sizes[i];
+	}
+
+	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_SIZE01,
+			sizes[0] | (sizes[1] << 8));
+	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_SIZE23,
+			sizes[2] | (sizes[3] << 8));
+	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_SIZE45,
+			sizes[4] | (sizes[5] << 8));
+}
+
 /* Initialize the chip
  * https://bcm-specs.sipsolutions.net/ChipInit
  */
@@ -3327,6 +3368,8 @@ static int b43_chip_init(struct b43_wldev *dev)
 	err = b43_upload_initvals_band(dev);
 	if (err)
 		goto err_gpio_clean;
+
+	b43_fifo_fixup(dev);
 
 	/* Turn the Analog on and initialize the PHY. */
 	phy->ops->switch_analog(dev, 1);
