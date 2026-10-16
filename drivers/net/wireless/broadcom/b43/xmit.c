@@ -202,15 +202,17 @@ static const u16 b43_ht_rate_kbps[] = {
 	6500, 13000, 19500, 26000, 39000, 52000, 58500, 65000,
 };
 
-static u16 b43_generate_tx_phy_ctl1_ht(u8 mcs)
+static u16 b43_generate_tx_phy_ctl1_ht(u8 mcs, bool stbc)
 {
-	return B43_TXH_PHY1_BW_20 | B43_TXH_PHY1_MODE_SISO |
+	return B43_TXH_PHY1_BW_20 |
+	       (stbc ? B43_TXH_PHY1_MODE_STBC : B43_TXH_PHY1_MODE_SISO) |
 	       (b43_ht_phy_ctl1_mod[mcs] << 8);
 }
 
 /* Generate a mixed-mode HT PLCP header (HT-SIG) */
 static void b43_generate_ht_plcp_hdr(struct b43_plcp_hdr6 *plcp,
-				     unsigned int octets, u8 mcs, bool sgi)
+				     unsigned int octets, u8 mcs, bool sgi,
+				     bool stbc)
 {
 	memset(plcp, 0, sizeof(*plcp));
 	plcp->raw[0] = mcs;
@@ -218,6 +220,9 @@ static void b43_generate_ht_plcp_hdr(struct b43_plcp_hdr6 *plcp,
 	plcp->raw[2] = (octets >> 8) & 0xff;
 	/* Smoothing, not a sounding PPDU, reserved bit set */
 	plcp->raw[3] = 0x07;
+	/* One extra space-time stream: STBC of a single spatial stream */
+	if (stbc)
+		plcp->raw[3] |= 0x10;
 	if (sgi)
 		plcp->raw[3] |= 0x80;
 }
@@ -227,18 +232,23 @@ static void b43_generate_ht_plcp_hdr(struct b43_plcp_hdr6 *plcp,
  * defer for the whole frame: its duration in 4 us legacy symbols, as bytes
  * at 6 Mbit/s.
  */
-static u16 b43_ht_lsig_len(u8 mcs, bool sgi, unsigned int octets)
+static u16 b43_ht_lsig_len(u8 mcs, bool sgi, bool stbc, unsigned int octets)
 {
 	unsigned int kbps = b43_ht_rate_kbps[mcs];
-	unsigned int nsyms;
+	unsigned int nsyms, bits;
 
 	if (sgi)
 		kbps = DIV_ROUND_UP(kbps * 10, 9);
 
 	/* 16 service bits and 6 tail bits, in 4 us symbols */
-	nsyms = DIV_ROUND_UP((16 + 8 * octets + 6) * 1000, kbps * 4);
-	/* One HT-LTF for one spatial stream, two HT-SIG and the HT-STF */
-	nsyms += 1 + 3;
+	bits = (16 + 8 * octets + 6) * 1000;
+	if (stbc)
+		/* STBC sends the data symbols in pairs */
+		nsyms = 2 * DIV_ROUND_UP(bits, 2 * kbps * 4);
+	else
+		nsyms = DIV_ROUND_UP(bits, kbps * 4);
+	/* An HT-LTF per space-time stream, two HT-SIG and the HT-STF */
+	nsyms += (stbc ? 2 : 1) + 3;
 
 	return 3 * nsyms - 3;
 }
@@ -257,7 +267,7 @@ unsigned int b43_ht_max_ampdu_len(u8 mcs)
 static void b43_generate_ampdu_txhdr(struct b43_wldev *dev,
 				     struct b43_txhdr *txhdr, u32 *mac_ctl,
 				     u8 mcs, bool sgi, bool ht_fb, u8 mcs_fb,
-				     bool sgi_fb)
+				     bool sgi_fb, bool stbc)
 {
 	const struct b43_ampdu_tx_ctx *ampdu = &dev->ampdu_tx;
 	struct b43_plcp_hdr6 *plcp = &txhdr->format_598.plcp;
@@ -285,11 +295,11 @@ static void b43_generate_ampdu_txhdr(struct b43_wldev *dev,
 	plcp->raw[1] = ampdu->len & 0xff;
 	plcp->raw[2] = (ampdu->len >> 8) & 0xff;
 	plcp->raw[3] |= 0x08;
-	txhdr->mimo_modelen = cpu_to_le16(b43_ht_lsig_len(mcs, sgi,
+	txhdr->mimo_modelen = cpu_to_le16(b43_ht_lsig_len(mcs, sgi, stbc,
 							  ampdu->len));
 	if (ht_fb)
 		txhdr->mimo_ratelen_fb =
-			cpu_to_le16(b43_ht_lsig_len(mcs_fb, sgi_fb,
+			cpu_to_le16(b43_ht_lsig_len(mcs_fb, sgi_fb, stbc,
 						    ampdu->len));
 }
 
@@ -360,7 +370,7 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 	const struct ieee80211_rate *txrate = NULL;
 	struct ieee80211_tx_rate *rates = info->control.rates;
 	struct ieee80211_tx_rate *rate_fb_ctl;
-	bool ht, ht_fb, sgi, sgi_fb;
+	bool ht, ht_fb, sgi, sgi_fb, stbc;
 	u8 mcs = 0, mcs_fb = 0;
 
 	memset(txhdr, 0, sizeof(*txhdr));
@@ -375,6 +385,12 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 	ht_fb = rate_fb_ctl->flags & IEEE80211_TX_RC_MCS;
 	sgi = rates[0].flags & IEEE80211_TX_RC_SHORT_GI;
 	sgi_fb = rate_fb_ctl->flags & IEEE80211_TX_RC_SHORT_GI;
+	/*
+	 * Rate control asks for STBC on all frames to a station that can
+	 * receive it, and it only applies to HT rates. Both TX chains send
+	 * the single spatial stream.
+	 */
+	stbc = ht && (info->flags & IEEE80211_TX_CTL_STBC);
 
 	if (ht) {
 		mcs = rates[0].idx;
@@ -476,7 +492,8 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 	case B43_FW_HDR_598:
 		if (ht)
 			b43_generate_ht_plcp_hdr(&txhdr->format_598.plcp,
-						 plcp_fragment_len, mcs, sgi);
+						 plcp_fragment_len, mcs, sgi,
+						 stbc);
 		else
 			b43_generate_plcp_hdr((struct b43_plcp_hdr4 *)(&txhdr->format_598.plcp),
 					      plcp_fragment_len, rate);
@@ -492,7 +509,7 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 	}
 	if (ht_fb)
 		b43_generate_ht_plcp_hdr(&txhdr->plcp_fb, plcp_fragment_len,
-					 mcs_fb, sgi_fb);
+					 mcs_fb, sgi_fb, stbc);
 	else
 		b43_generate_plcp_hdr((struct b43_plcp_hdr4 *)(&txhdr->plcp_fb),
 				      plcp_fragment_len, rate_fb);
@@ -703,8 +720,8 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 
 		if (ht) {
 			txhdr->phy_ctl1 =
-				cpu_to_le16(b43_generate_tx_phy_ctl1_ht(mcs));
-			len = b43_ht_lsig_len(mcs, sgi, plcp_fragment_len);
+				cpu_to_le16(b43_generate_tx_phy_ctl1_ht(mcs, stbc));
+			len = b43_ht_lsig_len(mcs, sgi, stbc, plcp_fragment_len);
 			txhdr->mimo_modelen = cpu_to_le16(len);
 		} else {
 			txhdr->phy_ctl1 =
@@ -712,8 +729,9 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 		}
 		if (ht_fb) {
 			txhdr->phy_ctl1_fb =
-				cpu_to_le16(b43_generate_tx_phy_ctl1_ht(mcs_fb));
-			len = b43_ht_lsig_len(mcs_fb, sgi_fb,
+				cpu_to_le16(b43_generate_tx_phy_ctl1_ht(mcs_fb,
+									stbc));
+			len = b43_ht_lsig_len(mcs_fb, sgi_fb, stbc,
 					      plcp_fragment_len);
 			txhdr->mimo_ratelen_fb = cpu_to_le16(len);
 		} else {
@@ -724,7 +742,7 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 
 	if (ht && dev->ampdu_tx.active)
 		b43_generate_ampdu_txhdr(dev, txhdr, &mac_ctl, mcs, sgi,
-					 ht_fb, mcs_fb, sgi_fb);
+					 ht_fb, mcs_fb, sgi_fb, stbc);
 
 	/* Apply the bitfields */
 	txhdr->mac_ctl = cpu_to_le32(mac_ctl);
