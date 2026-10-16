@@ -364,7 +364,10 @@ static struct ieee80211_supported_band b43_band_2ghz_limited = {
 	.n_bitrates	= b43_g_ratetable_size,
 };
 
-/* HT20 with one spatial stream */
+/*
+ * HT20 with one spatial stream. b43_ht_cap_set_chains() adds a second
+ * one for devices with two chains.
+ */
 #define B43_HT_CAP {							\
 	.ht_supported	= true,						\
 	.cap		= IEEE80211_HT_CAP_SM_PS |			\
@@ -5646,6 +5649,29 @@ out:
 	b43info(wl, "Controller restarted\n");
 }
 
+/*
+ * N-PHY devices have two cores, but not every board connects both of
+ * them for TX or RX. A second spatial stream needs both, and so does
+ * STBC for TX. The SPROM chain masks default to all chains when unset.
+ */
+static void b43_ht_cap_set_chains(struct b43_wldev *dev,
+				  struct ieee80211_sta_ht_cap *ht_cap)
+{
+	struct ssb_sprom *sprom = dev->dev->bus_sprom;
+	int tx = hweight8(sprom->txchain & 0x3) ?: 2;
+	int rx = hweight8(sprom->rxchain & 0x3) ?: 2;
+
+	if (rx >= 2)
+		ht_cap->mcs.rx_mask[1] = 0xff;
+	if (tx < 2)
+		ht_cap->cap &= ~IEEE80211_HT_CAP_TX_STBC;
+	if (tx != rx)
+		ht_cap->mcs.tx_params |= IEEE80211_HT_MCS_TX_RX_DIFF |
+			((tx - 1) << IEEE80211_HT_MCS_TX_MAX_STREAMS_SHIFT);
+
+	b43dbg(dev->wl, "HT with %d TX and %d RX chains\n", tx, rx);
+}
+
 static int b43_setup_bands(struct b43_wldev *dev,
 			   bool have_2ghz_phy, bool have_5ghz_phy)
 {
@@ -5667,10 +5693,12 @@ static int b43_setup_bands(struct b43_wldev *dev,
 	 */
 	ht = modparam_ht && phy->type == B43_PHYTYPE_N && phy->rev >= 3;
 
-	if (have_2ghz_phy && ht)
-		hw->wiphy->bands[NL80211_BAND_2GHZ] = limited_2g ?
-			&b43_band_2ghz_limited_ht : &b43_band_2ghz_ht;
-	else if (have_2ghz_phy)
+	if (have_2ghz_phy && ht) {
+		dev->wl->band_2ghz_ht = limited_2g ? b43_band_2ghz_limited_ht :
+						     b43_band_2ghz_ht;
+		b43_ht_cap_set_chains(dev, &dev->wl->band_2ghz_ht.ht_cap);
+		hw->wiphy->bands[NL80211_BAND_2GHZ] = &dev->wl->band_2ghz_ht;
+	} else if (have_2ghz_phy)
 		hw->wiphy->bands[NL80211_BAND_2GHZ] = limited_2g ?
 			&b43_band_2ghz_limited : &b43_band_2GHz;
 	if (dev->phy.type == B43_PHYTYPE_N) {
