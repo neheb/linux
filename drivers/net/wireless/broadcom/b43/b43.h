@@ -832,7 +832,7 @@ enum {
 					} while (0)
 
 /* Maximum number of MPDUs b43 puts in one A-MPDU */
-#define B43_AMPDU_MAX_FRAMES	16
+#define B43_AMPDU_MAX_FRAMES	32
 /* Times an MPDU missing from a block ack is sent again */
 #define B43_AMPDU_RETRY_LIMIT	5
 
