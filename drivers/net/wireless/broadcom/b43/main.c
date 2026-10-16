@@ -5169,6 +5169,7 @@ static int b43_wireless_core_init(struct b43_wldev *dev)
 
 	b43_rate_memory_init(dev);
 	b43_set_phytxctl_defaults(dev);
+	memset(&dev->rx_ppdu, 0, sizeof(dev->rx_ppdu));
 
 	/* Minimum Contention Window */
 	if (phy->type == B43_PHYTYPE_B)
