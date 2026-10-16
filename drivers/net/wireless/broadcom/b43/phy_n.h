@@ -973,6 +973,16 @@ struct b43_phy_n {
 	u16 tx_pwr_last_recalc_freq;
 	int tx_pwr_last_recalc_limit;
 
+	/*
+	 * Base indices of the hardware TX power control while OFDM frames
+	 * were sent, to restore them when sending starts again after idle.
+	 */
+	bool txpctl_bidx_valid;
+	bool txpctl_bidx_loaded;
+	u16 txpctl_bidx;
+	unsigned long txpctl_last_tx;
+	unsigned long txpctl_last_sample;
+
 	u8 txrx_chain;
 	u16 tx_rx_cal_phy_saveregs[11];
 	u16 tx_rx_cal_radio_saveregs[22];
@@ -1004,5 +1014,13 @@ struct b43_phy_n {
 
 struct b43_phy_operations;
 extern const struct b43_phy_operations b43_phyops_n;
+
+#ifdef CONFIG_B43_PHY_N
+void b43_nphy_txpctl_ofdm_tx(struct b43_wldev *dev);
+#else
+static inline void b43_nphy_txpctl_ofdm_tx(struct b43_wldev *dev)
+{
+}
+#endif
 
 #endif /* B43_NPHY_H_ */
