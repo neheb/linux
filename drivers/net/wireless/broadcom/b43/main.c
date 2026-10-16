@@ -3785,6 +3785,40 @@ static unsigned int b43_tx_ampdu_peer_max(struct sk_buff *skb)
 	return min(max, 0xffffU);
 }
 
+static u16 b43_tx_seq(struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+
+	return IEEE80211_SEQ_TO_SN(le16_to_cpu(hdr->seq_ctrl));
+}
+
+/*
+ * The block ack window of the receiver and TID of @skb: where it starts
+ * and how many MPDUs it holds. With no MPDU in flight, it starts at @skb.
+ */
+static void b43_tx_ampdu_window(struct sk_buff *skb, u16 *start, u16 *size)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	u8 tid = ieee80211_get_tid(hdr);
+	struct ieee80211_sta *sta;
+	struct b43_sta *bsta;
+
+	*start = b43_tx_seq(skb);
+	*size = IEEE80211_MAX_AMPDU_BUF_HT;
+
+	rcu_read_lock();
+	sta = ieee80211_find_sta(info->control.vif, hdr->addr1);
+	if (sta) {
+		bsta = (struct b43_sta *)sta->drv_priv;
+		if (bsta->ampdu_win_pending[tid])
+			*start = bsta->ampdu_win_start[tid];
+		if (bsta->ampdu_win_size[tid])
+			*size = bsta->ampdu_win_size[tid];
+	}
+	rcu_read_unlock();
+}
+
 /*
  * Send @skb and the frames following it in @queue for the same receiver
  * and TID as one A-MPDU. Each MPDU but the last is padded to 4 bytes,
@@ -3796,7 +3830,20 @@ static int b43_tx_ampdu(struct b43_wldev *dev, struct sk_buff_head *queue,
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct sk_buff *skbs[B43_AMPDU_MAX_FRAMES];
 	unsigned int max_len, len, n = 1, i;
+	u16 win_start, win_size;
 	int err;
+
+	/*
+	 * Send nothing past the receiver's block ack window. An MPDU past
+	 * it moves the window on, and the receiver drops the MPDUs it
+	 * leaves behind, so those that are lost can't be sent again. Wait
+	 * for the window to move on with the TX status instead.
+	 */
+	b43_tx_ampdu_window(skb, &win_start, &win_size);
+	if (ieee80211_sn_sub(b43_tx_seq(skb), win_start) >= win_size) {
+		skb_queue_head(queue, skb);
+		return -ENOSPC;
+	}
 
 	max_len = min(b43_tx_ampdu_peer_max(skb),
 		      b43_ht_max_ampdu_len(info->control.rates[0].idx));
@@ -3808,6 +3855,8 @@ static int b43_tx_ampdu(struct b43_wldev *dev, struct sk_buff_head *queue,
 		struct sk_buff *next = skb_peek(queue);
 		unsigned int nlen;
 
+		if (ieee80211_sn_sub(b43_tx_seq(next), win_start) >= win_size)
+			break;
 		nlen = b43_tx_mpdu_len(next) + 4;
 		if (ALIGN(len, 4) + nlen > max_len)
 			break;
@@ -5467,17 +5516,26 @@ static int b43_op_ampdu_action(struct ieee80211_hw *hw,
 		if (!wl->ampdu_tx)
 			return -EOPNOTSUPP;
 		/* The window starts at the first MPDU of the session */
-		bsta->ampdu_seq[params->tid] =
-			ieee80211_sn_sub(params->ssn, 1);
+		bsta->ampdu_win_start[params->tid] = params->ssn;
+		bsta->ampdu_win_pending[params->tid] = 0;
+		bsta->ampdu_win_size[params->tid] = 0;
 		return IEEE80211_AMPDU_TX_START_IMMEDIATE;
 	}
 	case IEEE80211_AMPDU_TX_STOP_CONT:
 		ieee80211_stop_tx_ba_cb_irqsafe(vif, params->sta->addr,
 						params->tid);
 		return 0;
+	case IEEE80211_AMPDU_TX_OPERATIONAL: {
+		struct b43_sta *bsta = (struct b43_sta *)params->sta->drv_priv;
+
+		/* The receiver's block ack buffer, from its ADDBA response */
+		bsta->ampdu_win_size[params->tid] =
+			clamp_t(u16, params->buf_size, 1,
+				IEEE80211_MAX_AMPDU_BUF_HT);
+		return 0;
+	}
 	case IEEE80211_AMPDU_TX_STOP_FLUSH:
 	case IEEE80211_AMPDU_TX_STOP_FLUSH_CONT:
-	case IEEE80211_AMPDU_TX_OPERATIONAL:
 		/* Frames are aggregated as they are queued */
 		return 0;
 	default:

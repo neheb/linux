@@ -1463,27 +1463,63 @@ static bool b43_dma_ampdu_frame_acked(const struct b43_txstatus *status,
 	       (status->ba_bitmap & BIT_ULL(idx));
 }
 
+/* Whether the MPDU @seq is in flight in the block ack window of @tid */
+static bool b43_dma_ampdu_in_window(struct b43_sta *bsta, u8 tid, u16 seq)
+{
+	u16 idx = ieee80211_sn_sub(seq, bsta->ampdu_win_start[tid]);
+
+	return idx < IEEE80211_MAX_AMPDU_BUF_HT &&
+	       (bsta->ampdu_win_pending[tid] & BIT_ULL(idx));
+}
+
+/* Add the MPDU @seq, just queued, to the block ack window of @tid */
+static void b43_dma_ampdu_win_add(struct b43_sta *bsta, u8 tid, u16 seq)
+{
+	u16 idx;
+
+	if (!bsta->ampdu_win_pending[tid])
+		bsta->ampdu_win_start[tid] = seq;
+	idx = ieee80211_sn_sub(seq, bsta->ampdu_win_start[tid]);
+	if (idx < IEEE80211_MAX_AMPDU_BUF_HT)
+		bsta->ampdu_win_pending[tid] |= BIT_ULL(idx);
+}
+
+/*
+ * The MPDU @seq is done with, acked or given up on: take it out of the
+ * block ack window of @tid, and move the window on past the MPDUs done.
+ */
+static void b43_dma_ampdu_win_done(struct b43_sta *bsta, u8 tid, u16 seq)
+{
+	u16 idx = ieee80211_sn_sub(seq, bsta->ampdu_win_start[tid]);
+
+	if (idx < IEEE80211_MAX_AMPDU_BUF_HT)
+		bsta->ampdu_win_pending[tid] &= ~BIT_ULL(idx);
+	while (bsta->ampdu_win_pending[tid] &&
+	       !(bsta->ampdu_win_pending[tid] & 1)) {
+		bsta->ampdu_win_pending[tid] >>= 1;
+		bsta->ampdu_win_start[tid] =
+			ieee80211_sn_inc(bsta->ampdu_win_start[tid]);
+	}
+}
+
 /*
  * Whether the MPDU in @skb may be sent again. It must still be in the
- * block ack window, which follows the newest MPDU queued: once it falls
- * behind, the receiver takes it for an old frame, or for a new one once
- * the sequence numbers wrap.
+ * block ack window: b43_tx_ampdu() sends no MPDU past the window, so the
+ * receiver still waits for it.
  */
 static bool b43_dma_ampdu_may_retry(struct b43_wldev *dev,
+				    struct b43_sta *bsta,
 				    struct sk_buff *skb)
 {
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	u16 seq = b43_dma_ampdu_seq(skb);
 	u8 tid = ieee80211_get_tid(hdr);
 	struct b43_ampdu_retry *retry;
-	struct b43_sta *bsta;
 
-	bsta = b43_dma_ampdu_sta(dev, skb);
 	if (!bsta || !dev->wl->vif)
 		return false;
 
-	if (ieee80211_sn_sub(bsta->ampdu_seq[tid], seq) >=
-	    IEEE80211_MAX_AMPDU_BUF_HT)
+	if (!b43_dma_ampdu_in_window(bsta, tid, seq))
 		return false;
 
 	retry = &bsta->ampdu_retry[tid][seq % IEEE80211_MAX_AMPDU_BUF_HT];
@@ -1517,6 +1553,7 @@ static bool b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
 	struct b43_private_tx_info *priv_info = b43_get_priv_tx_info(info);
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	bool acked = b43_dma_ampdu_frame_acked(status, skb);
+	struct b43_sta *bsta = b43_dma_ampdu_sta(dev, skb);
 	int i;
 
 	unmap_descbuffer(ring, meta->dmaaddr, skb->len, 1);
@@ -1524,7 +1561,7 @@ static bool b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
 	priv_info->bouncebuffer = NULL;
 	meta->skb = B43_DMA_PTR_POISON;
 
-	if (!acked && b43_dma_ampdu_may_retry(dev, skb)) {
+	if (!acked && b43_dma_ampdu_may_retry(dev, bsta, skb)) {
 		hdr->frame_control |= cpu_to_le16(IEEE80211_FCTL_RETRY);
 		/* The bounce buffer pointer took the place of the vif */
 		info->control.vif = dev->wl->vif;
@@ -1543,6 +1580,10 @@ static bool b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
 		__skb_queue_tail(retry, skb);
 		return false;
 	}
+
+	if (bsta)
+		b43_dma_ampdu_win_done(bsta, ieee80211_get_tid(hdr),
+				       b43_dma_ampdu_seq(skb));
 
 	ieee80211_tx_info_clear_status(info);
 	info->status.rates[0].count = 1;
@@ -1603,6 +1644,7 @@ int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
 	struct b43_sta *bsta;
 	unsigned int i, queued = 0;
 	int err;
+	u8 tid;
 
 	ring = select_ring_by_priority(dev, skb_get_queue_mapping(skbs[0]));
 	if (unlikely(ring->stopped) ||
@@ -1613,17 +1655,7 @@ int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
 
 	rcu_read_lock();
 	bsta = b43_dma_ampdu_sta(dev, skbs[0]);
-	if (bsta) {
-		u8 tid = ieee80211_get_tid((struct ieee80211_hdr *)skbs[0]->data);
-
-		for (i = 0; i < n; i++) {
-			u16 seq = b43_dma_ampdu_seq(skbs[i]);
-
-			if (ieee80211_sn_less(bsta->ampdu_seq[tid], seq))
-				bsta->ampdu_seq[tid] = seq;
-		}
-	}
-	rcu_read_unlock();
+	tid = ieee80211_get_tid((struct ieee80211_hdr *)skbs[0]->data);
 
 	ampdu->active = true;
 	ampdu->len = ampdu_len;
@@ -1633,12 +1665,16 @@ int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
 
 		err = dma_tx_fragment(ring, skbs[i], ampdu->last);
 		if (likely(!err)) {
+			if (bsta)
+				b43_dma_ampdu_win_add(bsta, tid,
+						      b43_dma_ampdu_seq(skbs[i]));
 			queued++;
 			continue;
 		}
 
 		if (!queued) {
 			ampdu->active = false;
+			rcu_read_unlock();
 			return err;
 		}
 		/* Drop this frame and end the A-MPDU with the one before */
@@ -1647,6 +1683,7 @@ int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
 			b43_dma_end_ampdu(ring);
 	}
 	ampdu->active = false;
+	rcu_read_unlock();
 
 	if (free_slots(ring) < TX_SLOTS_PER_FRAME) {
 		unsigned int skb_mapping = skb_get_queue_mapping(skbs[0]);

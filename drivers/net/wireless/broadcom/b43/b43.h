@@ -843,8 +843,14 @@ struct b43_ampdu_retry {
 
 /* Data private to b43 for each station */
 struct b43_sta {
-	/* Newest sequence number queued in an A-MPDU, by TID */
-	u16 ampdu_seq[IEEE80211_NUM_TIDS];
+	/*
+	 * Block ack window by TID: the sequence number it starts at, the
+	 * MPDUs in it that are queued and not completed yet (bit n for
+	 * start + n), and the size the receiver accepted.
+	 */
+	u16 ampdu_win_start[IEEE80211_NUM_TIDS];
+	u64 ampdu_win_pending[IEEE80211_NUM_TIDS];
+	u8 ampdu_win_size[IEEE80211_NUM_TIDS];
 	/* Resends of the MPDUs in the block ack window, by TID */
 	struct b43_ampdu_retry
 		ampdu_retry[IEEE80211_NUM_TIDS][IEEE80211_MAX_AMPDU_BUF_HT];
