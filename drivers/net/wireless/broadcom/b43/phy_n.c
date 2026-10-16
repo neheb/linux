@@ -5127,13 +5127,16 @@ static void b43_nphy_tx_cal_phy_setup(struct b43_wldev *dev)
 		b43_phy_mask(dev, B43_NPHY_PAPD_EN0, ~0x0001);
 		b43_phy_mask(dev, B43_NPHY_PAPD_EN1, ~0x0001);
 
-		tmp = b43_nphy_read_lpf_ctl(dev, 0);
-		if (phy->rev >= 19)
+		/* The RF sequence table of older revisions is shorter */
+		if (phy->rev >= 19) {
+			tmp = b43_nphy_read_lpf_ctl(dev, 0);
 			b43_nphy_rf_ctl_override_rev19(dev, 0x80, tmp, 0, false,
 						       1);
-		else if (phy->rev >= 7)
+		} else if (phy->rev >= 7) {
+			tmp = b43_nphy_read_lpf_ctl(dev, 0);
 			b43_nphy_rf_ctl_override_rev7(dev, 0x80, tmp, 0, false,
 						      1);
+		}
 
 		if (nphy->use_int_tx_iq_lo_cal && true /* FIXME */) {
 			if (phy->rev >= 19) {
