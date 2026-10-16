@@ -3832,6 +3832,13 @@ static int b43_tx_ampdu(struct b43_wldev *dev, struct sk_buff_head *queue,
 		skbs[n++] = skb_dequeue(queue);
 	}
 
+	/*
+	 * A collision destroys a whole A-MPDU, a few ms of airtime, and
+	 * without RTS/CTS about one in six went unanswered with a single
+	 * station sending TCP acks. Protect A-MPDUs of more than one MPDU.
+	 */
+	if (n > 1)
+		info->control.rates[0].flags |= IEEE80211_TX_RC_USE_RTS_CTS;
 	err = b43_dma_tx_ampdu(dev, skbs, n, len);
 	if (err == -ENOSPC) {
 		for (i = n; i > 0; i--)
