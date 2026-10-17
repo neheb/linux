@@ -1169,12 +1169,10 @@ static int b43_phy_ht_op_switch_channel(struct b43_wldev *dev,
 	enum nl80211_channel_type channel_type =
 		cfg80211_get_chandef_type(&dev->wl->hw->conf.chandef);
 
-	if (b43_current_band(dev->wl) == NL80211_BAND_2GHZ) {
-		if ((new_channel < 1) || (new_channel > 14))
-			return -EINVAL;
-	} else {
+	/* On 5 GHz, b43_phy_ht_set_channel() rejects untabulated channels */
+	if (b43_current_band(dev->wl) == NL80211_BAND_2GHZ &&
+	    (new_channel < 1 || new_channel > 14))
 		return -EINVAL;
-	}
 
 	return b43_phy_ht_set_channel(dev, channel, channel_type);
 }
