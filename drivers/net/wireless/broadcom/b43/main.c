@@ -416,6 +416,15 @@ static struct ieee80211_supported_band b43_band_2ghz_limited_ht = {
 	.ht_cap		= B43_HT_CAP,
 };
 
+static struct ieee80211_supported_band b43_band_5GHz_htphy_ht = {
+	.band		= NL80211_BAND_5GHZ,
+	.channels	= b43_5ghz_htphy_chantable,
+	.n_channels	= ARRAY_SIZE(b43_5ghz_htphy_chantable),
+	.bitrates	= b43_a_ratetable,
+	.n_bitrates	= b43_a_ratetable_size,
+	.ht_cap		= B43_HT_CAP,
+};
+
 /*
  * Whether b43 enables HT on the PHY of @dev. HT needs the 598 firmware TX
  * header. The firmware is not loaded when the bands are set up: with an
@@ -424,7 +433,8 @@ static struct ieee80211_supported_band b43_band_2ghz_limited_ht = {
  */
 static bool b43_ht_supported(struct b43_wldev *dev)
 {
-	return dev->phy.type == B43_PHYTYPE_N && dev->phy.rev >= 3;
+	return (dev->phy.type == B43_PHYTYPE_N && dev->phy.rev >= 3) ||
+	       dev->phy.type == B43_PHYTYPE_HT;
 }
 
 static void b43_wireless_core_exit(struct b43_wldev *dev);
@@ -2717,9 +2727,12 @@ static void b43_request_firmware(struct work_struct *work)
 	goto out;
 
 start_ieee80211:
+	/*
+	 * mac80211 needs four queues for HT. On the BCM4331 only the best
+	 * effort FIFO works, so it gets them without hardware QoS.
+	 */
 	wl->hw->queues = B43_QOS_QUEUE_NUM;
-	if (!modparam_qos || dev->fw.opensource ||
-	    dev->dev->chip_id == BCMA_CHIP_ID_BCM4331)
+	if (!modparam_qos || dev->fw.opensource)
 		wl->hw->queues = 1;
 
 	err = ieee80211_register_hw(wl->hw);
@@ -2829,7 +2842,8 @@ static int b43_upload_microcode(struct b43_wldev *dev)
 	if (b43_ht_supported(dev) && dev->fw.hdr_format != B43_FW_HDR_598)
 		b43warn(dev->wl, "HT needs firmware 598 or newer, sending legacy rates only\n");
 
-	dev->qos_enabled = dev->wl->hw->queues > 1;
+	dev->qos_enabled = dev->wl->hw->queues > 1 &&
+			   dev->dev->chip_id != BCMA_CHIP_ID_BCM4331;
 	/* Default to firmware/hardware crypto acceleration. */
 	dev->hwcrypto_enabled = true;
 
@@ -3983,6 +3997,9 @@ static void b43_op_tx(struct ieee80211_hw *hw,
 		return;
 	}
 
+	/* Without hardware QoS, all frames go through the first queue */
+	if (wl->current_dev && !wl->current_dev->qos_enabled)
+		skb_set_queue_mapping(skb, 0);
 	skb_queue_mapping = skb_get_queue_mapping(skb);
 	skb_queue_tail(&wl->tx_queue[skb_queue_mapping], skb);
 	if (skb_queue_len(&wl->tx_queue[skb_queue_mapping]) >=
@@ -5721,8 +5738,8 @@ static int b43_setup_bands(struct b43_wldev *dev,
 				&b43_band_5GHz_nphy;
 	} else if (dev->phy.type == B43_PHYTYPE_HT) {
 		if (have_5ghz_phy)
-			hw->wiphy->bands[NL80211_BAND_5GHZ] =
-				&b43_band_5GHz_htphy;
+			hw->wiphy->bands[NL80211_BAND_5GHZ] = ht ?
+				&b43_band_5GHz_htphy_ht : &b43_band_5GHz_htphy;
 	} else {
 		if (have_5ghz_phy)
 			hw->wiphy->bands[NL80211_BAND_5GHZ] = &b43_band_5GHz_aphy;
