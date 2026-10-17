@@ -1076,11 +1076,31 @@ static void b43_phy_ht_ext_fem_setup(struct b43_wldev *dev)
 	bus = dev->dev->bdev->bus;
 	bf2 = sprom->boardflags2_lo | (sprom->boardflags2_hi << 16);
 	if (bus->chipinfo.id != BCMA_CHIP_ID_BCM4331 ||
-	    b43_current_band(dev->wl) != NL80211_BAND_2GHZ ||
 	    !(bf2 & B43_BFL2_ANAPACTRL_2G) ||
 	    bus->chipinfo.pkg == 9 || bus->chipinfo.pkg == 11)
 		return;
 	cc = &bus->drv_cc;
+
+	/*
+	 * Outside the 12x9 package bcma sets EXTPA_EN2 where it would set
+	 * EXTPA_ON_GPIO2_5, the 5 GHz ext PA lines, so EXTPA_EN2 likely
+	 * enables the 5 GHz ext PAs. Only the 2.4 GHz ones are under analog
+	 * control: at 5 GHz, give the PAs back the lines bcma set up.
+	 */
+	if (b43_current_band(dev->wl) != NL80211_BAND_2GHZ) {
+		old = bcma_cc_read32(cc, BCMA_CC_CHIPCTL);
+		if (!(old & B43_CHIPCTL_4331_EXTPA_ANA_EN))
+			return;
+		set = BCMA_CHIPCTL_4331_EXTPA_EN;
+		if (bus->chipinfo.rev > 0)
+			set |= BCMA_CHIPCTL_4331_EXTPA_EN2;
+		bcma_cc_maskset32(cc, BCMA_CC_CHIPCTL,
+				  ~B43_CHIPCTL_4331_EXTPA_ANA_EN, set);
+		b43dbg(dev->wl,
+		       "HT-PHY ext FEM: digital PA control, chipcontrol 0x%08x -> 0x%08x\n",
+		       old, bcma_cc_read32(cc, BCMA_CC_CHIPCTL));
+		return;
+	}
 
 	set = B43_CHIPCTL_4331_EXTPA_ANA_EN;
 	if (sprom->boardflags_lo & B43_BFL_EXTLNA)
@@ -1292,12 +1312,10 @@ static int b43_phy_ht_op_switch_channel(struct b43_wldev *dev,
 	enum nl80211_channel_type channel_type =
 		cfg80211_get_chandef_type(&dev->wl->hw->conf.chandef);
 
-	if (b43_current_band(dev->wl) == NL80211_BAND_2GHZ) {
-		if ((new_channel < 1) || (new_channel > 14))
-			return -EINVAL;
-	} else {
+	/* On 5 GHz, b43_phy_ht_set_channel() rejects untabulated channels */
+	if (b43_current_band(dev->wl) == NL80211_BAND_2GHZ &&
+	    (new_channel < 1 || new_channel > 14))
 		return -EINVAL;
-	}
 
 	return b43_phy_ht_set_channel(dev, channel, channel_type);
 }
