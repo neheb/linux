@@ -17,6 +17,38 @@
 #include "radio_2059.h"
 #include "main.h"
 
+/*
+ * A front end module like the R6400's. BFL_EXTLNA and extpagain don't tell
+ * it apart: the Apple BCM4331 card has an external LNA and PA as well.
+ */
+static bool b43_phy_ht_ext_fem(struct b43_wldev *dev)
+{
+	return dev->dev->bus_sprom->boardflags_lo & (B43_BFL_FEM | B43_BFL_HGPA);
+}
+
+/*
+ * The static TX gain index to use, or -1 for the hardware power control
+ * loop. On the BCM4331 boards with an external PA (Netgear R6400) the loop
+ * drives the gain to (near) maximum, which compresses the PA: at a fixed
+ * client distance the download doubled (12 -> 22.5 Mbit/s at 802.11g) with
+ * the loop off and a fixed gain from table 0x1a entry 0xc0 + index, for
+ * every index from 16 up to 40 on the R6400 v2 (FEM board); index 12 shows
+ * the first loss, index 8 distorts, index 0 is as bad as the loop. A board
+ * with a high-gain external PA (BFL_HGPA, R6400 v1) still compresses at
+ * index 16 and is clean from 20. wl runs these chains at indices 10..17.
+ * Use 24 with BFL_HGPA, else 16, i.e. about four steps above the measured
+ * edge on both boards. Elsewhere the loop stays on: on an Apple BCM4331
+ * card, with an external PA but neither flag, it holds the SPROM target
+ * power.
+ */
+static int b43_phy_ht_txgain_idx(struct b43_wldev *dev)
+{
+	if (!b43_phy_ht_ext_fem(dev))
+		return -1;
+
+	return (dev->dev->bus_sprom->boardflags_lo & B43_BFL_HGPA) ? 24 : 16;
+}
+
 /* Force values to keep compatibility with wl */
 enum ht_rssi_type {
 	HT_RSSI_W1 = 0,
@@ -514,7 +546,11 @@ static void b43_phy_ht_tx_power_fix(struct b43_wldev *dev)
 
 	for (i = 0; i < 3; i++) {
 		u16 mask;
-		u32 tmp = b43_httab_read(dev, B43_HTTAB32(26, 0xE8));
+		int idx = b43_phy_ht_txgain_idx(dev);
+		u32 tmp;
+
+		/* without a static gain, index 40 as before */
+		tmp = b43_httab_read(dev, B43_HTTAB32(26, 0xC0 + (idx >= 0 ? idx : 40)));
 
 		if (0) /* FIXME */
 			mask = 0x2 << (i * 4);
@@ -1067,7 +1103,13 @@ static int b43_phy_ht_op_init(struct b43_wldev *dev)
 	b43_phy_ht_tx_power_ctl_idle_tssi(dev);
 	b43_phy_ht_tx_power_ctl_setup(dev);
 	b43_phy_ht_tssi_setup(dev);
-	b43_phy_ht_tx_power_ctl(dev, saved_tx_pwr_ctl);
+	if (b43_phy_ht_txgain_idx(dev) >= 0) {
+		b43_phy_ht_tx_power_ctl(dev, false);
+		b43dbg(dev->wl, "HT-PHY: static TX gain index %d\n",
+		       b43_phy_ht_txgain_idx(dev));
+	} else {
+		b43_phy_ht_tx_power_ctl(dev, saved_tx_pwr_ctl);
+	}
 
 	return 0;
 }
