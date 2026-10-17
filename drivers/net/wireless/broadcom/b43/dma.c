@@ -1937,7 +1937,7 @@ out_wake:
 
 	if (dev->wl->tx_queue_stopped[ring->queue_prio]) {
 		dev->wl->tx_queue_stopped[ring->queue_prio] = false;
-	} else {
+	} else if (!b43_tx_queue_full(dev->wl, ring->queue_prio)) {
 		/* If the driver queue is running wake the corresponding
 		 * mac80211 queue. */
 		b43_wake_queue(dev, ring->queue_prio);

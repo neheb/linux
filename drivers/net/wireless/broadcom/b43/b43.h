@@ -1144,6 +1144,18 @@ static inline bool b43_using_pio_transfers(struct b43_wldev *dev)
 	return dev->__using_pio_transfers;
 }
 
+/*
+ * Frames b43_op_tx() takes per queue before it stops the mac80211 queue.
+ * mac80211 hands over all it holds once the queue is woken, so without a
+ * limit the queue grows as long as frames come faster than they go out.
+ */
+#define B43_TX_QUEUE_MAX	128
+
+static inline bool b43_tx_queue_full(struct b43_wl *wl, int queue_prio)
+{
+	return skb_queue_len(&wl->tx_queue[queue_prio]) >= B43_TX_QUEUE_MAX;
+}
+
 static inline void b43_wake_queue(struct b43_wldev *dev, int queue_prio)
 {
 	if (dev->qos_enabled)

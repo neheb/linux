@@ -3977,7 +3977,8 @@ static void b43_op_tx(struct ieee80211_hw *hw,
 	skb_queue_tail(&wl->tx_queue[skb_queue_mapping], skb);
 	if (!wl->tx_queue_stopped[skb_queue_mapping])
 		ieee80211_queue_work(wl->hw, &wl->tx_work);
-	else
+	if (wl->tx_queue_stopped[skb_queue_mapping] ||
+	    b43_tx_queue_full(wl, skb_queue_mapping))
 		b43_stop_queue(wl->current_dev, skb_queue_mapping);
 }
 
