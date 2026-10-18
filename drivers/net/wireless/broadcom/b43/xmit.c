@@ -192,28 +192,55 @@ static u16 b43_generate_tx_phy_ctl1(struct b43_wldev *dev, u8 bitrate)
 	return control;
 }
 
-/* PHY TX control word 1 modulation and coding byte for MCS 0-7 */
+/*
+ * PHY TX control word 1 modulation and coding byte for MCS 0-15. Bits 6-7
+ * hold the number of spatial streams minus one.
+ */
 static const u8 b43_ht_phy_ctl1_mod[] = {
 	0x00, 0x08, 0x0a, 0x10, 0x12, 0x19, 0x1a, 0x1c,
+	0x40, 0x48, 0x4a, 0x50, 0x52, 0x59, 0x5a, 0x5c,
 };
 
-/* Data rate of MCS 0-7 at 20 MHz with the long guard interval, in kbit/s */
-static const u16 b43_ht_rate_kbps[] = {
+/* Data rate of MCS 0-15 at 20 MHz with the long guard interval, in kbit/s */
+static const u32 b43_ht_rate_kbps[] = {
 	6500, 13000, 19500, 26000, 39000, 52000, 58500, 65000,
+	13000, 26000, 39000, 52000, 78000, 104000, 117000, 130000,
 };
 
-/* Legacy rate closest to MCS 0-7, for firmware without HT TX support */
+/* Legacy rate closest to MCS 0-15, for firmware without HT TX support */
 static const u8 b43_ht_legacy_rate[] = {
 	B43_OFDM_RATE_6MB, B43_OFDM_RATE_12MB, B43_OFDM_RATE_18MB,
 	B43_OFDM_RATE_24MB, B43_OFDM_RATE_36MB, B43_OFDM_RATE_48MB,
 	B43_OFDM_RATE_54MB, B43_OFDM_RATE_54MB,
+	B43_OFDM_RATE_12MB, B43_OFDM_RATE_24MB, B43_OFDM_RATE_36MB,
+	B43_OFDM_RATE_48MB, B43_OFDM_RATE_54MB, B43_OFDM_RATE_54MB,
+	B43_OFDM_RATE_54MB, B43_OFDM_RATE_54MB,
 };
+
+/* MCS 8-15 send two spatial streams */
+static bool b43_ht_mcs_2ss(u8 mcs)
+{
+	return mcs >= 8;
+}
+
+/* STBC only applies to a single spatial stream */
+static bool b43_ht_stbc(u8 mcs, bool stbc)
+{
+	return stbc && !b43_ht_mcs_2ss(mcs);
+}
 
 static u16 b43_generate_tx_phy_ctl1_ht(u8 mcs, bool stbc)
 {
-	return B43_TXH_PHY1_BW_20 |
-	       (stbc ? B43_TXH_PHY1_MODE_STBC : B43_TXH_PHY1_MODE_SISO) |
-	       (b43_ht_phy_ctl1_mod[mcs] << 8);
+	u16 mode;
+
+	if (b43_ht_mcs_2ss(mcs))
+		mode = B43_TXH_PHY1_MODE_SDM;
+	else if (stbc)
+		mode = B43_TXH_PHY1_MODE_STBC;
+	else
+		mode = B43_TXH_PHY1_MODE_SISO;
+
+	return B43_TXH_PHY1_BW_20 | mode | (b43_ht_phy_ctl1_mod[mcs] << 8);
 }
 
 /* Generate a mixed-mode HT PLCP header (HT-SIG) */
@@ -228,7 +255,7 @@ static void b43_generate_ht_plcp_hdr(struct b43_plcp_hdr6 *plcp,
 	/* Smoothing, not a sounding PPDU, reserved bit set */
 	plcp->raw[3] = 0x07;
 	/* One extra space-time stream: STBC of a single spatial stream */
-	if (stbc)
+	if (b43_ht_stbc(mcs, stbc))
 		plcp->raw[3] |= 0x10;
 	if (sgi)
 		plcp->raw[3] |= 0x80;
@@ -244,6 +271,7 @@ static u16 b43_ht_lsig_len(u8 mcs, bool sgi, bool stbc, unsigned int octets)
 	unsigned int kbps = b43_ht_rate_kbps[mcs];
 	unsigned int nsyms, bits;
 
+	stbc = b43_ht_stbc(mcs, stbc);
 	if (sgi)
 		kbps = DIV_ROUND_UP(kbps * 10, 9);
 
@@ -255,7 +283,7 @@ static u16 b43_ht_lsig_len(u8 mcs, bool sgi, bool stbc, unsigned int octets)
 	else
 		nsyms = DIV_ROUND_UP(bits, kbps * 4);
 	/* An HT-LTF per space-time stream, two HT-SIG and the HT-STF */
-	nsyms += (stbc ? 2 : 1) + 3;
+	nsyms += (stbc || b43_ht_mcs_2ss(mcs) ? 2 : 1) + 3;
 
 	return 3 * nsyms - 3;
 }

@@ -971,6 +971,9 @@ struct b43_wl {
 	bool hw_registered;
 	/* HT is enabled, and with it A-MPDU */
 	bool ampdu_tx;
+	/* The HT bands, set up for the chains of the device */
+	struct ieee80211_supported_band band_2ghz_ht;
+	struct ieee80211_supported_band band_5ghz_ht;
 
 	/* We can only have one operating interface (802.11 core)
 	 * at a time. General information about this interface follows.

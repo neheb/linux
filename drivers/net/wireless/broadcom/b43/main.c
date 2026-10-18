@@ -5707,6 +5707,32 @@ out:
 	b43info(wl, "Controller restarted\n");
 }
 
+/*
+ * Add a second spatial stream for devices with at least two chains, from
+ * the SPROM chain masks (all cores when unset).
+ */
+static void b43_ht_cap_set_chains(struct b43_wldev *dev,
+				  struct ieee80211_sta_ht_cap *ht_cap)
+{
+	struct ssb_sprom *sprom = dev->dev->bus_sprom;
+	int cores = dev->phy.type == B43_PHYTYPE_HT ? 3 : 2;
+	u8 mask = (1 << cores) - 1;
+	int tx = hweight8(sprom->txchain & mask) ?: cores;
+	int rx = hweight8(sprom->rxchain & mask) ?: cores;
+	int tx_ss = min(tx, 2), rx_ss = min(rx, 2);
+
+	if (rx_ss >= 2)
+		ht_cap->mcs.rx_mask[1] = 0xff;
+	if (tx < 2)
+		ht_cap->cap &= ~IEEE80211_HT_CAP_TX_STBC;
+	if (tx_ss != rx_ss)
+		ht_cap->mcs.tx_params |= IEEE80211_HT_MCS_TX_RX_DIFF |
+			((tx_ss - 1) << IEEE80211_HT_MCS_TX_MAX_STREAMS_SHIFT);
+
+	b43dbg(dev->wl, "HT with %d TX and %d RX chains, %d/%d streams\n",
+	       tx, rx, tx_ss, rx_ss);
+}
+
 static int b43_setup_bands(struct b43_wldev *dev,
 			   bool have_2ghz_phy, bool have_5ghz_phy)
 {
@@ -5725,10 +5751,12 @@ static int b43_setup_bands(struct b43_wldev *dev,
 	ht = b43_ht_supported(dev);
 	dev->wl->ampdu_tx = ht;
 
-	if (have_2ghz_phy && ht)
-		hw->wiphy->bands[NL80211_BAND_2GHZ] = limited_2g ?
-			&b43_band_2ghz_limited_ht : &b43_band_2ghz_ht;
-	else if (have_2ghz_phy)
+	if (have_2ghz_phy && ht) {
+		dev->wl->band_2ghz_ht = limited_2g ? b43_band_2ghz_limited_ht :
+						     b43_band_2ghz_ht;
+		b43_ht_cap_set_chains(dev, &dev->wl->band_2ghz_ht.ht_cap);
+		hw->wiphy->bands[NL80211_BAND_2GHZ] = &dev->wl->band_2ghz_ht;
+	} else if (have_2ghz_phy)
 		hw->wiphy->bands[NL80211_BAND_2GHZ] = limited_2g ?
 			&b43_band_2ghz_limited : &b43_band_2GHz;
 	if (dev->phy.type == B43_PHYTYPE_N) {
@@ -5737,9 +5765,16 @@ static int b43_setup_bands(struct b43_wldev *dev,
 				&b43_band_5GHz_nphy_limited :
 				&b43_band_5GHz_nphy;
 	} else if (dev->phy.type == B43_PHYTYPE_HT) {
-		if (have_5ghz_phy)
-			hw->wiphy->bands[NL80211_BAND_5GHZ] = ht ?
-				&b43_band_5GHz_htphy_ht : &b43_band_5GHz_htphy;
+		if (have_5ghz_phy && ht) {
+			dev->wl->band_5ghz_ht = b43_band_5GHz_htphy_ht;
+			b43_ht_cap_set_chains(dev,
+					      &dev->wl->band_5ghz_ht.ht_cap);
+			hw->wiphy->bands[NL80211_BAND_5GHZ] =
+				&dev->wl->band_5ghz_ht;
+		} else if (have_5ghz_phy) {
+			hw->wiphy->bands[NL80211_BAND_5GHZ] =
+				&b43_band_5GHz_htphy;
+		}
 	} else {
 		if (have_5ghz_phy)
 			hw->wiphy->bands[NL80211_BAND_5GHZ] = &b43_band_5GHz_aphy;
