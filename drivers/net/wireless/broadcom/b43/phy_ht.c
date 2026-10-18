@@ -555,16 +555,23 @@ static void b43_phy_ht_tx_power_ctl(struct b43_wldev *dev, bool enable)
 	} else {
 		b43_phy_set(dev, B43_PHY_HT_TXPCTL_CMD_C1, en_bits);
 
+		/*
+		 * Only touch the index: the enable bits are in the same
+		 * register for core 1
+		 */
 		if (b43_current_band(dev->wl) == NL80211_BAND_5GHZ) {
 			for (i = 0; i < 3; i++)
-				b43_phy_write(dev, cmd_regs[i], 0x32);
+				b43_phy_maskset(dev, cmd_regs[i],
+						~B43_PHY_HT_TXPCTL_CMD_C1_INIT,
+						0x32);
 		}
 
 		for (i = 0; i < 3; i++)
 			if (phy_ht->tx_pwr_idx[i] <=
 			    B43_PHY_HT_TXPCTL_CMD_C1_INIT)
-				b43_phy_write(dev, cmd_regs[i],
-					      phy_ht->tx_pwr_idx[i]);
+				b43_phy_maskset(dev, cmd_regs[i],
+						~B43_PHY_HT_TXPCTL_CMD_C1_INIT,
+						phy_ht->tx_pwr_idx[i]);
 	}
 
 	phy_ht->tx_pwr_ctl = enable;
