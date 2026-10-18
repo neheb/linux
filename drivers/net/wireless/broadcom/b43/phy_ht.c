@@ -767,6 +767,71 @@ static void b43_phy_ht_spur_avoid(struct b43_wldev *dev,
 	b43_phy_ht_reset_cca(dev);
 }
 
+/*
+ * The RX gain tables depend on the band. Tables 0, 1 and 40 hold the gains
+ * of cores 1, 2 and 3, tables 2, 3 and 41 the matching gain codes. Values
+ * from wl, which writes them on every band change.
+ *
+ * They are wl's values for an Apple BCM4331 card, which has an external
+ * LNA and PA. On a Netgear R6400, whose front end module (BFL_FEM, or a
+ * high-gain PA with BFL_HGPA) differs, they give too much gain and cost
+ * about 20% of the throughput, so keep the old gains there; wl uses lower
+ * ones on that board. BFL_EXTLNA does not tell the two apart.
+ */
+static void b43_phy_ht_gain_tables(struct b43_wldev *dev,
+				   enum nl80211_band band)
+{
+	static const u8 gain_tbl[] = { 0, 1, 40 };
+	static const u8 code_tbl[] = { 2, 3, 41 };
+	static const u16 gain[2][4][4] = {
+		{ { 0x10, 0x10 }, { 0x0b, 0x11, 0x15, 0x1a },
+		  { 0xfd, 0x07, 0x07, 0x07 } },
+		{ { 0x0d, 0x0d }, { 0x0e, 0x14, 0x18, 0x1c },
+		  { 0xff, 0x07, 0x0b, 0x0b } },
+	};
+	static const u16 code[2][4] = {
+		{ 0, 1, 1, 1 }, { 0, 1, 2, 2 },
+	};
+	bool ghz5 = band == NL80211_BAND_5GHZ;
+	int core, i;
+
+	if (dev->dev->bus_sprom->boardflags_lo & (B43_BFL_FEM | B43_BFL_HGPA)) {
+		for (core = 0; core < ARRAY_SIZE(gain_tbl); core++)
+			b43_httab_write_few(dev, B43_HTTAB16(gain_tbl[core], 0x8),
+					    4, 0x09, 0x0e, 0x13, 0x18);
+		return;
+	}
+
+	for (core = 0; core < ARRAY_SIZE(gain_tbl); core++) {
+		u8 g = gain_tbl[core], c = code_tbl[core];
+
+		for (i = 0; i < 2; i++)
+			b43_httab_write(dev, B43_HTTAB16(g, i),
+					gain[ghz5][0][i]);
+		for (i = 0; i < 4; i++) {
+			b43_httab_write(dev, B43_HTTAB16(g, 0x08 + i),
+					gain[ghz5][1][i]);
+			b43_httab_write(dev, B43_HTTAB16(g, 0x10 + i),
+					gain[ghz5][2][i]);
+			b43_httab_write(dev, B43_HTTAB16(c, 0x10 + i),
+					code[ghz5][i]);
+		}
+		for (i = 0; i <= 0xa; i++) {
+			if (ghz5) {
+				b43_httab_write(dev, B43_HTTAB16(g, 0x20 + i),
+						i < 2 ? 0xfa : 0xfd);
+				b43_httab_write(dev, B43_HTTAB16(c, 0x20 + i),
+						i < 2 ? 1 : 2);
+			} else {
+				b43_httab_write(dev, B43_HTTAB16(g, 0x20 + i),
+						i < 0xa ? 0x00 : 0xfd);
+				b43_httab_write(dev, B43_HTTAB16(c, 0x20 + i),
+						i < 0xa ? 1 : 2);
+			}
+		}
+	}
+}
+
 static void b43_phy_ht_channel_setup(struct b43_wldev *dev,
 				const struct b43_phy_ht_channeltab_e_phy *e,
 				struct ieee80211_channel *new_channel)
@@ -807,6 +872,8 @@ static void b43_phy_ht_channel_setup(struct b43_wldev *dev,
 		b43_phy_ht_tx_power_fix(dev);
 
 	b43_phy_ht_spur_avoid(dev, new_channel);
+
+	b43_phy_ht_gain_tables(dev, new_channel->band);
 
 	b43_phy_write(dev, 0x017e, 0x3830);
 }
@@ -952,14 +1019,6 @@ static int b43_phy_ht_op_init(struct b43_wldev *dev)
 	b43_phy_maskset(dev, 0x0283, 0xff00, 0x3e);
 	b43_phy_maskset(dev, B43_PHY_OFDM(0x0141), 0xff00, 0x46);
 	b43_phy_maskset(dev, 0x0283, 0xff00, 0x40);
-
-	b43_httab_write_few(dev, B43_HTTAB16(00, 0x8), 4,
-			    0x09, 0x0e, 0x13, 0x18);
-	b43_httab_write_few(dev, B43_HTTAB16(01, 0x8), 4,
-			    0x09, 0x0e, 0x13, 0x18);
-	/* TODO: Did wl mean 2 instead of 40? */
-	b43_httab_write_few(dev, B43_HTTAB16(40, 0x8), 4,
-			    0x09, 0x0e, 0x13, 0x18);
 
 	b43_phy_maskset(dev, B43_PHY_OFDM(0x24), 0x3f, 0xd);
 	b43_phy_maskset(dev, B43_PHY_OFDM(0x64), 0x3f, 0xd);
