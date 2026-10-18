@@ -714,7 +714,7 @@ static void b43_phy_ht_tx_power_ctl_setup(struct b43_wldev *dev)
 
 	for (c = 0; c < 3; c++) {
 		s32 num, den, pwr;
-		u32 regval[64];
+		u16 regval[64];
 
 		for (i = 0; i < 64; i++) {
 			num = 8 * (16 * b0[c] + b1[c] * i);
