@@ -257,6 +257,8 @@ struct b43_dmaring {
 	enum b43_dmatype type;
 	/* Boolean. Is this ring stopped at ieee80211 level? */
 	bool stopped;
+	/* A-MPDUs on the ring that have no TX status yet */
+	unsigned int ampdu_inflight;
 	/* The QOS priority assigned to this ring. Only used for TX rings.
 	 * This is the mac80211 "queue" value. */
 	u8 queue_prio;
@@ -293,6 +295,7 @@ void b43_dma_free(struct b43_wldev *dev);
 void b43_dma_tx_suspend(struct b43_wldev *dev);
 void b43_dma_tx_resume(struct b43_wldev *dev);
 
+bool b43_dma_ampdu_busy(struct b43_wldev *dev, struct sk_buff *skb);
 enum b43_ampdu_window {
 	B43_AMPDU_IN_WINDOW,
 	B43_AMPDU_AHEAD,	/* Not yet: the window is full */

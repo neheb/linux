@@ -1738,6 +1738,26 @@ static void b43_dma_ampdu_rate_status(struct b43_wldev *dev,
 	ieee80211_tx_status_ext(dev->wl->hw, &status);
 }
 
+/* A-MPDUs per TX ring waiting for their TX status */
+#define B43_AMPDU_INFLIGHT	2
+
+/*
+ * Whether the ring for @skb has enough A-MPDUs on the way. Frames queued
+ * meanwhile then go out together in the next one, instead of each in an
+ * A-MPDU of its own as they arrive.
+ */
+bool b43_dma_ampdu_busy(struct b43_wldev *dev, struct sk_buff *skb)
+{
+	struct b43_dmaring *ring;
+
+	ring = select_ring_by_priority(dev, skb_get_queue_mapping(skb));
+	/* Nothing is on the way when the ring is empty */
+	if (!ring->used_slots)
+		ring->ampdu_inflight = 0;
+
+	return ring->ampdu_inflight >= B43_AMPDU_INFLIGHT;
+}
+
 /*
  * Queue the MPDUs of an A-MPDU. The firmware sends frames marked first,
  * intermediate and last back to back as one PPDU, so the DMA engine is
@@ -1804,6 +1824,7 @@ int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
 	ampdu->active = false;
 
 	b43_dma_end_ampdu(ring, first_slot, len, queued < n);
+	ring->ampdu_inflight++;
 
 	if (free_slots(ring) < TX_SLOTS_PER_FRAME) {
 		unsigned int skb_mapping = skb_get_queue_mapping(skbs[0]);
@@ -1835,6 +1856,8 @@ static void b43_dma_handle_ampdu_txstatus(struct b43_wldev *dev,
 	bool last;
 
 	__skb_queue_head_init(&retry);
+	if (ring->ampdu_inflight)
+		ring->ampdu_inflight--;
 	rcu_read_lock();
 	do {
 		/* Header slot */

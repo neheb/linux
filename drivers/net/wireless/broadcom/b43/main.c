@@ -3892,8 +3892,9 @@ static int b43_tx_ampdu(struct b43_wldev *dev, struct sk_buff_head *queue,
 }
 
 /*
- * A-MPDU frames can wait in tx_queue for the block ack window, so stop the
- * mac80211 queue when it holds two A-MPDUs worth of frames.
+ * A-MPDU frames can wait in tx_queue, for the block ack window or for the
+ * A-MPDUs on the way, so stop the mac80211 queue when it holds two
+ * A-MPDUs worth of frames.
  */
 #define B43_TX_QUEUE_MAX	(2 * B43_AMPDU_MAX_FRAMES)
 #define B43_TX_QUEUE_WAKE	(B43_TX_QUEUE_MAX / 2)
@@ -3930,7 +3931,8 @@ static void b43_tx_work(struct work_struct *work)
 					continue;
 				}
 				/* The next TX status starts this work again */
-				if (win == B43_AMPDU_AHEAD) {
+				if (b43_dma_ampdu_busy(dev, skb) ||
+				    win == B43_AMPDU_AHEAD) {
 					skb_queue_head(&wl->tx_queue[queue_num],
 						       skb);
 					break;
