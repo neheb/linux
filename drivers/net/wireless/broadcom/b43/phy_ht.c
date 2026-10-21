@@ -671,6 +671,7 @@ static void b43_phy_ht_tx_power_ctl_setup(struct b43_wldev *dev)
 	s16 a1[3], b0[3], b1[3];
 
 	u16 freq = dev->phy.chandef->chan->center_freq;
+	int limit;
 	int i, c;
 
 	if (b43_current_band(dev->wl) == NL80211_BAND_2GHZ) {
@@ -707,6 +708,17 @@ static void b43_phy_ht_tx_power_ctl_setup(struct b43_wldev *dev)
 		b0[0] = b0[1] = b0[2] = 5612;
 		b1[0] = b1[1] = b1[2] = -1393;
 	}
+
+	/* Regulatory and user limits, but no lower than 8 dBm */
+	limit = INT_TO_Q52(dev->phy.chandef->chan->max_power);
+	if (dev->phy.desired_txpower)
+		limit = min(limit, INT_TO_Q52(dev->phy.desired_txpower));
+	limit = max(limit, INT_TO_Q52(8));
+	for (c = 0; c < 3; c++)
+		target[c] = min_t(int, target[c], limit);
+
+	phy_ht->tx_pwr_last_recalc_freq = freq;
+	phy_ht->tx_pwr_last_recalc_limit = dev->phy.desired_txpower;
 
 	b43_phy_set(dev, B43_PHY_HT_TSSIMODE, B43_PHY_HT_TSSIMODE_EN);
 	b43_phy_mask(dev, B43_PHY_HT_TXPCTL_CMD_C1,
@@ -1215,6 +1227,27 @@ static void b43_phy_ht_op_radio_write(struct b43_wldev *dev, u16 reg,
 static enum b43_txpwr_result
 b43_phy_ht_op_recalc_txpower(struct b43_wldev *dev, bool ignore_tssi)
 {
+	struct b43_phy_ht *phy_ht = dev->phy.ht;
+	u16 freq = dev->phy.chandef->chan->center_freq;
+	bool enabled = phy_ht->tx_pwr_ctl;
+
+	if (phy_ht->tx_pwr_last_recalc_freq == freq &&
+	    phy_ht->tx_pwr_last_recalc_limit == dev->phy.desired_txpower)
+		return B43_TXPWR_RES_DONE;
+
+	/*
+	 * The setup stops the TX power control loop. Restart it from the
+	 * index it had reached, with the new target. With a static TX gain
+	 * the loop stays off, and the target only takes effect once it runs.
+	 */
+	b43_mac_suspend(dev);
+	if (enabled)
+		b43_phy_ht_tx_power_ctl(dev, false);
+	b43_phy_ht_tx_power_ctl_setup(dev);
+	if (enabled)
+		b43_phy_ht_tx_power_ctl(dev, true);
+	b43_mac_enable(dev);
+
 	return B43_TXPWR_RES_DONE;
 }
 

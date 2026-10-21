@@ -129,6 +129,9 @@ struct b43_phy_ht {
 
 	bool tx_pwr_ctl;
 	u8 tx_pwr_idx[3];
+	/* Channel and user limit the TX power control target is set for */
+	u16 tx_pwr_last_recalc_freq;
+	int tx_pwr_last_recalc_limit;
 
 	s32 bb_mult_save[3];
 
