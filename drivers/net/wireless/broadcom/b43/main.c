@@ -4181,6 +4181,17 @@ static void b43_op_bss_info_changed(struct ieee80211_hw *hw,
 	}
 
 	b43_mac_enable(dev);
+
+	/*
+	 * mac80211 passes a TX power limit set on the interface only here,
+	 * not in the power level of the hardware configuration.
+	 */
+	if (changed & BSS_CHANGED_TXPOWER && conf->txpower > 0 &&
+	    conf->txpower != dev->phy.desired_txpower) {
+		dev->phy.desired_txpower = conf->txpower;
+		b43_phy_txpower_check(dev, B43_TXPWR_IGNORE_TIME |
+					   B43_TXPWR_IGNORE_TSSI);
+	}
 out_unlock_mutex:
 	mutex_unlock(&wl->mutex);
 }
