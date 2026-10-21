@@ -4004,6 +4004,34 @@ static void b43_set_retry_limits(struct b43_wldev *dev,
 			long_retry);
 }
 
+/*
+ * Take the TX power limit of the hardware configuration, or that of the
+ * interface if there is one. mac80211 passes a limit set on the interface
+ * only in the latter (BSS_CHANGED_TXPOWER): it recalculates the former,
+ * the minimum over the interfaces, only when the channel changes, so it
+ * may still hold an old limit of the interface. The limit of the
+ * interface is that of the operating channel, which the channel being
+ * scanned can only lower.
+ */
+static void b43_update_desired_txpower(struct b43_wldev *dev)
+{
+	struct ieee80211_conf *conf = &dev->wl->hw->conf;
+	struct ieee80211_vif *vif = dev->wl->vif;
+	int power = conf->power_level;
+
+	if (vif && vif->bss_conf.txpower > 0) {
+		power = vif->bss_conf.txpower;
+		if (conf->chandef.chan)
+			power = min(power, conf->chandef.chan->max_power);
+	}
+	if (power <= 0 || power == dev->phy.desired_txpower)
+		return;
+
+	dev->phy.desired_txpower = power;
+	b43_phy_txpower_check(dev, B43_TXPWR_IGNORE_TIME |
+				   B43_TXPWR_IGNORE_TSSI);
+}
+
 static int b43_op_config(struct ieee80211_hw *hw, int radio_idx, u32 changed)
 {
 	struct b43_wl *wl = hw_to_b43_wl(hw);
@@ -4044,13 +4072,7 @@ static int b43_op_config(struct ieee80211_hw *hw, int radio_idx, u32 changed)
 	dev->wl->radiotap_enabled = !!(conf->flags & IEEE80211_CONF_MONITOR);
 
 	/* Adjust the desired TX power level. */
-	if (conf->power_level != 0) {
-		if (conf->power_level != phy->desired_txpower) {
-			phy->desired_txpower = conf->power_level;
-			b43_phy_txpower_check(dev, B43_TXPWR_IGNORE_TIME |
-						   B43_TXPWR_IGNORE_TSSI);
-		}
-	}
+	b43_update_desired_txpower(dev);
 
 	/* Antennas for RX and management frame TX. */
 	antenna = B43_ANTENNA_DEFAULT;
@@ -4181,6 +4203,9 @@ static void b43_op_bss_info_changed(struct ieee80211_hw *hw,
 	}
 
 	b43_mac_enable(dev);
+
+	if (changed & BSS_CHANGED_TXPOWER)
+		b43_update_desired_txpower(dev);
 out_unlock_mutex:
 	mutex_unlock(&wl->mutex);
 }
