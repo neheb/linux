@@ -1757,6 +1757,27 @@ static void b43_dma_ampdu_rate_status(struct b43_wldev *dev,
 	ieee80211_tx_status_ext(dev->wl->hw, &status);
 }
 
+/* Charge @sta with the airtime of an A-MPDU of @bytes sent at the rate of @first */
+static void b43_dma_ampdu_airtime(struct b43_wldev *dev,
+				  struct ieee80211_sta *sta,
+				  const struct ieee80211_tx_info *first,
+				  u8 tid, unsigned int bytes)
+{
+	struct ieee80211_tx_info info = {};
+	int i;
+
+	info.band = first->band;
+	for (i = 0; i < ARRAY_SIZE(info.status.rates); i++)
+		info.status.rates[i].idx = -1;
+	info.status.rates[0] = first->control.rates[0];
+	info.status.rates[0].count = 1;
+
+	ieee80211_sta_register_airtime(sta, tid,
+				       ieee80211_calc_tx_airtime(dev->wl->hw,
+								 &info, bytes),
+				       0);
+}
+
 /* A-MPDUs per TX ring waiting for their TX status */
 #define B43_AMPDU_INFLIGHT	2
 
@@ -1870,8 +1891,9 @@ static void b43_dma_handle_ampdu_txstatus(struct b43_wldev *dev,
 	struct sk_buff_head retry, *queue;
 	struct ieee80211_tx_info first = {};
 	struct ieee80211_sta *sta = NULL;
-	unsigned int len = 0, acked = 0;
+	unsigned int len = 0, acked = 0, bytes = 0;
 	unsigned long flags;
+	u8 tid = 0;
 	bool last;
 
 	__skb_queue_head_init(&retry);
@@ -1906,7 +1928,9 @@ static void b43_dma_handle_ampdu_txstatus(struct b43_wldev *dev,
 			first = *IEEE80211_SKB_CB(meta->skb);
 			sta = ieee80211_find_sta_by_ifaddr(dev->wl->hw,
 							   hdr->addr1, NULL);
+			tid = b43_airtime_tid(hdr);
 		}
+		bytes += meta->skb->len;
 		if (b43_dma_complete_ampdu_frame(dev, ring, meta, status,
 						 &retry))
 			acked++;
@@ -1914,8 +1938,10 @@ static void b43_dma_handle_ampdu_txstatus(struct b43_wldev *dev,
 
 		slot = next_slot(ring, slot);
 	} while (!last && ring->used_slots);
-	if (sta && first.control.rates[0].idx >= 0)
+	if (sta && first.control.rates[0].idx >= 0) {
 		b43_dma_ampdu_rate_status(dev, sta, &first, len, acked);
+		b43_dma_ampdu_airtime(dev, sta, &first, tid, bytes);
+	}
 	rcu_read_unlock();
 
 	if (skb_queue_empty(&retry))
@@ -2048,6 +2074,7 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 
 			frame_succeed = b43_fill_txstatus_report(dev, info,
 								 txstat);
+			b43_tx_airtime(dev, meta->skb);
 #ifdef CONFIG_B43_DEBUG
 			if (frame_succeed)
 				ring->nr_succeed_tx_packets++;

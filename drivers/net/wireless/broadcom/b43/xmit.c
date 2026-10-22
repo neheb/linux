@@ -991,6 +991,46 @@ static s8 b43_rssi_postprocess(struct b43_wldev *dev,
 	return (s8) tmp;
 }
 
+/* The TID whose access category the airtime of @hdr is charged to */
+u8 b43_airtime_tid(struct ieee80211_hdr *hdr)
+{
+	return ieee80211_is_data_qos(hdr->frame_control) ?
+	       ieee80211_get_tid(hdr) : 0;
+}
+
+/*
+ * Charge the sender of the data frame in @skb with its airtime, so that
+ * mac80211 shares the airtime fairly between the stations. The PHY header
+ * of a PPDU only counts for its first MPDU.
+ */
+static void b43_rx_airtime(struct b43_wldev *dev, struct sk_buff *skb,
+			   struct ieee80211_rx_status *status, bool ppdu_start)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	struct ieee80211_hw *hw = dev->wl->hw;
+	struct ieee80211_sta *sta;
+	u32 airtime;
+
+	if (!ieee80211_is_data(hdr->frame_control) ||
+	    (status->flag & (RX_FLAG_FAILED_FCS_CRC |
+			     RX_FLAG_FAILED_PLCP_CRC)))
+		return;
+	/* Not a rate mac80211 knows the airtime of */
+	if (status->encoding == RX_ENC_HT && status->rate_idx >= 32)
+		return;
+
+	rcu_read_lock();
+	sta = ieee80211_find_sta_by_ifaddr(hw, hdr->addr2, NULL);
+	if (sta) {
+		airtime = ieee80211_calc_rx_airtime(hw, status, skb->len);
+		if (!ppdu_start)
+			airtime -= ieee80211_calc_rx_airtime(hw, status, 0);
+		ieee80211_sta_register_airtime(sta, b43_airtime_tid(hdr), 0,
+					       airtime);
+	}
+	rcu_read_unlock();
+}
+
 void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 {
 	struct ieee80211_rx_status status;
@@ -1003,6 +1043,7 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 	u32 macstat;
 	u16 chanid;
 	int padding, rate_idx;
+	bool ppdu_start = true;
 
 	memset(&status, 0, sizeof(status));
 
@@ -1130,6 +1171,7 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 			rate_idx = dev->rx_ppdu.rate_idx;
 			status.bw = dev->rx_ppdu.bw;
 			status.enc_flags = dev->rx_ppdu.enc_flags;
+			ppdu_start = false;
 			break;
 		}
 		rate_idx = plcp->raw[0] & 0x7f;
@@ -1208,6 +1250,8 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 		goto drop;
 	}
 
+	b43_rx_airtime(dev, skb, &status, ppdu_start);
+
 	memcpy(IEEE80211_SKB_RXCB(skb), &status, sizeof(status));
 	ieee80211_rx_ni(dev->wl->hw, skb);
 
@@ -1253,6 +1297,33 @@ void b43_handle_txstatus(struct b43_wldev *dev,
 /* Fill out the mac80211 TXstatus report based on the b43-specific
  * txstatus report data. This returns a boolean whether the frame was
  * successfully transmitted. */
+/*
+ * Charge the receiver of the frame in @skb, which is not part of an A-MPDU,
+ * with the airtime of all its transmissions. The TX status must be filled
+ * in already.
+ */
+void b43_tx_airtime(struct b43_wldev *dev, struct sk_buff *skb)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_sta *sta;
+	u32 airtime;
+
+	if (is_multicast_ether_addr(hdr->addr1))
+		return;
+
+	airtime = ieee80211_calc_tx_airtime(dev->wl->hw, info, skb->len);
+	if (!airtime)
+		return;
+
+	rcu_read_lock();
+	sta = ieee80211_find_sta_by_ifaddr(dev->wl->hw, hdr->addr1, NULL);
+	if (sta)
+		ieee80211_sta_register_airtime(sta, b43_airtime_tid(hdr),
+					       airtime, 0);
+	rcu_read_unlock();
+}
+
 bool b43_fill_txstatus_report(struct b43_wldev *dev,
 			      struct ieee80211_tx_info *report,
 			      const struct b43_txstatus *status)
