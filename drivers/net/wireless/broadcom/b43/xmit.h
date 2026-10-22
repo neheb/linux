@@ -368,6 +368,8 @@ void b43_handle_txstatus(struct b43_wldev *dev,
 bool b43_fill_txstatus_report(struct b43_wldev *dev,
 			      struct ieee80211_tx_info *report,
 			      const struct b43_txstatus *status);
+u8 b43_airtime_tid(struct ieee80211_hdr *hdr);
+void b43_tx_airtime(struct b43_wldev *dev, struct sk_buff *skb);
 
 void b43_tx_suspend(struct b43_wldev *dev);
 void b43_tx_resume(struct b43_wldev *dev);
