@@ -6234,6 +6234,7 @@ static struct b43_wl *b43_wireless_init(struct b43_bus_dev *dev)
 	ieee80211_hw_set(hw, SIGNAL_DBM);
 	ieee80211_hw_set(hw, MFP_CAPABLE);
 	ieee80211_hw_set(hw, AMPDU_AGGREGATION);
+	ieee80211_hw_set(hw, SUPPORT_FAST_XMIT);
 	hw->max_tx_aggregation_subframes = B43_AMPDU_MAX_FRAMES;
 	hw->sta_data_size = sizeof(struct b43_sta);
 	hw->wiphy->interface_modes =

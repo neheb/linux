@@ -338,6 +338,73 @@ static u8 b43_ht_rts_rate(struct b43_wldev *dev,
 	return B43_OFDM_RATE_6MB;
 }
 
+/*
+ * The time to send @len bytes and the FCS at @bitrate (in 100 kbit/s),
+ * plus SIFS, like ieee80211_frame_duration() of mac80211 calculates it.
+ */
+static unsigned int b43_frame_duration(enum nl80211_band band,
+				       unsigned int len, int bitrate,
+				       bool erp, bool short_preamble)
+{
+	unsigned int dur;
+
+	if (band == NL80211_BAND_5GHZ || erp) {
+		/* SIFS and signal extension, preamble, SIGNAL, symbols */
+		dur = 16 + 16 + 4;
+		dur += 4 * DIV_ROUND_UP((16 + 8 * (len + 4) + 6) * 10,
+					4 * bitrate);
+	} else {
+		/* SIFS, preamble and PLCP header, data */
+		dur = 10 + (short_preamble ? 72 + 24 : 144 + 48);
+		dur += DIV_ROUND_UP(8 * (len + 4) * 10, bitrate);
+	}
+
+	return dur;
+}
+
+/*
+ * The duration field of a frame to a station sent at the legacy rate
+ * @txrate: SIFS and the ACK, which the receiver sends at the fastest basic
+ * rate that is not faster than @txrate, or else at the fastest mandatory
+ * rate that is not, as mac80211 calculates it for the frames it does not
+ * send with fast-xmit.
+ */
+static __le16 b43_ack_duration(struct b43_wldev *dev,
+			       const struct ieee80211_tx_info *info,
+			       const struct ieee80211_rate *txrate)
+{
+	struct ieee80211_vif *vif = info->control.vif;
+	struct ieee80211_supported_band *sband;
+	bool erp = txrate->flags & IEEE80211_RATE_ERP_G;
+	int i, ack = -1, mandatory;
+	u32 mandatory_flag;
+
+	sband = dev->wl->hw->wiphy->bands[info->band];
+	if (info->band == NL80211_BAND_5GHZ)
+		mandatory_flag = IEEE80211_RATE_MANDATORY_A;
+	else if (erp)
+		mandatory_flag = IEEE80211_RATE_MANDATORY_G;
+	else
+		mandatory_flag = IEEE80211_RATE_MANDATORY_B;
+
+	mandatory = sband->bitrates[0].bitrate;
+	for (i = 0; i < sband->n_bitrates; i++) {
+		const struct ieee80211_rate *r = &sband->bitrates[i];
+
+		if (r->bitrate > txrate->bitrate)
+			break;
+		if (vif->bss_conf.basic_rates & BIT(i))
+			ack = r->bitrate;
+		if (r->flags & mandatory_flag)
+			mandatory = r->bitrate;
+	}
+	if (ack < 0)
+		ack = mandatory;
+
+	return cpu_to_le16(b43_frame_duration(info->band, 10, ack, erp,
+					      vif->bss_conf.use_short_preamble));
+}
+
 /* Airtime of a legacy frame of @bytes at @rate, in microseconds */
 static unsigned int b43_legacy_airtime(u8 rate, unsigned int bytes)
 {
@@ -591,6 +658,17 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 		rate_fb = fbrate ? fbrate->hw_value : B43_CCK_RATE_1MB;
 	}
 	rate_fb_ofdm = b43_is_ofdm_rate(rate_fb);
+
+	/*
+	 * mac80211 leaves the duration field of frames sent with fast-xmit
+	 * to the driver. Only frames at legacy rates need one, mac80211
+	 * leaves it at zero for HT rates as well.
+	 */
+	if ((info->control.flags & IEEE80211_TX_CTRL_FAST_XMIT) && txrate &&
+	    info->control.vif && !(info->flags & IEEE80211_TX_CTL_NO_ACK) &&
+	    !is_multicast_ether_addr(wlhdr->addr1))
+		((struct ieee80211_hdr *)skb_frag->data)->duration_id =
+			b43_ack_duration(dev, info, txrate);
 
 	if (ht)
 		txhdr->phy_rate = mcs;
