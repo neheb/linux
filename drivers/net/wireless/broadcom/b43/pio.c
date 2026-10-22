@@ -748,7 +748,7 @@ data_ready:
 		}
 	}
 
-	b43_rx(q->dev, skb, rxhdr);
+	b43_rx(q->dev, skb, rxhdr, NULL);
 
 	return true;
 

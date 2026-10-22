@@ -314,7 +314,8 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 
 void b43_dma_handle_rx_overflow(struct b43_dmaring *ring);
 
-void b43_dma_rx(struct b43_dmaring *ring);
+int b43_dma_rx(struct b43_dmaring *ring, int budget,
+	       struct napi_struct *napi);
 
 void b43_dma_direct_fifo_rx(struct b43_wldev *dev,
 			    unsigned int engine_index, bool enable);
