@@ -1417,7 +1417,7 @@ int b43_dma_tx(struct b43_wldev *dev, struct sk_buff *skb)
 	/* Assign the queue number to the ring (if not already done before)
 	 * so TX status handling can use it. The queue to ring mapping is
 	 * static, so we don't need to store it per frame. */
-	ring->queue_prio = skb_get_queue_mapping(skb);
+	ring->queue_prio = b43_tx_queue_num(dev, skb);
 
 	err = dma_tx_fragment(ring, skb, true);
 	if (unlikely(err == -ENOKEY)) {
@@ -1434,7 +1434,7 @@ int b43_dma_tx(struct b43_wldev *dev, struct sk_buff *skb)
 	if ((free_slots(ring) < TX_SLOTS_PER_FRAME) ||
 	    should_inject_overflow(ring)) {
 		/* This TX ring is full. */
-		unsigned int skb_mapping = skb_get_queue_mapping(skb);
+		unsigned int skb_mapping = b43_tx_queue_num(dev, skb);
 		b43_stop_queue(dev, skb_mapping);
 		dev->wl->tx_queue_stopped[skb_mapping] = true;
 		ring->stopped = true;
@@ -1829,7 +1829,7 @@ int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
 	    free_slots(ring) < n * TX_SLOTS_PER_FRAME)
 		return -ENOSPC;
 
-	ring->queue_prio = skb_get_queue_mapping(skbs[0]);
+	ring->queue_prio = b43_tx_queue_num(dev, skbs[0]);
 
 	rcu_read_lock();
 	bsta = b43_dma_ampdu_sta(dev, skbs[0]);
@@ -1878,7 +1878,7 @@ int b43_dma_tx_ampdu(struct b43_wldev *dev, struct sk_buff **skbs,
 	ring->ampdu_inflight++;
 
 	if (free_slots(ring) < TX_SLOTS_PER_FRAME) {
-		unsigned int skb_mapping = skb_get_queue_mapping(skbs[0]);
+		unsigned int skb_mapping = b43_tx_queue_num(dev, skbs[0]);
 
 		b43_stop_queue(dev, skb_mapping);
 		dev->wl->tx_queue_stopped[skb_mapping] = true;
@@ -1959,7 +1959,7 @@ static void b43_dma_handle_ampdu_txstatus(struct b43_wldev *dev,
 		return;
 
 	/* Resend the MPDUs ahead of the frames queued since */
-	queue = &dev->wl->tx_queue[skb_get_queue_mapping(retry.next)];
+	queue = &dev->wl->tx_queue[b43_tx_queue_num(dev, retry.next)];
 	spin_lock_irqsave(&queue->lock, flags);
 	skb_queue_splice(&retry, queue);
 	spin_unlock_irqrestore(&queue->lock, flags);
@@ -2140,8 +2140,8 @@ out_wake:
 			b43dbg(dev->wl, "Woke up TX ring %d\n", ring->index);
 		}
 	}
-	/* Add work to the queue. */
-	ieee80211_queue_work(dev->wl->hw, &dev->wl->tx_work);
+	/* Have the TX status handler send more */
+	b43_txq_pull_later(dev, ring->queue_prio);
 }
 
 /* Hand the buffer in @slot back to the device without reading it */

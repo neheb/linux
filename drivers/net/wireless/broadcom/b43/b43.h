@@ -1028,6 +1028,10 @@ struct b43_wl {
 	bool tx_queue_stopped[B43_QOS_QUEUE_NUM];
 	/* The mac80211 queue is stopped as tx_queue is full */
 	bool tx_queue_full[B43_QOS_QUEUE_NUM];
+	/* Serializes taking frames from the mac80211 TXQs of an AC */
+	spinlock_t txq_lock;
+	/* ACs with a TX status since b43_do_tx_work() last took their frames */
+	unsigned long txq_pull;
 
 	/* firmware loading work */
 	struct work_struct firmware_load;
@@ -1152,6 +1156,16 @@ static inline bool b43_using_pio_transfers(struct b43_wldev *dev)
  * Without hardware QoS all mac80211 queues share one FIFO, so they are
  * stopped and woken together.
  */
+/*
+ * The tx_queue, and queue_prio of a ring, of @skb: without hardware QoS,
+ * all frames go through the first one. The queue mapping itself stays,
+ * as mac80211 charges and refunds the airtime of a frame by it.
+ */
+static inline int b43_tx_queue_num(struct b43_wldev *dev, struct sk_buff *skb)
+{
+	return dev->qos_enabled ? skb_get_queue_mapping(skb) : 0;
+}
+
 static inline void b43_wake_queue(struct b43_wldev *dev, int queue_prio)
 {
 	if (dev->qos_enabled)
