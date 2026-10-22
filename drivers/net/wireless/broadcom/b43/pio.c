@@ -533,7 +533,7 @@ int b43_pio_tx(struct b43_wldev *dev, struct sk_buff *skb)
 	/* Assign the queue number to the ring (if not already done before)
 	 * so TX status handling can use it. The mac80211-queue to b43-queue
 	 * mapping is static, so we don't need to store it per frame. */
-	q->queue_prio = skb_get_queue_mapping(skb);
+	q->queue_prio = b43_tx_queue_num(dev, skb);
 
 	err = pio_tx_frame(q, skb);
 	if (unlikely(err == -ENOKEY)) {
@@ -586,6 +586,7 @@ void b43_pio_handle_txstatus(struct b43_wldev *dev,
 	ieee80211_tx_status_skb(dev->wl->hw, pack->skb);
 	pack->skb = NULL;
 	list_add(&pack->list, &q->packets_list);
+	b43_txq_pull_later(dev, q->queue_prio);
 
 	if (q->stopped) {
 		/* b43_tx_work() wakes it once tx_queue has room */
