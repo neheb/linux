@@ -932,9 +932,11 @@ struct b43_wldev {
 	unsigned int periodic_state;
 
 	struct work_struct restart_work;
-	/* Receives the frames of interrupts that only signal RX */
+	/* Receives the frames of interrupts that only signal RX and TX status */
 	struct net_device *napi_dev;
 	struct napi_struct napi;
+	/* The interrupt the NAPI poll handles signals TX status */
+	bool napi_tx_status;
 
 	/* encryption/decryption */
 	u16 ktp;		/* Key table pointer */
@@ -1035,6 +1037,16 @@ struct b43_wl {
 	spinlock_t txq_lock;
 	/* ACs with a TX status since b43_do_tx_work() last took their frames */
 	unsigned long txq_pull;
+	/*
+	 * Serializes DMA transmission and TX status instead of wl->mutex,
+	 * see b43_tx_direct(). tx_busy is set while it is held, and
+	 * tx_kick asks its holder to run b43_do_tx_work() once more.
+	 */
+	spinlock_t tx_lock;
+	bool tx_busy;
+	unsigned long tx_kick;
+	/* What sending OFDM frames needs done with wl->mutex held */
+	struct work_struct tx_phy_work;
 
 	/* firmware loading work */
 	struct work_struct firmware_load;
@@ -1153,6 +1165,17 @@ static inline void b43_block_write(struct b43_wldev *dev, const void *buffer,
 static inline bool b43_using_pio_transfers(struct b43_wldev *dev)
 {
 	return dev->__using_pio_transfers;
+}
+
+/*
+ * Whether frames are sent and their TX status is handled under
+ * wl->tx_lock, without sleeping, instead of under wl->mutex: right where
+ * mac80211 hands them over, and in the NAPI poll. PIO on SDIO sleeps.
+ */
+static inline bool b43_tx_direct(struct b43_wldev *dev)
+{
+	return !b43_using_pio_transfers(dev) &&
+	       !b43_bus_host_is_sdio(dev->dev);
 }
 
 /*
