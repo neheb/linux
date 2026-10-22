@@ -27,6 +27,7 @@
 #include <linux/etherdevice.h>
 #include <linux/slab.h>
 #include <asm/div64.h>
+#include <net/page_pool/helpers.h>
 
 
 /* Required number of TX DMA slots per TX frame.
@@ -593,40 +594,64 @@ static int setup_rx_descbuffer(struct b43_dmaring *ring,
 			       struct b43_dmadesc_generic *desc,
 			       struct b43_dmadesc_meta *meta, gfp_t gfp_flags)
 {
+	struct page_pool *pp = ring->page_pool;
 	dma_addr_t dmaaddr;
 	struct sk_buff *skb;
+	unsigned int size;
+	struct page *page;
+	void *data;
 
 	B43_WARN_ON(ring->tx);
 
-	skb = __dev_alloc_skb(ring->rx_buffersize, gfp_flags);
-	if (unlikely(!skb))
+	size = SKB_DATA_ALIGN(NET_SKB_PAD + ring->rx_buffersize) +
+	       SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+
+	data = page_pool_alloc_va(pp, &size, gfp_flags);
+	if (unlikely(!data))
 		return -ENOMEM;
-	b43_poison_rx_buffer(ring, skb);
-	dmaaddr = map_descbuffer(ring, skb->data, ring->rx_buffersize, 0);
-	if (b43_dma_mapping_error(ring, dmaaddr, ring->rx_buffersize, 0)) {
-		/* ugh. try to realloc in zone_dma */
-		gfp_flags |= GFP_DMA;
 
-		dev_kfree_skb_any(skb);
-
-		skb = __dev_alloc_skb(ring->rx_buffersize, gfp_flags);
-		if (unlikely(!skb))
-			return -ENOMEM;
-		b43_poison_rx_buffer(ring, skb);
-		dmaaddr = map_descbuffer(ring, skb->data,
-					 ring->rx_buffersize, 0);
-		if (b43_dma_mapping_error(ring, dmaaddr, ring->rx_buffersize, 0)) {
-			b43err(ring->dev->wl, "RX DMA buffer allocation failed\n");
-			dev_kfree_skb_any(skb);
-			return -EIO;
-		}
+	skb = build_skb(data, size);
+	if (unlikely(!skb)) {
+		page_pool_free_va(pp, data, false);
+		return -ENOMEM;
 	}
+	skb_mark_for_recycle(skb);
+	skb_reserve(skb, NET_SKB_PAD);
+
+	page = virt_to_head_page(data);
+	dmaaddr = page_pool_get_dma_addr(page) +
+		  (skb->data - (u8 *)page_address(page));
+
+	b43_poison_rx_buffer(ring, skb);
+	sync_descbuffer_for_device(ring, dmaaddr, ring->rx_buffersize);
 
 	meta->skb = skb;
 	meta->dmaaddr = dmaaddr;
 	ring->ops->fill_descriptor(ring, desc, dmaaddr,
 				   ring->rx_buffersize, 0, 0, 0);
 
+	return 0;
+}
+
+static int b43_rx_page_pool_create(struct b43_dmaring *ring)
+{
+	struct page_pool_params pp_params = {};
+	struct page_pool *pp;
+
+	pp_params.order = 0;
+	pp_params.pool_size = ring->nr_slots;
+	pp_params.nid = NUMA_NO_NODE;
+	pp_params.dev = ring->dev->dev->dma_dev;
+	pp_params.dma_dir = DMA_FROM_DEVICE;
+	pp_params.flags = PP_FLAG_DMA_MAP;
+
+	pp = page_pool_create(&pp_params);
+	if (IS_ERR(pp)) {
+		b43err(ring->dev->wl, "Failed to create the RX page pool\n");
+		return PTR_ERR(pp);
+	}
+
+	ring->page_pool = pp;
 	return 0;
 }
 
@@ -659,7 +684,6 @@ static int alloc_initial_descbuffers(struct b43_dmaring *ring)
 	for (i--; i >= 0; i--) {
 		desc = ring->ops->idx2desc(ring, i, &meta);
 
-		unmap_descbuffer(ring, meta->dmaaddr, ring->rx_buffersize, 0);
 		dev_kfree_skb(meta->skb);
 	}
 	goto out;
@@ -786,13 +810,9 @@ static void free_all_descbuffers(struct b43_dmaring *ring)
 			B43_WARN_ON(!ring->tx);
 			continue;
 		}
-		if (ring->tx) {
+		if (ring->tx)
 			unmap_descbuffer(ring, meta->dmaaddr,
 					 meta->skb->len, 1);
-		} else {
-			unmap_descbuffer(ring, meta->dmaaddr,
-					 ring->rx_buffersize, 0);
-		}
 		free_descriptor_buffer(ring, meta);
 	}
 }
@@ -929,9 +949,15 @@ struct b43_dmaring *b43_setup_dmaring(struct b43_wldev *dev,
 				 DMA_TO_DEVICE);
 	}
 
+	if (!for_tx) {
+		err = b43_rx_page_pool_create(ring);
+		if (err)
+			goto err_kfree_meta;
+	}
+
 	err = alloc_ringmemory(ring);
 	if (err)
-		goto err_kfree_txhdr_cache;
+		goto err_destroy_page_pool;
 	err = dmacontroller_setup(ring);
 	if (err)
 		goto err_free_ringmemory;
@@ -941,6 +967,9 @@ struct b43_dmaring *b43_setup_dmaring(struct b43_wldev *dev,
 
       err_free_ringmemory:
 	free_ringmemory(ring);
+      err_destroy_page_pool:
+	if (ring->page_pool)
+		page_pool_destroy(ring->page_pool);
       err_kfree_txhdr_cache:
 	kfree(ring->txhdr_cache);
       err_kfree_meta:
@@ -1001,6 +1030,8 @@ static void b43_destroy_dmaring(struct b43_dmaring *ring,
 	dmacontroller_cleanup(ring);
 	free_all_descbuffers(ring);
 	free_ringmemory(ring);
+	if (ring->page_pool)
+		page_pool_destroy(ring->page_pool);
 
 	kfree(ring->txhdr_cache);
 	kfree(ring);
@@ -2147,7 +2178,6 @@ static void dma_rx(struct b43_dmaring *ring, int *slot)
 		goto drop_recycle_buffer;
 	}
 
-	unmap_descbuffer(ring, dmaaddr, ring->rx_buffersize, 0);
 	skb_put(skb, len + ring->frameoffset);
 	skb_pull(skb, ring->frameoffset);
 

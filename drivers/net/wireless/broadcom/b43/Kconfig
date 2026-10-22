@@ -4,6 +4,7 @@ config B43
 	depends on (BCMA_POSSIBLE || SSB_POSSIBLE) && MAC80211 && HAS_DMA
 	select BCMA if B43_BCMA
 	select SSB if B43_SSB
+	select PAGE_POOL
 	select FW_LOADER
 	select CORDIC
 	help
