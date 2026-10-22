@@ -1028,6 +1028,10 @@ struct b43_wl {
 	bool tx_queue_stopped[B43_QOS_QUEUE_NUM];
 	/* The mac80211 queue is stopped as tx_queue is full */
 	bool tx_queue_full[B43_QOS_QUEUE_NUM];
+	/* Serializes taking frames from the mac80211 TXQs of an AC */
+	spinlock_t txq_lock;
+	/* ACs with a TX status since b43_do_tx_work() last took their frames */
+	unsigned long txq_pull;
 
 	/* firmware loading work */
 	struct work_struct firmware_load;

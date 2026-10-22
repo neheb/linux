@@ -586,6 +586,7 @@ void b43_pio_handle_txstatus(struct b43_wldev *dev,
 	ieee80211_tx_status_skb(dev->wl->hw, pack->skb);
 	pack->skb = NULL;
 	list_add(&pack->list, &q->packets_list);
+	b43_txq_pull_later(dev, q->queue_prio);
 
 	if (q->stopped) {
 		/* b43_tx_work() wakes it once tx_queue has room */

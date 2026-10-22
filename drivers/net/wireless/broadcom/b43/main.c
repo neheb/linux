@@ -2092,6 +2092,8 @@ out:
 			B43_DEBUGIRQ_REASON_REG, B43_DEBUGIRQ_ACK);
 }
 
+static void b43_do_tx_work(struct b43_wldev *dev);
+
 static void b43_do_interrupt_thread(struct b43_wldev *dev)
 {
 	u32 reason;
@@ -2176,6 +2178,13 @@ static void b43_do_interrupt_thread(struct b43_wldev *dev)
 
 	/* Re-enable interrupts on the device by restoring the current interrupt mask. */
 	b43_write32(dev, B43_MMIO_GEN_IRQ_MASK, dev->irq_mask);
+
+	/*
+	 * Send the frames the TX status made room for here, instead of
+	 * waking the TX work for it.
+	 */
+	if (READ_ONCE(dev->wl->txq_pull))
+		b43_do_tx_work(dev);
 
 #if B43_DEBUG
 	if (b43_debug(dev, B43_DBG_VERBOSESTATS)) {
@@ -3899,20 +3908,77 @@ static int b43_tx_ampdu(struct b43_wldev *dev, struct sk_buff_head *queue,
 #define B43_TX_QUEUE_MAX	(2 * B43_AMPDU_MAX_FRAMES)
 #define B43_TX_QUEUE_WAKE	(B43_TX_QUEUE_MAX / 2)
 
-static void b43_tx_work(struct work_struct *work)
+static bool b43_tx_enqueue(struct b43_wl *wl,
+			   struct ieee80211_tx_control *control,
+			   struct sk_buff *skb);
+
+/*
+ * Take the frames of @ac from the mac80211 TXQs, in the order its airtime
+ * scheduler picks the stations, until tx_queue is full. Returns whether
+ * the TX work has to send them.
+ */
+static bool b43_pull_txqs(struct b43_wl *wl, u8 ac)
 {
-	struct b43_wl *wl = container_of(work, struct b43_wl, tx_work);
-	struct b43_wldev *dev;
+	struct ieee80211_hw *hw = wl->hw;
+	struct ieee80211_txq *txq;
+	struct sk_buff *skb;
+	bool send = false;
+
+	spin_lock_bh(&wl->txq_lock);
+	ieee80211_txq_schedule_start(hw, ac);
+	while ((txq = ieee80211_next_txq(hw, ac))) {
+		struct ieee80211_tx_control control = {
+			.sta = txq->sta,
+		};
+
+		while ((skb = ieee80211_tx_dequeue(hw, txq)))
+			send |= b43_tx_enqueue(wl, &control, skb);
+		ieee80211_return_txq(hw, txq, false);
+	}
+	ieee80211_txq_schedule_end(hw, ac);
+	spin_unlock_bh(&wl->txq_lock);
+
+	return send;
+}
+
+static void b43_op_wake_tx_queue(struct ieee80211_hw *hw,
+				 struct ieee80211_txq *txq)
+{
+	struct b43_wl *wl = hw_to_b43_wl(hw);
+
+	if (b43_pull_txqs(wl, txq->ac))
+		ieee80211_queue_work(hw, &wl->tx_work);
+}
+
+/*
+ * mac80211 holds back the frames of stations over their airtime queue
+ * limit, and does not offer them again once their frames went out. Have
+ * b43_do_tx_work() take the frames of @ac after its TX status.
+ */
+void b43_txq_pull_later(struct b43_wldev *dev, u8 ac)
+{
+	set_bit(ac, &dev->wl->txq_pull);
+}
+
+/* Send the frames in tx_queue. Must be called with wl->mutex held. */
+static void b43_do_tx_work(struct b43_wldev *dev)
+{
+	struct b43_wl *wl = dev->wl;
 	struct sk_buff *skb;
 	bool ofdm_seen = false;
+	unsigned long pull;
 	int queue_num;
 	int err = 0;
 
-	mutex_lock(&wl->mutex);
-	dev = wl->current_dev;
-	if (unlikely(!dev || b43_status(dev) < B43_STAT_STARTED)) {
-		mutex_unlock(&wl->mutex);
-		return;
+	/* Without hardware QoS, the frames of all ACs share queue 0 */
+	pull = xchg(&wl->txq_pull, 0);
+	if (pull && !dev->qos_enabled)
+		pull = BIT(IEEE80211_NUM_ACS) - 1;
+	for (queue_num = 0; queue_num < IEEE80211_NUM_ACS; queue_num++) {
+		/* mac80211 offers them itself once the full queue wakes */
+		if ((pull & BIT(queue_num)) &&
+		    !wl->tx_queue_full[dev->qos_enabled ? queue_num : 0])
+			b43_pull_txqs(wl, queue_num);
 	}
 
 	for (queue_num = 0; queue_num < B43_QOS_QUEUE_NUM; queue_num++) {
@@ -3973,21 +4039,33 @@ static void b43_tx_work(struct work_struct *work)
 #if B43_DEBUG
 	dev->tx_count++;
 #endif
+}
+
+static void b43_tx_work(struct work_struct *work)
+{
+	struct b43_wl *wl = container_of(work, struct b43_wl, tx_work);
+	struct b43_wldev *dev;
+
+	mutex_lock(&wl->mutex);
+	dev = wl->current_dev;
+	if (likely(dev && b43_status(dev) >= B43_STAT_STARTED))
+		b43_do_tx_work(dev);
 	mutex_unlock(&wl->mutex);
 }
 
-static void b43_op_tx(struct ieee80211_hw *hw,
-		      struct ieee80211_tx_control *control,
-		      struct sk_buff *skb)
+/* Queue @skb in tx_queue. Returns whether the TX work has to send it. */
+static bool b43_tx_enqueue(struct b43_wl *wl,
+			   struct ieee80211_tx_control *control,
+			   struct sk_buff *skb)
 {
-	struct b43_wl *wl = hw_to_b43_wl(hw);
+	struct ieee80211_hw *hw = wl->hw;
 	struct ieee80211_hdr *hdr;
 	u16 skb_queue_mapping;
 
 	if (unlikely(skb->len < 2 + 2 + 6)) {
 		/* Too short, this can't be a valid frame. */
 		ieee80211_free_txskb(hw, skb);
-		return;
+		return false;
 	}
 	B43_WARN_ON(skb_shinfo(skb)->nr_frags);
 
@@ -3996,7 +4074,7 @@ static void b43_op_tx(struct ieee80211_hw *hw,
 	    control->sta && wl->ampdu_tx &&
 	    !b43_dma_ampdu_bar_valid(control->sta, skb)) {
 		ieee80211_free_txskb(hw, skb);
-		return;
+		return false;
 	}
 
 	/* Without hardware QoS, all frames go through the first queue */
@@ -4010,9 +4088,20 @@ static void b43_op_tx(struct ieee80211_hw *hw,
 		b43_stop_queue(wl->current_dev, skb_queue_mapping);
 	}
 	if (!wl->tx_queue_stopped[skb_queue_mapping])
-		ieee80211_queue_work(wl->hw, &wl->tx_work);
-	else
-		b43_stop_queue(wl->current_dev, skb_queue_mapping);
+		return true;
+
+	b43_stop_queue(wl->current_dev, skb_queue_mapping);
+	return false;
+}
+
+static void b43_op_tx(struct ieee80211_hw *hw,
+		      struct ieee80211_tx_control *control,
+		      struct sk_buff *skb)
+{
+	struct b43_wl *wl = hw_to_b43_wl(hw);
+
+	if (b43_tx_enqueue(wl, control, skb))
+		ieee80211_queue_work(hw, &wl->tx_work);
 }
 
 static void b43_qos_params_upload(struct b43_wldev *dev,
@@ -5629,7 +5718,7 @@ static const struct ieee80211_ops b43_hw_ops = {
 	.change_chanctx = ieee80211_emulate_change_chanctx,
 	.switch_vif_chanctx = ieee80211_emulate_switch_vif_chanctx,
 	.tx			= b43_op_tx,
-	.wake_tx_queue		= ieee80211_handle_wake_tx_queue,
+	.wake_tx_queue		= b43_op_wake_tx_queue,
 	.conf_tx		= b43_op_conf_tx,
 	.add_interface		= b43_op_add_interface,
 	.remove_interface	= b43_op_remove_interface,
@@ -6090,6 +6179,7 @@ static struct b43_wl *b43_wireless_init(struct b43_bus_dev *dev)
 
 	wiphy_ext_feature_set(hw->wiphy, NL80211_EXT_FEATURE_CQM_RSSI_LIST);
 	wiphy_ext_feature_set(hw->wiphy, NL80211_EXT_FEATURE_AIRTIME_FAIRNESS);
+	wiphy_ext_feature_set(hw->wiphy, NL80211_EXT_FEATURE_AQL);
 
 	wl->hw_registered = false;
 	hw->max_rates = 2;
@@ -6107,6 +6197,7 @@ static struct b43_wl *b43_wireless_init(struct b43_bus_dev *dev)
 	INIT_WORK(&wl->beacon_update_trigger, b43_beacon_update_trigger_work);
 	INIT_WORK(&wl->txpower_adjust_work, b43_phy_txpower_adjust_work);
 	INIT_WORK(&wl->tx_work, b43_tx_work);
+	spin_lock_init(&wl->txq_lock);
 
 	/* Initialize queues and flags. */
 	for (queue_num = 0; queue_num < B43_QOS_QUEUE_NUM; queue_num++) {

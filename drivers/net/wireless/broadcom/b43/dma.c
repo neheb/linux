@@ -2129,8 +2129,8 @@ out_wake:
 			b43dbg(dev->wl, "Woke up TX ring %d\n", ring->index);
 		}
 	}
-	/* Add work to the queue. */
-	ieee80211_queue_work(dev->wl->hw, &dev->wl->tx_work);
+	/* Have the TX status handler send more */
+	b43_txq_pull_later(dev, ring->queue_prio);
 }
 
 static void dma_rx(struct b43_dmaring *ring, int *slot)
