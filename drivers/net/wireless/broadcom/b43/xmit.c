@@ -1373,7 +1373,11 @@ void b43_handle_txstatus(struct b43_wldev *dev,
 	else
 		b43_dma_handle_txstatus(dev, status);
 
-	b43_phy_txpower_check(dev, 0);
+	/* Without wl->mutex, b43_tx_phy_work() checks it */
+	if (!b43_tx_direct(dev))
+		b43_phy_txpower_check(dev, 0);
+	else if (time_after_eq(jiffies, dev->phy.next_txpwr_check_time))
+		ieee80211_queue_work(dev->wl->hw, &dev->wl->tx_phy_work);
 }
 
 /* Fill out the mac80211 TXstatus report based on the b43-specific

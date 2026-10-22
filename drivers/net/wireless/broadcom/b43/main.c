@@ -2092,7 +2092,7 @@ out:
 			B43_DEBUGIRQ_REASON_REG, B43_DEBUGIRQ_ACK);
 }
 
-static void b43_do_tx_work(struct b43_wldev *dev);
+static void b43_tx_status_irq(struct b43_wldev *dev);
 
 static void b43_do_interrupt_thread(struct b43_wldev *dev)
 {
@@ -2174,17 +2174,10 @@ static void b43_do_interrupt_thread(struct b43_wldev *dev)
 	B43_WARN_ON(dma_reason[5] & B43_DMAIRQ_RX_DONE);
 
 	if (reason & B43_IRQ_TX_OK)
-		handle_irq_transmit_status(dev);
+		b43_tx_status_irq(dev);
 
 	/* Re-enable interrupts on the device by restoring the current interrupt mask. */
 	b43_write32(dev, B43_MMIO_GEN_IRQ_MASK, dev->irq_mask);
-
-	/*
-	 * Send the frames the TX status made room for here, instead of
-	 * waking the TX work for it.
-	 */
-	if (READ_ONCE(dev->wl->txq_pull))
-		b43_do_tx_work(dev);
 
 #if B43_DEBUG
 	if (b43_debug(dev, B43_DBG_VERBOSESTATS)) {
@@ -2198,11 +2191,11 @@ static void b43_do_interrupt_thread(struct b43_wldev *dev)
 }
 
 /*
- * Receive the frames of an interrupt that signals nothing else. Running
- * here instead of in the interrupt thread saves waking the thread, two
- * context switches per interrupt, and mac80211 hands the frames to GRO.
- * The device interrupts stay disabled until this is done, so it never
- * runs together with the thread.
+ * Receive the frames and handle the TX status of an interrupt that
+ * signals nothing else. Running here instead of in the interrupt thread
+ * saves waking the thread, two context switches per interrupt, and
+ * mac80211 hands the frames to GRO. The device interrupts stay disabled
+ * until this is done, so it never runs together with the thread.
  */
 static int b43_napi_poll(struct napi_struct *napi, int budget)
 {
@@ -2210,8 +2203,13 @@ static int b43_napi_poll(struct napi_struct *napi, int budget)
 	struct b43_wl *wl = dev->wl;
 	int done = 0;
 
-	if (likely(b43_status(dev) == B43_STAT_STARTED))
+	if (likely(b43_status(dev) == B43_STAT_STARTED)) {
 		done = b43_dma_rx(dev->dma.rx_ring, budget, napi);
+		if (READ_ONCE(dev->napi_tx_status)) {
+			WRITE_ONCE(dev->napi_tx_status, false);
+			b43_tx_status_irq(dev);
+		}
+	}
 
 	if (done < budget && napi_complete_done(napi, done)) {
 		/* b43_wireless_core_stop() disables them under the same lock */
@@ -2224,14 +2222,14 @@ static int b43_napi_poll(struct napi_struct *napi, int budget)
 	return done;
 }
 
-/* Whether the interrupt being handled only signals received frames */
-static bool b43_irq_is_rx_only(struct b43_wldev *dev, u32 reason)
+/* Whether the interrupt being handled only signals RX and TX status */
+static bool b43_irq_for_napi(struct b43_wldev *dev, u32 reason)
 {
 	int i;
 
-	if (reason != B43_IRQ_DMA ||
-	    dev->dma_reason[0] != B43_DMAIRQ_RX_DONE ||
-	    b43_using_pio_transfers(dev))
+	if ((reason & ~(B43_IRQ_DMA | B43_IRQ_TX_OK)) ||
+	    (dev->dma_reason[0] & ~B43_DMAIRQ_RX_DONE) ||
+	    !b43_tx_direct(dev))
 		return false;
 	for (i = 1; i < ARRAY_SIZE(dev->dma_reason); i++) {
 		if (dev->dma_reason[i])
@@ -2300,7 +2298,9 @@ static irqreturn_t b43_do_interrupt(struct b43_wldev *dev)
 	b43_write32(dev, B43_MMIO_GEN_IRQ_MASK, 0);
 
 	if (!b43_bus_host_is_sdio(dev->dev) &&
-	    b43_irq_is_rx_only(dev, reason)) {
+	    b43_irq_for_napi(dev, reason)) {
+		if (reason & B43_IRQ_TX_OK)
+			WRITE_ONCE(dev->napi_tx_status, true);
 		napi_schedule(&dev->napi);
 		return IRQ_HANDLED;
 	}
@@ -3965,6 +3965,7 @@ static int b43_tx_ampdu(struct b43_wldev *dev, struct sk_buff_head *queue,
 static bool b43_tx_enqueue(struct b43_wl *wl,
 			   struct ieee80211_tx_control *control,
 			   struct sk_buff *skb);
+static void b43_tx_kick(struct b43_wl *wl);
 
 /*
  * Take the frames of @ac from the mac80211 TXQs, in the order its airtime
@@ -3999,9 +4000,15 @@ static void b43_op_wake_tx_queue(struct ieee80211_hw *hw,
 				 struct ieee80211_txq *txq)
 {
 	struct b43_wl *wl = hw_to_b43_wl(hw);
+	struct b43_wldev *dev = READ_ONCE(wl->current_dev);
 
-	if (b43_pull_txqs(wl, txq->ac))
+	if (dev && b43_tx_direct(dev)) {
+		/* b43_do_tx_work() takes them */
+		set_bit(txq->ac, &wl->txq_pull);
+		b43_tx_kick(wl);
+	} else if (b43_pull_txqs(wl, txq->ac)) {
 		ieee80211_queue_work(hw, &wl->tx_work);
+	}
 }
 
 /*
@@ -4014,7 +4021,32 @@ void b43_txq_pull_later(struct b43_wldev *dev, u8 ac)
 	set_bit(ac, &dev->wl->txq_pull);
 }
 
-/* Send the frames in tx_queue. Must be called with wl->mutex held. */
+/*
+ * Prepare the PHY for OFDM frames. Returns whether they have to wait
+ * until b43_tx_phy_work() is done with it.
+ */
+static bool b43_tx_ofdm_hold(struct b43_wldev *dev)
+{
+	enum b43_nphy_txpctl_op op;
+
+	if (!b43_tx_direct(dev)) {
+		b43_nphy_txpctl_ofdm_tx(dev);
+		return false;
+	}
+
+	op = b43_nphy_txpctl_ofdm_check(dev);
+	if (op == B43_NPHY_TXPCTL_NONE)
+		return false;
+	ieee80211_queue_work(dev->wl->hw, &dev->wl->tx_phy_work);
+
+	/* Frames sent before the base indices are loaded compress the PA */
+	return op == B43_NPHY_TXPCTL_LOAD;
+}
+
+/*
+ * Send the frames in tx_queue. Must be called with wl->tx_lock held if
+ * b43_tx_direct(), or else with wl->mutex held.
+ */
 static void b43_do_tx_work(struct b43_wldev *dev)
 {
 	struct b43_wl *wl = dev->wl;
@@ -4039,8 +4071,12 @@ static void b43_do_tx_work(struct b43_wldev *dev)
 		while (skb_queue_len(&wl->tx_queue[queue_num])) {
 			skb = skb_dequeue(&wl->tx_queue[queue_num]);
 			if (!ofdm_seen && b43_tx_is_ofdm(dev, skb)) {
-				b43_nphy_txpctl_ofdm_tx(dev);
 				ofdm_seen = true;
+				if (b43_tx_ofdm_hold(dev)) {
+					skb_queue_head(&wl->tx_queue[queue_num],
+						       skb);
+					return;
+				}
 			}
 			if (b43_tx_ampdu_candidate(dev, skb)) {
 				enum b43_ampdu_window win;
@@ -4095,6 +4131,77 @@ static void b43_do_tx_work(struct b43_wldev *dev)
 #endif
 }
 
+static void b43_tx_lock(struct b43_wl *wl)
+{
+	spin_lock_bh(&wl->tx_lock);
+	WRITE_ONCE(wl->tx_busy, true);
+}
+
+static void __b43_tx_unlock(struct b43_wl *wl)
+{
+	WRITE_ONCE(wl->tx_busy, false);
+	spin_unlock_bh(&wl->tx_lock);
+	/* Pairs with the barrier in b43_tx_kick() */
+	smp_mb();
+}
+
+/*
+ * Run b43_do_tx_work() as b43_tx_kick() asked for. If wl->tx_lock is held,
+ * on another CPU or further up the stack, as mac80211 sends frames from
+ * the TX status, its holder does that once it releases it.
+ */
+static void b43_tx_run(struct b43_wl *wl)
+{
+	struct b43_wldev *dev;
+
+	while (test_bit(0, &wl->tx_kick) && !READ_ONCE(wl->tx_busy)) {
+		b43_tx_lock(wl);
+		if (test_and_clear_bit(0, &wl->tx_kick)) {
+			dev = wl->current_dev;
+			if (dev && b43_status(dev) == B43_STAT_STARTED)
+				b43_do_tx_work(dev);
+		}
+		__b43_tx_unlock(wl);
+	}
+}
+
+static void b43_tx_unlock(struct b43_wl *wl)
+{
+	__b43_tx_unlock(wl);
+	b43_tx_run(wl);
+}
+
+/* Send the frames in tx_queue and those of the ACs in wl->txq_pull */
+static void b43_tx_kick(struct b43_wl *wl)
+{
+	struct b43_wldev *dev = READ_ONCE(wl->current_dev);
+
+	if (!dev || !b43_tx_direct(dev)) {
+		ieee80211_queue_work(wl->hw, &wl->tx_work);
+		return;
+	}
+
+	set_bit(0, &wl->tx_kick);
+	/* Pairs with the barrier in __b43_tx_unlock() */
+	smp_mb__after_atomic();
+	b43_tx_run(wl);
+}
+
+/* Handle the TX status, and send the frames it made room for */
+static void b43_tx_status_irq(struct b43_wldev *dev)
+{
+	struct b43_wl *wl = dev->wl;
+	bool direct = b43_tx_direct(dev);
+
+	if (direct)
+		b43_tx_lock(wl);
+	handle_irq_transmit_status(dev);
+	if (READ_ONCE(wl->txq_pull))
+		b43_do_tx_work(dev);
+	if (direct)
+		b43_tx_unlock(wl);
+}
+
 static void b43_tx_work(struct work_struct *work)
 {
 	struct b43_wl *wl = container_of(work, struct b43_wl, tx_work);
@@ -4102,9 +4209,37 @@ static void b43_tx_work(struct work_struct *work)
 
 	mutex_lock(&wl->mutex);
 	dev = wl->current_dev;
-	if (likely(dev && b43_status(dev) >= B43_STAT_STARTED))
-		b43_do_tx_work(dev);
+	if (likely(dev && b43_status(dev) >= B43_STAT_STARTED)) {
+		if (b43_tx_direct(dev)) {
+			b43_tx_lock(wl);
+			b43_do_tx_work(dev);
+			b43_tx_unlock(wl);
+		} else {
+			b43_do_tx_work(dev);
+		}
+	}
 	mutex_unlock(&wl->mutex);
+}
+
+/*
+ * Do what sending frames under wl->tx_lock needs done with wl->mutex
+ * held, then send the frames that waited for it.
+ */
+static void b43_tx_phy_work(struct work_struct *work)
+{
+	struct b43_wl *wl = container_of(work, struct b43_wl, tx_phy_work);
+	struct b43_wldev *dev;
+
+	mutex_lock(&wl->mutex);
+	dev = wl->current_dev;
+	if (likely(dev && b43_status(dev) >= B43_STAT_STARTED)) {
+		if (dev->phy.type == B43_PHYTYPE_N)
+			b43_nphy_txpctl_ofdm_apply(dev);
+		b43_phy_txpower_check(dev, 0);
+	}
+	mutex_unlock(&wl->mutex);
+
+	b43_tx_kick(wl);
 }
 
 /* Queue @skb in tx_queue. Returns whether the TX work has to send it. */
@@ -4154,7 +4289,7 @@ static void b43_op_tx(struct ieee80211_hw *hw,
 	struct b43_wl *wl = hw_to_b43_wl(hw);
 
 	if (b43_tx_enqueue(wl, control, skb))
-		ieee80211_queue_work(hw, &wl->tx_work);
+		b43_tx_kick(wl);
 }
 
 static void b43_qos_params_upload(struct b43_wldev *dev,
@@ -4869,6 +5004,7 @@ redo:
 	mutex_unlock(&wl->mutex);
 	cancel_delayed_work_sync(&dev->periodic_work);
 	cancel_work_sync(&wl->tx_work);
+	cancel_work_sync(&wl->tx_phy_work);
 	b43_leds_stop(dev);
 	mutex_lock(&wl->mutex);
 	dev = wl->current_dev;
@@ -4879,6 +5015,9 @@ redo:
 
 	/* Disable interrupts on the device. */
 	b43_set_status(dev, B43_STAT_INITIALIZED);
+	/* Nothing sends frames without wl->mutex anymore after this */
+	b43_tx_lock(wl);
+	__b43_tx_unlock(wl);
 	if (b43_bus_host_is_sdio(dev->dev)) {
 		/* wl->mutex is locked. That is enough. */
 		b43_write32(dev, B43_MMIO_GEN_IRQ_MASK, 0);
@@ -6265,7 +6404,9 @@ static struct b43_wl *b43_wireless_init(struct b43_bus_dev *dev)
 	INIT_WORK(&wl->beacon_update_trigger, b43_beacon_update_trigger_work);
 	INIT_WORK(&wl->txpower_adjust_work, b43_phy_txpower_adjust_work);
 	INIT_WORK(&wl->tx_work, b43_tx_work);
+	INIT_WORK(&wl->tx_phy_work, b43_tx_phy_work);
 	spin_lock_init(&wl->txq_lock);
+	spin_lock_init(&wl->tx_lock);
 
 	/* Initialize queues and flags. */
 	for (queue_num = 0; queue_num < B43_QOS_QUEUE_NUM; queue_num++) {
