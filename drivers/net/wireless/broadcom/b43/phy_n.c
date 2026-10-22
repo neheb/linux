@@ -3603,6 +3603,7 @@ static void b43_nphy_txpctl_bidx_reset(struct b43_wldev *dev)
 	struct b43_phy_n *nphy = dev->phy.n;
 
 	nphy->txpctl_bidx_valid = false;
+	nphy->txpctl_op = B43_NPHY_TXPCTL_NONE;
 	nphy->txpctl_last_tx = jiffies - HZ;
 	if (nphy->txpctl_bidx_loaded) {
 		b43_phy_write(dev, B43_NPHY_TXPCTL_BIDX, 0);
@@ -6389,41 +6390,66 @@ static void b43_nphy_channel_setup(struct b43_wldev *dev,
  *
  * The MAC is suspended only around the register accesses, which happen
  * at most every 20 ms while frames are sent.
+ *
+ * b43_nphy_txpctl_ofdm_check() decides on the register access, without
+ * sleeping, and b43_nphy_txpctl_ofdm_apply() does it, with wl->mutex
+ * held. Until then, the check returns the same access again.
  */
-void b43_nphy_txpctl_ofdm_tx(struct b43_wldev *dev)
+enum b43_nphy_txpctl_op b43_nphy_txpctl_ofdm_check(struct b43_wldev *dev)
 {
 	struct b43_phy_n *nphy = dev->phy.n;
+	enum b43_nphy_txpctl_op op = B43_NPHY_TXPCTL_NONE;
 	unsigned long now = jiffies;
-	bool load = false, unload = false, sample = false;
-	u16 c1, c2;
 
 	if (dev->phy.rev < 3 || !nphy->txpwrctrl)
-		return;
+		return B43_NPHY_TXPCTL_NONE;
+
+	/* Pairs with the release in b43_nphy_txpctl_ofdm_apply() */
+	op = smp_load_acquire(&nphy->txpctl_op);
+	if (op != B43_NPHY_TXPCTL_NONE)
+		goto out;
 
 	if (nphy->txpctl_bidx_valid &&
 	    time_after(now, nphy->txpctl_last_tx + HZ / 2))
-		load = true;
-	else if (nphy->txpctl_bidx_loaded)
-		unload = time_after(now, nphy->txpctl_last_sample + HZ / 50);
-	else if (time_after_eq(now, nphy->txpctl_last_tx + HZ / 20))
+		op = B43_NPHY_TXPCTL_LOAD;
+	else if (nphy->txpctl_bidx_loaded) {
+		if (time_after(now, nphy->txpctl_last_sample + HZ / 50))
+			op = B43_NPHY_TXPCTL_UNLOAD;
+	} else if (time_after_eq(now, nphy->txpctl_last_tx + HZ / 20))
 		/* Traffic starts again, give the loop time to settle */
 		nphy->txpctl_last_sample = now;
-	else
-		sample = time_after(now, nphy->txpctl_last_sample + HZ / 5);
+	else if (time_after(now, nphy->txpctl_last_sample + HZ / 5))
+		op = B43_NPHY_TXPCTL_SAMPLE;
 
+	if (op != B43_NPHY_TXPCTL_NONE)
+		WRITE_ONCE(nphy->txpctl_op, op);
+out:
 	nphy->txpctl_last_tx = now;
-	if (!load && !unload && !sample)
+
+	return op;
+}
+
+void b43_nphy_txpctl_ofdm_apply(struct b43_wldev *dev)
+{
+	struct b43_phy_n *nphy = dev->phy.n;
+	enum b43_nphy_txpctl_op op = READ_ONCE(nphy->txpctl_op);
+	u16 c1, c2;
+
+	if (op == B43_NPHY_TXPCTL_NONE)
 		return;
+	/* b43_nphy_txpctl_bidx_reset() forgot them meanwhile */
+	if (op == B43_NPHY_TXPCTL_LOAD && !nphy->txpctl_bidx_valid)
+		goto out;
 
 	b43_mac_suspend(dev);
 	if (nphy->hang_avoid)
 		b43_nphy_stay_in_carrier_search(dev, 1);
 
-	if (load) {
+	if (op == B43_NPHY_TXPCTL_LOAD) {
 		b43_phy_write(dev, B43_NPHY_TXPCTL_BIDX,
 			      B43_NPHY_TXPCTL_BIDX_LOAD | nphy->txpctl_bidx);
 		nphy->txpctl_bidx_loaded = true;
-	} else if (unload) {
+	} else if (op == B43_NPHY_TXPCTL_UNLOAD) {
 		b43_phy_write(dev, B43_NPHY_TXPCTL_BIDX, nphy->txpctl_bidx);
 		nphy->txpctl_bidx_loaded = false;
 	} else {
@@ -6439,7 +6465,17 @@ void b43_nphy_txpctl_ofdm_tx(struct b43_wldev *dev)
 		b43_nphy_stay_in_carrier_search(dev, 0);
 	b43_mac_enable(dev);
 
-	nphy->txpctl_last_sample = now;
+	nphy->txpctl_last_sample = jiffies;
+out:
+	/* The state above is final before the check decides again */
+	smp_store_release(&nphy->txpctl_op, B43_NPHY_TXPCTL_NONE);
+}
+
+/* Called before OFDM or HT frames are sent, with wl->mutex held */
+void b43_nphy_txpctl_ofdm_tx(struct b43_wldev *dev)
+{
+	if (b43_nphy_txpctl_ofdm_check(dev) != B43_NPHY_TXPCTL_NONE)
+		b43_nphy_txpctl_ofdm_apply(dev);
 }
 
 /* https://bcm-v4.sipsolutions.net/802.11/PHY/N/SetChanspec */

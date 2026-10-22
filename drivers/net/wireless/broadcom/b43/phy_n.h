@@ -931,6 +931,14 @@ struct b43_phy_n_pwr_ctl_info {
 	u8 idle_tssi_5g;
 };
 
+/* TX power control register access before OFDM frames are sent */
+enum b43_nphy_txpctl_op {
+	B43_NPHY_TXPCTL_NONE,
+	B43_NPHY_TXPCTL_LOAD,
+	B43_NPHY_TXPCTL_UNLOAD,
+	B43_NPHY_TXPCTL_SAMPLE,
+};
+
 struct b43_phy_n {
 	u8 antsel_type;
 	u8 cal_orig_pwr_idx[2];
@@ -982,6 +990,8 @@ struct b43_phy_n {
 	u16 txpctl_bidx;
 	unsigned long txpctl_last_tx;
 	unsigned long txpctl_last_sample;
+	/* Register access b43_nphy_txpctl_ofdm_apply() has to do */
+	enum b43_nphy_txpctl_op txpctl_op;
 
 	u8 txrx_chain;
 	u16 tx_rx_cal_phy_saveregs[11];
@@ -1016,8 +1026,20 @@ struct b43_phy_operations;
 extern const struct b43_phy_operations b43_phyops_n;
 
 #ifdef CONFIG_B43_PHY_N
+enum b43_nphy_txpctl_op b43_nphy_txpctl_ofdm_check(struct b43_wldev *dev);
+void b43_nphy_txpctl_ofdm_apply(struct b43_wldev *dev);
 void b43_nphy_txpctl_ofdm_tx(struct b43_wldev *dev);
 #else
+static inline enum b43_nphy_txpctl_op
+b43_nphy_txpctl_ofdm_check(struct b43_wldev *dev)
+{
+	return B43_NPHY_TXPCTL_NONE;
+}
+
+static inline void b43_nphy_txpctl_ofdm_apply(struct b43_wldev *dev)
+{
+}
+
 static inline void b43_nphy_txpctl_ofdm_tx(struct b43_wldev *dev)
 {
 }
