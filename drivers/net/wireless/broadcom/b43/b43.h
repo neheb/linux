@@ -932,6 +932,9 @@ struct b43_wldev {
 	unsigned int periodic_state;
 
 	struct work_struct restart_work;
+	/* Receives the frames of interrupts that only signal RX */
+	struct net_device *napi_dev;
+	struct napi_struct napi;
 
 	/* encryption/decryption */
 	u16 ktp;		/* Key table pointer */

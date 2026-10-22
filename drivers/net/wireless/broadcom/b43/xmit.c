@@ -1031,7 +1031,8 @@ static void b43_rx_airtime(struct b43_wldev *dev, struct sk_buff *skb,
 	rcu_read_unlock();
 }
 
-void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
+void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr,
+	    struct napi_struct *napi)
 {
 	struct ieee80211_rx_status status;
 	struct b43_plcp_hdr6 *plcp;
@@ -1253,7 +1254,10 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 	b43_rx_airtime(dev, skb, &status, ppdu_start);
 
 	memcpy(IEEE80211_SKB_RXCB(skb), &status, sizeof(status));
-	ieee80211_rx_ni(dev->wl->hw, skb);
+	if (napi)
+		ieee80211_rx_napi(dev->wl->hw, NULL, skb, napi);
+	else
+		ieee80211_rx_ni(dev->wl->hw, skb);
 
 #if B43_DEBUG
 	dev->rx_count++;

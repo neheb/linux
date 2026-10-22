@@ -2154,7 +2154,8 @@ static void b43_dma_rx_recycle(struct b43_dmaring *ring, int slot)
 	sync_descbuffer_for_device(ring, meta->dmaaddr, ring->rx_buffersize);
 }
 
-static void dma_rx(struct b43_dmaring *ring, int slot)
+static void dma_rx(struct b43_dmaring *ring, int slot,
+		   struct napi_struct *napi)
 {
 	const struct b43_dma_ops *ops = ring->ops;
 	struct b43_dmadesc_generic *desc;
@@ -2221,7 +2222,7 @@ static void dma_rx(struct b43_dmaring *ring, int slot)
 	skb_put(skb, len + ring->frameoffset);
 	skb_pull(skb, ring->frameoffset);
 
-	b43_rx(ring->dev, skb, rxhdr);
+	b43_rx(ring->dev, skb, rxhdr, napi);
 	return;
 
 drop_recycle_buffer:
@@ -2249,7 +2250,11 @@ void b43_dma_handle_rx_overflow(struct b43_dmaring *ring)
 	ring->ops->set_current_rxslot(ring, previous_slot);
 }
 
-void b43_dma_rx(struct b43_dmaring *ring)
+/*
+ * Receive up to @budget frames, and hand them to mac80211 through @napi
+ * unless it is NULL. Returns the number of frames received.
+ */
+int b43_dma_rx(struct b43_dmaring *ring, int budget, struct napi_struct *napi)
 {
 	const struct b43_dma_ops *ops = ring->ops;
 	int slot, current_slot;
@@ -2260,18 +2265,21 @@ void b43_dma_rx(struct b43_dmaring *ring)
 	B43_WARN_ON(!(current_slot >= 0 && current_slot < ring->nr_slots));
 
 	slot = ring->current_slot;
-	for (; slot != current_slot; slot = next_slot(ring, slot)) {
+	for (; slot != current_slot && used_slots < budget;
+	     slot = next_slot(ring, slot)) {
 		if (unlikely(ring->rx_skip)) {
 			b43_dma_rx_recycle(ring, slot);
 			ring->rx_skip--;
 		} else {
-			dma_rx(ring, slot);
+			dma_rx(ring, slot, napi);
 		}
 		update_max_used_slots(ring, ++used_slots);
 	}
 	wmb();
 	ops->set_current_rxslot(ring, slot);
 	ring->current_slot = slot;
+
+	return used_slots;
 }
 
 static void b43_dma_tx_suspend_ring(struct b43_dmaring *ring)

@@ -2165,7 +2165,7 @@ static void b43_do_interrupt_thread(struct b43_wldev *dev)
 		if (b43_using_pio_transfers(dev))
 			b43_pio_rx(dev->pio.rx_queue);
 		else
-			b43_dma_rx(dev->dma.rx_ring);
+			b43_dma_rx(dev->dma.rx_ring, INT_MAX, NULL);
 	}
 	B43_WARN_ON(dma_reason[1] & B43_DMAIRQ_RX_DONE);
 	B43_WARN_ON(dma_reason[2] & B43_DMAIRQ_RX_DONE);
@@ -2195,6 +2195,50 @@ static void b43_do_interrupt_thread(struct b43_wldev *dev)
 		}
 	}
 #endif
+}
+
+/*
+ * Receive the frames of an interrupt that signals nothing else. Running
+ * here instead of in the interrupt thread saves waking the thread, two
+ * context switches per interrupt, and mac80211 hands the frames to GRO.
+ * The device interrupts stay disabled until this is done, so it never
+ * runs together with the thread.
+ */
+static int b43_napi_poll(struct napi_struct *napi, int budget)
+{
+	struct b43_wldev *dev = container_of(napi, struct b43_wldev, napi);
+	struct b43_wl *wl = dev->wl;
+	int done = 0;
+
+	if (likely(b43_status(dev) == B43_STAT_STARTED))
+		done = b43_dma_rx(dev->dma.rx_ring, budget, napi);
+
+	if (done < budget && napi_complete_done(napi, done)) {
+		/* b43_wireless_core_stop() disables them under the same lock */
+		spin_lock_irq(&wl->hardirq_lock);
+		if (b43_status(dev) == B43_STAT_STARTED)
+			b43_write32(dev, B43_MMIO_GEN_IRQ_MASK, dev->irq_mask);
+		spin_unlock_irq(&wl->hardirq_lock);
+	}
+
+	return done;
+}
+
+/* Whether the interrupt being handled only signals received frames */
+static bool b43_irq_is_rx_only(struct b43_wldev *dev, u32 reason)
+{
+	int i;
+
+	if (reason != B43_IRQ_DMA ||
+	    dev->dma_reason[0] != B43_DMAIRQ_RX_DONE ||
+	    b43_using_pio_transfers(dev))
+		return false;
+	for (i = 1; i < ARRAY_SIZE(dev->dma_reason); i++) {
+		if (dev->dma_reason[i])
+			return false;
+	}
+
+	return true;
 }
 
 /* Interrupt thread handler. Handles device interrupts in thread context. */
@@ -2249,8 +2293,18 @@ static irqreturn_t b43_do_interrupt(struct b43_wldev *dev)
 	b43_write32(dev, B43_MMIO_DMA5_REASON, dev->dma_reason[5]);
 */
 
-	/* Disable IRQs on the device. The IRQ thread handler will re-enable them. */
+	/*
+	 * Disable IRQs on the device. The IRQ thread handler or the NAPI
+	 * poll will re-enable them.
+	 */
 	b43_write32(dev, B43_MMIO_GEN_IRQ_MASK, 0);
+
+	if (!b43_bus_host_is_sdio(dev->dev) &&
+	    b43_irq_is_rx_only(dev, reason)) {
+		napi_schedule(&dev->napi);
+		return IRQ_HANDLED;
+	}
+
 	/* Save the reason bitmasks for the IRQ thread handler. */
 	dev->irq_reason = reason;
 
@@ -4842,6 +4896,7 @@ redo:
 		b43_sdio_free_irq(dev);
 	else
 		free_irq(dev->dev->irq, dev);
+	napi_disable(&orig_dev->napi);
 	mutex_lock(&wl->mutex);
 	dev = wl->current_dev;
 	if (!dev)
@@ -4886,10 +4941,12 @@ static int b43_wireless_core_start(struct b43_wldev *dev)
 			goto out;
 		}
 	} else {
+		napi_enable(&dev->napi);
 		err = request_threaded_irq(dev->dev->irq, b43_interrupt_handler,
 					   b43_interrupt_thread_handler,
 					   IRQF_SHARED, KBUILD_MODNAME, dev);
 		if (err) {
+			napi_disable(&dev->napi);
 			b43err(dev->wl, "Cannot request IRQ-%d\n",
 			       dev->dev->irq);
 			goto out;
@@ -6073,6 +6130,8 @@ static void b43_one_core_detach(struct b43_bus_dev *dev)
 	b43_wireless_core_detach(wldev);
 	list_del(&wldev->list);
 	b43_bus_set_wldev(dev, NULL);
+	netif_napi_del(&wldev->napi);
+	free_netdev(wldev->napi_dev);
 	kfree(wldev);
 }
 
@@ -6092,9 +6151,14 @@ static int b43_one_core_attach(struct b43_bus_dev *dev, struct b43_wl *wl)
 	wldev->bad_frames_preempt = modparam_bad_frames_preempt;
 	INIT_LIST_HEAD(&wldev->list);
 
+	wldev->napi_dev = alloc_netdev_dummy(0);
+	if (!wldev->napi_dev)
+		goto err_kfree_wldev;
+	netif_napi_add(wldev->napi_dev, &wldev->napi, b43_napi_poll);
+
 	err = b43_wireless_core_attach(wldev);
 	if (err)
-		goto err_kfree_wldev;
+		goto err_free_napi;
 
 	b43_bus_set_wldev(dev, wldev);
 	b43_debugfs_add_device(wldev);
@@ -6102,6 +6166,9 @@ static int b43_one_core_attach(struct b43_bus_dev *dev, struct b43_wl *wl)
       out:
 	return err;
 
+      err_free_napi:
+	netif_napi_del(&wldev->napi);
+	free_netdev(wldev->napi_dev);
       err_kfree_wldev:
 	kfree(wldev);
 	return err;

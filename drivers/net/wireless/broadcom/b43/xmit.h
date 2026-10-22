@@ -358,7 +358,8 @@ u8 b43_plcp_get_ratecode_ofdm(const u8 bitrate);
 void b43_generate_plcp_hdr(struct b43_plcp_hdr4 *plcp,
 			   const u16 octets, const u8 bitrate);
 
-void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr);
+void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr,
+	    struct napi_struct *napi);
 
 unsigned int b43_ht_max_ampdu_len(u8 mcs);
 unsigned int b43_tx_mpdu_len(struct sk_buff *skb);
