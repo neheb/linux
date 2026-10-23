@@ -299,17 +299,13 @@ unsigned int b43_ht_max_ampdu_len(u8 mcs)
 }
 
 /*
- * The rate of the RTS in front of an A-MPDU. mac80211 picks the lowest
- * rate for frames sent at an MCS, 1 Mbit/s, and the RTS and CTS then
- * take a large part of the airtime. Like brcmsmac, take the fastest basic
- * rate that is not faster than the MCS, here of the OFDM rates, or the
- * fastest mandatory OFDM rate below it if no OFDM rate is basic. When
- * the BSS protects OFDM frames from 802.11b stations, keep the rate of
- * mac80211, which then is a CCK rate.
+ * The rate a station answers a frame sent at @mcs at. Like brcmsmac, take
+ * the fastest basic rate that is not faster than the MCS, here of the
+ * OFDM rates, or the fastest mandatory OFDM rate below it if no OFDM rate
+ * is basic.
  */
-static u8 b43_ht_rts_rate(struct b43_wldev *dev,
-			  const struct ieee80211_tx_info *info, u8 mcs,
-			  u8 rts_rate)
+static u8 b43_ht_resp_rate(struct b43_wldev *dev,
+			   const struct ieee80211_tx_info *info, u8 mcs)
 {
 	struct ieee80211_vif *vif = info->control.vif;
 	struct ieee80211_supported_band *sband;
@@ -317,11 +313,8 @@ static u8 b43_ht_rts_rate(struct b43_wldev *dev,
 	unsigned long basic;
 	int i;
 
-	if (!vif || vif->bss_conf.use_cts_prot)
-		return rts_rate;
-
 	sband = dev->wl->hw->wiphy->bands[info->band];
-	basic = vif->bss_conf.basic_rates;
+	basic = vif ? vif->bss_conf.basic_rates : 0;
 	for_each_set_bit(i, &basic, sband->n_bitrates) {
 		u8 r = sband->bitrates[i].hw_value;
 
@@ -336,6 +329,25 @@ static u8 b43_ht_rts_rate(struct b43_wldev *dev,
 	if (max >= B43_OFDM_RATE_12MB)
 		return B43_OFDM_RATE_12MB;
 	return B43_OFDM_RATE_6MB;
+}
+
+/*
+ * The rate of the RTS in front of an A-MPDU. mac80211 picks the lowest
+ * rate for frames sent at an MCS, 1 Mbit/s, and the RTS and CTS then
+ * take a large part of the airtime, so take the rate the station answers
+ * the MCS at. When the BSS protects OFDM frames from 802.11b stations,
+ * keep the rate of mac80211, which then is a CCK rate.
+ */
+static u8 b43_ht_rts_rate(struct b43_wldev *dev,
+			  const struct ieee80211_tx_info *info, u8 mcs,
+			  u8 rts_rate)
+{
+	struct ieee80211_vif *vif = info->control.vif;
+
+	if (!vif || vif->bss_conf.use_cts_prot)
+		return rts_rate;
+
+	return b43_ht_resp_rate(dev, info, mcs);
 }
 
 /*
@@ -403,6 +415,22 @@ static __le16 b43_ack_duration(struct b43_wldev *dev,
 
 	return cpu_to_le16(b43_frame_duration(info->band, 10, ack, erp,
 					      vif->bss_conf.use_short_preamble));
+}
+
+/*
+ * The duration field of a frame to a station sent at @mcs: SIFS and the
+ * ACK, or the block ack of an A-MPDU, at the rate the station answers at.
+ */
+static __le16 b43_ht_duration(struct b43_wldev *dev,
+			      const struct ieee80211_tx_info *info, u8 mcs)
+{
+	/* A compressed block ack has 28 bytes before the FCS, an ACK 10 */
+	unsigned int len = info->flags & IEEE80211_TX_CTL_AMPDU ? 28 : 10;
+	u8 rate = b43_ht_resp_rate(dev, info, mcs);
+
+	/* The rate is in 500 kbit/s, b43_frame_duration() takes 100 kbit/s */
+	return cpu_to_le16(b43_frame_duration(info->band, len, rate * 5,
+					      true, false));
 }
 
 /* Airtime of a legacy frame of @bytes at @rate, in microseconds */
@@ -660,15 +688,22 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 	rate_fb_ofdm = b43_is_ofdm_rate(rate_fb);
 
 	/*
-	 * mac80211 leaves the duration field of frames sent with fast-xmit
-	 * to the driver. Only frames at legacy rates need one, mac80211
-	 * leaves it at zero for HT rates as well.
+	 * mac80211 leaves the duration field of frames sent at an MCS to
+	 * the hardware, and the firmware sends it as it is: other stations
+	 * would set no NAV for the ACK or the block ack. With fast-xmit, it
+	 * leaves the one of frames at legacy rates to the driver as well.
 	 */
-	if ((info->control.flags & IEEE80211_TX_CTRL_FAST_XMIT) && txrate &&
-	    info->control.vif && !(info->flags & IEEE80211_TX_CTL_NO_ACK) &&
-	    !is_multicast_ether_addr(wlhdr->addr1))
-		((struct ieee80211_hdr *)skb_frag->data)->duration_id =
-			b43_ack_duration(dev, info, txrate);
+	if (info->control.vif && !(info->flags & IEEE80211_TX_CTL_NO_ACK) &&
+	    !is_multicast_ether_addr(wlhdr->addr1)) {
+		struct ieee80211_hdr *hdr =
+			(struct ieee80211_hdr *)skb_frag->data;
+
+		if (rates[0].flags & IEEE80211_TX_RC_MCS)
+			hdr->duration_id = b43_ht_duration(dev, info, mcs);
+		else if ((info->control.flags & IEEE80211_TX_CTRL_FAST_XMIT) &&
+			 txrate)
+			hdr->duration_id = b43_ack_duration(dev, info, txrate);
+	}
 
 	if (ht)
 		txhdr->phy_rate = mcs;
