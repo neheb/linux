@@ -247,6 +247,8 @@ struct b43_dmaring {
 	u16 rx_buffersize;
 	/* The MMIO base register of the DMA controller. */
 	u16 mmio_base;
+	/* RX buffers left of a frame that spans several of them */
+	int rx_skip;
 	/* DMA controller index number (0-5). */
 	int index;
 	/* Boolean. Is this a TX ring? */

@@ -1582,7 +1582,17 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 	ieee80211_queue_work(dev->wl->hw, &dev->wl->tx_work);
 }
 
-static void dma_rx(struct b43_dmaring *ring, int *slot)
+/* Hand the buffer in @slot back to the device without reading it */
+static void b43_dma_rx_recycle(struct b43_dmaring *ring, int slot)
+{
+	struct b43_dmadesc_meta *meta;
+
+	ring->ops->idx2desc(ring, slot, &meta);
+	b43_poison_rx_buffer(ring, meta->skb);
+	sync_descbuffer_for_device(ring, meta->dmaaddr, ring->rx_buffersize);
+}
+
+static void dma_rx(struct b43_dmaring *ring, int slot)
 {
 	const struct b43_dma_ops *ops = ring->ops;
 	struct b43_dmadesc_generic *desc;
@@ -1593,7 +1603,7 @@ static void dma_rx(struct b43_dmaring *ring, int *slot)
 	int err;
 	dma_addr_t dmaaddr;
 
-	desc = ops->idx2desc(ring, *slot, &meta);
+	desc = ops->idx2desc(ring, slot, &meta);
 
 	sync_descbuffer_for_cpu(ring, meta->dmaaddr, ring->rx_buffersize);
 	skb = meta->skb;
@@ -1621,30 +1631,22 @@ static void dma_rx(struct b43_dmaring *ring, int *slot)
 		goto drop_recycle_buffer;
 	}
 	if (unlikely(len + ring->frameoffset > ring->rx_buffersize)) {
-		/* The data did not fit into one descriptor buffer
-		 * and is split over multiple buffers.
-		 * This should never happen, as we try to allocate buffers
-		 * big enough. So simply ignore this packet.
+		/*
+		 * The frame did not fit into this buffer and continues in
+		 * the next ones, like an A-MSDU from an HT station. Drop it:
+		 * recycle this buffer, and have b43_dma_rx() recycle the
+		 * others as the device fills them. A length no frame has
+		 * means that this buffer does not start a frame, drop only
+		 * the buffer then.
 		 */
-		int cnt = 0;
-		s32 tmp = len;
-
-		while (1) {
-			desc = ops->idx2desc(ring, *slot, &meta);
-			/* recycle the descriptor buffer. */
-			b43_poison_rx_buffer(ring, meta->skb);
-			sync_descbuffer_for_device(ring, meta->dmaaddr,
-						   ring->rx_buffersize);
-			*slot = next_slot(ring, *slot);
-			cnt++;
-			tmp -= ring->rx_buffersize;
-			if (tmp <= 0)
-				break;
-		}
+		if (len <= IEEE80211_MAX_MPDU_LEN_HT_7935)
+			ring->rx_skip = DIV_ROUND_UP(len + ring->frameoffset,
+						     ring->rx_buffersize) - 1;
 		b43err(ring->dev->wl, "DMA RX buffer too small "
 		       "(len: %u, buffer: %u, nr-dropped: %d)\n",
-		       len, ring->rx_buffersize, cnt);
-		goto drop;
+		       len, ring->rx_buffersize, ring->rx_skip + 1);
+		dmaaddr = meta->dmaaddr;
+		goto drop_recycle_buffer;
 	}
 
 	dmaaddr = meta->dmaaddr;
@@ -1659,7 +1661,6 @@ static void dma_rx(struct b43_dmaring *ring, int *slot)
 	skb_pull(skb, ring->frameoffset);
 
 	b43_rx(ring->dev, skb, rxhdr);
-drop:
 	return;
 
 drop_recycle_buffer:
@@ -1699,7 +1700,12 @@ void b43_dma_rx(struct b43_dmaring *ring)
 
 	slot = ring->current_slot;
 	for (; slot != current_slot; slot = next_slot(ring, slot)) {
-		dma_rx(ring, &slot);
+		if (unlikely(ring->rx_skip)) {
+			b43_dma_rx_recycle(ring, slot);
+			ring->rx_skip--;
+		} else {
+			dma_rx(ring, slot);
+		}
 		update_max_used_slots(ring, ++used_slots);
 	}
 	wmb();
