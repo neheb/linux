@@ -38,6 +38,7 @@
 #include "phy_common.h"
 #include "phy_g.h"
 #include "phy_n.h"
+#include "phy_ht.h"
 #include "dma.h"
 #include "pio.h"
 #include "sysfs.h"
@@ -4787,6 +4788,72 @@ static void b43_set_beacon_listen_interval(struct b43_wldev *dev, u16 interval)
 	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_BCN_LI, interval);
 }
 
+/*
+ * HT-PHY: the receiver locks onto any CCK frame it detects, also a weak
+ * one of a distant BSS, and stays on it to its end: a 1 Mbit/s broadcast
+ * of 200 bytes keeps it deaf for 2 ms, and a much stronger frame of our
+ * own BSS that starts meanwhile is lost. Turn CCK reception off as an AP,
+ * or while associated as a station, when nothing of the BSS is sent in
+ * CCK: no basic rate is CCK, and no peer supports a CCK rate. mac80211
+ * sends management frames and EAPOL to a peer at the lowest rate it
+ * supports, not at a basic rate, and a CCK frame is answered in CCK. A
+ * station is added with the mandatory rates, CCK ones among them, and
+ * keeps them until it associates. Keep CCK reception while scanning, as
+ * other APs beacon at 1 Mbit/s, and while a monitor interface is up.
+ */
+struct b43_cck_peers {
+	/* A station that changes state, counted as @present says */
+	struct ieee80211_sta *sta;
+	u32 cck;
+	bool found;
+};
+
+static void b43_cck_peers_iter(void *data, struct ieee80211_sta *sta)
+{
+	struct b43_cck_peers *peers = data;
+
+	if (sta != peers->sta &&
+	    (sta->deflink.supp_rates[NL80211_BAND_2GHZ] & peers->cck))
+		peers->found = true;
+}
+
+/*
+ * Update the CCK reception for the stations known. @sta, if not NULL,
+ * changes state: it counts if @present, and not if it is being removed.
+ */
+static void b43_update_cck_rx(struct b43_wldev *dev, struct ieee80211_sta *sta,
+			      bool present)
+{
+	struct b43_wl *wl = dev->wl;
+	struct ieee80211_vif *vif = wl->vif;
+	struct ieee80211_supported_band *sband;
+	struct b43_cck_peers peers = { .sta = sta };
+	bool on = true;
+	int i;
+
+	if (dev->phy.type != B43_PHYTYPE_HT)
+		return;
+
+	/* At 5 GHz the PHY receives no CCK whatever is set */
+	if (vif && !wl->radiotap_enabled && !wl->cck_scanning &&
+	    b43_current_band(wl) == NL80211_BAND_2GHZ &&
+	    vif->bss_conf.basic_rates &&
+	    (vif->type == NL80211_IFTYPE_AP ||
+	     (vif->type == NL80211_IFTYPE_STATION && vif->cfg.assoc))) {
+		sband = wl->hw->wiphy->bands[NL80211_BAND_2GHZ];
+		for (i = 0; sband && i < sband->n_bitrates; i++)
+			if (b43_is_cck_rate(sband->bitrates[i].hw_value))
+				peers.cck |= BIT(i);
+
+		ieee80211_iterate_stations_atomic(wl->hw, b43_cck_peers_iter,
+						  &peers);
+		on = (vif->bss_conf.basic_rates & peers.cck) || peers.found ||
+		     (sta && present &&
+		      (sta->deflink.supp_rates[NL80211_BAND_2GHZ] & peers.cck));
+	}
+	b43_phy_ht_set_cck_rx(dev, on);
+}
+
 /* Write the short and long frame retry limit values. */
 static void b43_set_retry_limits(struct b43_wldev *dev,
 				 unsigned int short_retry,
@@ -4869,6 +4936,7 @@ static int b43_op_config(struct ieee80211_hw *hw, int radio_idx, u32 changed)
 		goto out_mac_enable;
 
 	dev->wl->radiotap_enabled = !!(conf->flags & IEEE80211_CONF_MONITOR);
+	b43_update_cck_rx(dev, NULL, false);
 
 	/* Adjust the desired TX power level. */
 	b43_update_desired_txpower(dev);
@@ -4993,6 +5061,8 @@ static void b43_op_bss_info_changed(struct ieee80211_hw *hw,
 
 	if (changed & BSS_CHANGED_BASIC_RATES)
 		b43_update_basic_rates(dev, conf->basic_rates);
+	if (changed & (BSS_CHANGED_BASIC_RATES | BSS_CHANGED_ASSOC))
+		b43_update_cck_rx(dev, NULL, false);
 
 	if (changed & BSS_CHANGED_ERP_SLOT) {
 		if (conf->use_short_slot)
@@ -6070,8 +6140,8 @@ static void b43_op_release_buffered_frames(struct ieee80211_hw *hw,
 	b43_ps_requeue(wl, &list);
 }
 
-static int b43_op_sta_add(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-			  struct ieee80211_sta *sta)
+static void b43_sta_add(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			struct ieee80211_sta *sta)
 {
 	struct b43_sta *bsta = (struct b43_sta *)sta->drv_priv;
 
@@ -6080,13 +6150,11 @@ static int b43_op_sta_add(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		skb_queue_head_init(&bsta->psq);
 		bsta->ps_init = true;
 	}
-
-	return 0;
 }
 
-static int b43_op_sta_remove(struct ieee80211_hw *hw,
-			     struct ieee80211_vif *vif,
-			     struct ieee80211_sta *sta)
+static void b43_sta_remove(struct ieee80211_hw *hw,
+			   struct ieee80211_vif *vif,
+			   struct ieee80211_sta *sta)
 {
 	struct b43_wl *wl = hw_to_b43_wl(hw);
 	struct b43_sta *bsta = (struct b43_sta *)sta->drv_priv;
@@ -6102,6 +6170,35 @@ static int b43_op_sta_remove(struct ieee80211_hw *hw,
 	skb_queue_splice_init(&bsta->psq, &list);
 	spin_unlock_irqrestore(&bsta->psq.lock, flags);
 	ieee80211_purge_tx_queue(hw, &list);
+}
+
+static int b43_op_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			    struct ieee80211_sta *sta,
+			    enum ieee80211_sta_state old_state,
+			    enum ieee80211_sta_state new_state)
+{
+	struct b43_wl *wl = hw_to_b43_wl(hw);
+	struct b43_wldev *dev;
+	bool added = false, removed = false;
+
+	if (old_state == IEEE80211_STA_NOTEXIST &&
+	    new_state == IEEE80211_STA_NONE) {
+		b43_sta_add(hw, vif, sta);
+		added = true;
+	} else if (old_state == IEEE80211_STA_NONE &&
+		   new_state == IEEE80211_STA_NOTEXIST) {
+		b43_sta_remove(hw, vif, sta);
+		removed = true;
+	}
+
+	/* The rates of a station are known once it associates */
+	if (added || removed || new_state == IEEE80211_STA_ASSOC) {
+		mutex_lock(&wl->mutex);
+		dev = wl->current_dev;
+		if (dev && b43_status(dev) >= B43_STAT_INITIALIZED)
+			b43_update_cck_rx(dev, sta, !removed);
+		mutex_unlock(&wl->mutex);
+	}
 
 	return 0;
 }
@@ -6118,6 +6215,8 @@ static void b43_op_sw_scan_start_notifier(struct ieee80211_hw *hw,
 	if (dev && (b43_status(dev) >= B43_STAT_INITIALIZED)) {
 		/* Disable CFP update during scan on other channels. */
 		b43_hf_write(dev, b43_hf_read(dev) | B43_HF_SKCFPUP);
+		wl->cck_scanning = true;
+		b43_update_cck_rx(dev, NULL, false);
 	}
 	mutex_unlock(&wl->mutex);
 }
@@ -6133,6 +6232,8 @@ static void b43_op_sw_scan_complete_notifier(struct ieee80211_hw *hw,
 	if (dev && (b43_status(dev) >= B43_STAT_INITIALIZED)) {
 		/* Re-enable CFP update. */
 		b43_hf_write(dev, b43_hf_read(dev) & ~B43_HF_SKCFPUP);
+		wl->cck_scanning = false;
+		b43_update_cck_rx(dev, NULL, false);
 	}
 	mutex_unlock(&wl->mutex);
 }
@@ -6258,8 +6359,7 @@ static const struct ieee80211_ops b43_hw_ops = {
 	.set_tim		= b43_op_beacon_set_tim,
 	.sta_notify		= b43_op_sta_notify,
 	.release_buffered_frames = b43_op_release_buffered_frames,
-	.sta_add		= b43_op_sta_add,
-	.sta_remove		= b43_op_sta_remove,
+	.sta_state		= b43_op_sta_state,
 	.ampdu_action		= b43_op_ampdu_action,
 	.sw_scan_start		= b43_op_sw_scan_start_notifier,
 	.sw_scan_complete	= b43_op_sw_scan_complete_notifier,
