@@ -1630,13 +1630,14 @@ static bool b43_dma_ampdu_frame_acked(const struct b43_txstatus *status,
 }
 
 /*
- * Whether the MPDU in @skb may be sent again. It must still be in the
- * block ack window, which follows the newest MPDU queued: once it falls
- * behind, the receiver takes it for an old frame, or for a new one once
- * the sequence numbers wrap.
+ * How many times the MPDU in @skb is sent again, counting this time, or
+ * 0 if it may not be sent again. It must still be in the block ack
+ * window, which follows the newest MPDU queued: once it falls behind,
+ * the receiver takes it for an old frame, or for a new one once the
+ * sequence numbers wrap.
  */
-static bool b43_dma_ampdu_may_retry(struct b43_wldev *dev,
-				    struct sk_buff *skb)
+static unsigned int b43_dma_ampdu_may_retry(struct b43_wldev *dev,
+					    struct sk_buff *skb)
 {
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	u16 seq = b43_dma_ampdu_seq(skb);
@@ -1646,11 +1647,11 @@ static bool b43_dma_ampdu_may_retry(struct b43_wldev *dev,
 
 	bsta = b43_dma_ampdu_sta(dev, skb);
 	if (!bsta || !dev->wl->vif)
-		return false;
+		return 0;
 
 	if (ieee80211_sn_sub(bsta->ampdu_seq[tid], seq) >=
 	    IEEE80211_MAX_AMPDU_BUF_HT)
-		return false;
+		return 0;
 
 	retry = &bsta->ampdu_retry[tid][seq % IEEE80211_MAX_AMPDU_BUF_HT];
 	if (retry->seq != seq) {
@@ -1658,10 +1659,9 @@ static bool b43_dma_ampdu_may_retry(struct b43_wldev *dev,
 		retry->count = 0;
 	}
 	if (retry->count >= B43_AMPDU_RETRY_LIMIT)
-		return false;
+		return 0;
 
-	retry->count++;
-	return true;
+	return ++retry->count;
 }
 
 /*
@@ -1683,6 +1683,7 @@ static bool b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
 	struct b43_private_tx_info *priv_info = b43_get_priv_tx_info(info);
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	bool acked = b43_dma_ampdu_frame_acked(status, skb);
+	unsigned int resend;
 	struct b43_sta *bsta;
 	int i;
 
@@ -1691,7 +1692,8 @@ static bool b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
 	priv_info->bouncebuffer = NULL;
 	meta->skb = B43_DMA_PTR_POISON;
 
-	if (!acked && b43_dma_ampdu_may_retry(dev, skb)) {
+	resend = acked ? 0 : b43_dma_ampdu_may_retry(dev, skb);
+	if (resend) {
 		hdr->frame_control |= cpu_to_le16(IEEE80211_FCTL_RETRY);
 		/* The bounce buffer pointer took the place of the vif */
 		info->control.vif = dev->wl->vif;
@@ -1707,6 +1709,16 @@ static bool b43_dma_complete_ampdu_frame(struct b43_wldev *dev,
 								    NULL),
 				       skb, info->control.rates,
 				       ARRAY_SIZE(info->control.rates));
+		/*
+		 * That is nearly always the rate that just failed. Send it
+		 * again once at it, with the RTS/CTS of an A-MPDU against a
+		 * collision, and then at the second rate, which minstrel
+		 * picks as its most reliable one with max_rates = 2, as
+		 * multi-rate retry hardware does.
+		 */
+		if (resend > 1 && info->control.rates[1].idx >= 0 &&
+		    (info->control.rates[1].flags & IEEE80211_TX_RC_MCS))
+			info->control.rates[0] = info->control.rates[1];
 		__skb_queue_tail(retry, skb);
 		return false;
 	}

@@ -3865,22 +3865,30 @@ static bool b43_tx_ampdu_candidate(struct b43_wldev *dev,
 
 /*
  * Whether the frame at the head of @queue can join @skb in an A-MPDU:
- * the same receiver and TID.
+ * the same receiver and TID, and the same rate, as the A-MPDU is sent at
+ * the rate of its first MPDU. MPDUs sent again at a lower rate and rate
+ * control probes go in A-MPDUs of their own.
  */
 static bool b43_tx_ampdu_continues(struct b43_wldev *dev,
 				   struct sk_buff_head *queue,
 				   struct sk_buff *skb)
 {
+	const u16 rate_flags = IEEE80211_TX_RC_MCS | IEEE80211_TX_RC_SHORT_GI;
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	struct sk_buff *next = skb_peek(queue);
+	struct ieee80211_tx_rate *rate, *nrate;
 	struct ieee80211_hdr *nhdr;
 
 	if (!next || !b43_tx_ampdu_candidate(dev, next))
 		return false;
 
 	nhdr = (struct ieee80211_hdr *)next->data;
+	rate = &IEEE80211_SKB_CB(skb)->control.rates[0];
+	nrate = &IEEE80211_SKB_CB(next)->control.rates[0];
 	return ether_addr_equal(nhdr->addr1, hdr->addr1) &&
-	       ieee80211_get_tid(nhdr) == ieee80211_get_tid(hdr);
+	       ieee80211_get_tid(nhdr) == ieee80211_get_tid(hdr) &&
+	       nrate->idx == rate->idx &&
+	       (nrate->flags & rate_flags) == (rate->flags & rate_flags);
 }
 
 /* The A-MPDU length the peer accepts, as announced in its HT capabilities */
