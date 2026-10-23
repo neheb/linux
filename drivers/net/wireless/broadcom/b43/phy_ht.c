@@ -1002,6 +1002,57 @@ static void b43_phy_ht_op_prepare_structs(struct b43_wldev *dev)
 		phy_ht->bb_mult_save[i] = -1;
 }
 
+/*
+ * Not named in Linux yet; names and meanings as in Broadcom's published
+ * bcmdevs.h and sbchipc.h.
+ */
+#define B43_BFL2_ANAPACTRL_2G		0x00100000	/* 2.4 GHz ext PAs controlled by analog PA control lines */
+#define B43_CHIPCTL_4331_EXTPA_ANA_EN	BIT(24)		/* analog control of the ext PAs */
+
+/*
+ * On BCM4331 boards with BFL2_ANAPACTRL_2G (e.g. the Netgear R6400 v1 and v2)
+ * the 2.4 GHz external PAs are driven by the analog PA control lines. bcma
+ * enables the digital ones (EXTPA_EN, EXTPA_EN2) for every BCM4331 at boot, and
+ * b43 never enables the external LNA: the receiver is deaf and the transmitter
+ * weak. Switch to the analog lines, enable the external LNA, and set the two
+ * PHY values that differ from b43's init on these boards to what the hardware
+ * holds under Broadcom's driver: RF sequencer delay 0x90 in table 7 (0x08 ->
+ * 0x46) and PHY 0x259 (0x2024 -> 0x2444). The 12x9 package (9, 11) wires the
+ * ext PA lines differently (GPIO 2/5, see bcma) and is left alone.
+ */
+static void b43_phy_ht_ext_fem_setup(struct b43_wldev *dev)
+{
+	struct ssb_sprom *sprom = dev->dev->bus_sprom;
+	struct bcma_drv_cc *cc;
+	struct bcma_bus *bus;
+	u32 bf2, set, old;
+
+	if (dev->dev->bus_type != B43_BUS_BCMA)
+		return;
+	bus = dev->dev->bdev->bus;
+	bf2 = sprom->boardflags2_lo | (sprom->boardflags2_hi << 16);
+	if (bus->chipinfo.id != BCMA_CHIP_ID_BCM4331 ||
+	    b43_current_band(dev->wl) != NL80211_BAND_2GHZ ||
+	    !(bf2 & B43_BFL2_ANAPACTRL_2G) ||
+	    bus->chipinfo.pkg == 9 || bus->chipinfo.pkg == 11)
+		return;
+	cc = &bus->drv_cc;
+
+	set = B43_CHIPCTL_4331_EXTPA_ANA_EN;
+	if (sprom->boardflags_lo & B43_BFL_EXTLNA)
+		set |= BCMA_CHIPCTL_4331_EXT_LNA;
+	old = bcma_cc_read32(cc, BCMA_CC_CHIPCTL);
+	bcma_cc_maskset32(cc, BCMA_CC_CHIPCTL,
+			  ~(BCMA_CHIPCTL_4331_EXTPA_EN |
+			    BCMA_CHIPCTL_4331_EXTPA_EN2), set);
+
+	b43_httab_write(dev, B43_HTTAB8(7, 0x90), 0x46);
+	b43_phy_maskset(dev, 0x259, ~0x0ff0, 0x0440);
+
+	b43dbg(dev->wl, "HT-PHY ext FEM: analog PA control, chipcontrol 0x%08x -> 0x%08x\n",
+	       old, bcma_cc_read32(cc, BCMA_CC_CHIPCTL));
+}
+
 static int b43_phy_ht_op_init(struct b43_wldev *dev)
 {
 	struct b43_phy_ht *phy_ht = dev->phy.ht;
@@ -1123,6 +1174,8 @@ static int b43_phy_ht_op_init(struct b43_wldev *dev)
 
 	b43_httab_write_bulk(dev, B43_HTTAB32(0x1a, 0xc0),
 			B43_HTTAB_1A_C0_LATE_SIZE, b43_httab_0x1a_0xc0_late);
+
+	b43_phy_ht_ext_fem_setup(dev);
 
 	saved_tx_pwr_ctl = phy_ht->tx_pwr_ctl;
 	b43_phy_ht_tx_power_fix(dev);
