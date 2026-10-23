@@ -1013,6 +1013,8 @@ struct b43_wl {
 #endif /* CONFIG_B43_HWRNG */
 
 	bool radiotap_enabled;
+	/* A software scan is on, which needs CCK reception */
+	bool cck_scanning;
 	bool radio_enabled;
 
 	/* The beacon we are currently using (AP or IBSS mode). */

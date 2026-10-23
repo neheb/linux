@@ -265,6 +265,20 @@ static u16 b43_phy_ht_classifier(struct b43_wldev *dev, u16 mask, u16 val)
 	return tmp;
 }
 
+/* Turn CCK (802.11b) reception on or off, also for later PHY inits */
+void b43_phy_ht_set_cck_rx(struct b43_wldev *dev, bool on)
+{
+	struct b43_phy_ht *phy_ht = dev->phy.ht;
+
+	if (phy_ht->cck_rx_off == !on)
+		return;
+	phy_ht->cck_rx_off = !on;
+	if (b43_current_band(dev->wl) == NL80211_BAND_2GHZ)
+		b43_phy_ht_classifier(dev, B43_PHY_HT_CLASS_CTL_CCK_EN,
+				      on ? B43_PHY_HT_CLASS_CTL_CCK_EN : 0);
+	b43dbg(dev->wl, "HT-PHY: CCK reception %s\n", on ? "on" : "off");
+}
+
 static void b43_phy_ht_reset_cca(struct b43_wldev *dev)
 {
 	u16 bbcfg;
@@ -1026,6 +1040,7 @@ static int b43_phy_ht_op_init(struct b43_wldev *dev)
 		b43_phy_ht_classifier(dev, B43_PHY_HT_CLASS_CTL_CCK_EN, 0);
 	else
 		b43_phy_ht_classifier(dev, B43_PHY_HT_CLASS_CTL_CCK_EN,
+				      phy_ht->cck_rx_off ? 0 :
 				      B43_PHY_HT_CLASS_CTL_CCK_EN);
 
 	b43_phy_set(dev, 0xb1, 0x91);

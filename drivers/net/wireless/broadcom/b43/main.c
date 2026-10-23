@@ -38,6 +38,7 @@
 #include "phy_common.h"
 #include "phy_g.h"
 #include "phy_n.h"
+#include "phy_ht.h"
 #include "dma.h"
 #include "pio.h"
 #include "sysfs.h"
@@ -4779,6 +4780,41 @@ static void b43_set_beacon_listen_interval(struct b43_wldev *dev, u16 interval)
 	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_BCN_LI, interval);
 }
 
+/*
+ * HT-PHY: the receiver locks onto any CCK frame it detects, also a weak
+ * one of a distant BSS, and stays on it to its end: a 1 Mbit/s broadcast
+ * of 200 bytes keeps it deaf for 2 ms, and a much stronger frame of our
+ * own BSS that starts meanwhile is lost. A BSS without CCK basic rates
+ * never needs CCK reception, as its stations answer at a basic rate and
+ * are sent no CCK frames, so turn it off there, as an AP or while
+ * associated as a station. Keep it while scanning, as other APs beacon
+ * at 1 Mbit/s, and while a monitor interface is up.
+ */
+static void b43_update_cck_rx(struct b43_wldev *dev)
+{
+	struct b43_wl *wl = dev->wl;
+	struct ieee80211_vif *vif = wl->vif;
+	struct ieee80211_supported_band *sband;
+	bool on = true;
+	int i;
+
+	if (dev->phy.type != B43_PHYTYPE_HT)
+		return;
+
+	if (vif && !wl->radiotap_enabled && !wl->cck_scanning &&
+	    vif->bss_conf.basic_rates &&
+	    (vif->type == NL80211_IFTYPE_AP ||
+	     (vif->type == NL80211_IFTYPE_STATION && vif->cfg.assoc))) {
+		sband = wl->hw->wiphy->bands[NL80211_BAND_2GHZ];
+		on = false;
+		for (i = 0; sband && i < sband->n_bitrates; i++)
+			if ((vif->bss_conf.basic_rates & BIT(i)) &&
+			    b43_is_cck_rate(sband->bitrates[i].hw_value))
+				on = true;
+	}
+	b43_phy_ht_set_cck_rx(dev, on);
+}
+
 /* Write the short and long frame retry limit values. */
 static void b43_set_retry_limits(struct b43_wldev *dev,
 				 unsigned int short_retry,
@@ -4833,6 +4869,7 @@ static int b43_op_config(struct ieee80211_hw *hw, int radio_idx, u32 changed)
 		goto out_mac_enable;
 
 	dev->wl->radiotap_enabled = !!(conf->flags & IEEE80211_CONF_MONITOR);
+	b43_update_cck_rx(dev);
 
 	/* Adjust the desired TX power level. */
 	if (conf->power_level != 0) {
@@ -4963,6 +5000,8 @@ static void b43_op_bss_info_changed(struct ieee80211_hw *hw,
 
 	if (changed & BSS_CHANGED_BASIC_RATES)
 		b43_update_basic_rates(dev, conf->basic_rates);
+	if (changed & (BSS_CHANGED_BASIC_RATES | BSS_CHANGED_ASSOC))
+		b43_update_cck_rx(dev);
 
 	if (changed & BSS_CHANGED_ERP_SLOT) {
 		if (conf->use_short_slot)
@@ -6096,6 +6135,8 @@ static void b43_op_sw_scan_start_notifier(struct ieee80211_hw *hw,
 	if (dev && (b43_status(dev) >= B43_STAT_INITIALIZED)) {
 		/* Disable CFP update during scan on other channels. */
 		b43_hf_write(dev, b43_hf_read(dev) | B43_HF_SKCFPUP);
+		wl->cck_scanning = true;
+		b43_update_cck_rx(dev);
 	}
 	mutex_unlock(&wl->mutex);
 }
@@ -6111,6 +6152,8 @@ static void b43_op_sw_scan_complete_notifier(struct ieee80211_hw *hw,
 	if (dev && (b43_status(dev) >= B43_STAT_INITIALIZED)) {
 		/* Re-enable CFP update. */
 		b43_hf_write(dev, b43_hf_read(dev) & ~B43_HF_SKCFPUP);
+		wl->cck_scanning = false;
+		b43_update_cck_rx(dev);
 	}
 	mutex_unlock(&wl->mutex);
 }
