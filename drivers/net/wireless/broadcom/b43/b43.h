@@ -855,6 +855,14 @@ struct b43_sta {
 	u64 baw_pending[IEEE80211_NUM_TIDS];
 	/* Reorder buffer size of the receiver from its ADDBA response, by TID */
 	u8 ampdu_buf[IEEE80211_NUM_TIDS];
+	/* AP mode: the station dozes */
+	bool asleep;
+	/* psq is set up, and frames may be added to it */
+	bool ps_init;
+	/* A-MPDU frames held while the station dozes, by their lock */
+	struct sk_buff_head psq;
+	/* TIDs of psq reported to mac80211 as buffered */
+	u16 ps_tids;
 };
 
 /*
@@ -1039,6 +1047,8 @@ struct b43_wl {
 	spinlock_t txq_lock;
 	/* ACs with a TX status since b43_do_tx_work() last took their frames */
 	unsigned long txq_pull;
+	/* Stations in power save, as an AP */
+	atomic_t ps_dozing;
 	/*
 	 * Serializes DMA transmission and TX status instead of wl->mutex,
 	 * see b43_tx_direct(). tx_busy is set while it is held, and
