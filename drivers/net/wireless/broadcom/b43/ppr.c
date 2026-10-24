@@ -65,6 +65,62 @@ u8 b43_ppr_get_max(struct b43_wldev *dev, struct b43_ppr *ppr)
 	return res;
 }
 
+/*
+ * SPROM rev 9 has an offset for each CCK, legacy OFDM and MCS 0-7 rate in
+ * each band, in 0.5 dB steps below the maximum power. The MCS offsets
+ * apply to every way of sending the MCS (SISO, CDD, STBC and SDM).
+ */
+static bool b43_ppr_load_max_from_sprom_r9(struct b43_wldev *dev,
+					   struct b43_ppr *ppr,
+					   enum b43_band band, u8 maxpwr)
+{
+	struct b43_ppr_rates *rates = &ppr->rates;
+	struct ssb_sprom *sprom = dev->dev->bus_sprom;
+	u32 ofdm_po, mcs_po;
+	int i;
+
+	switch (band) {
+	case B43_BAND_2G:
+		ofdm_po = sprom->legofdmbw202gpo;
+		mcs_po = sprom->mcsbw202gpo;
+		break;
+	case B43_BAND_5G_LO:
+		ofdm_po = sprom->legofdmbw205glpo;
+		mcs_po = sprom->mcsbw205glpo;
+		break;
+	case B43_BAND_5G_MI:
+		ofdm_po = sprom->legofdmbw205gmpo;
+		mcs_po = sprom->mcsbw205gmpo;
+		break;
+	case B43_BAND_5G_HI:
+		ofdm_po = sprom->legofdmbw205ghpo;
+		mcs_po = sprom->mcsbw205ghpo;
+		break;
+	default:
+		return false;
+	}
+
+	if (band == B43_BAND_2G) {
+		for (i = 0; i < 4; i++)
+			rates->cck[i] = maxpwr -
+					((sprom->cckbw202gpo >> (i * 4)) & 0xf) * 2;
+	}
+
+	for (i = 0; i < 8; i++) {
+		u8 ofdm = maxpwr - ((ofdm_po >> (i * 4)) & 0xf) * 2;
+		u8 mcs = maxpwr - ((mcs_po >> (i * 4)) & 0xf) * 2;
+
+		rates->ofdm[i] = ofdm;
+		rates->ofdm_20_cdd[i] = ofdm;
+		rates->mcs_20[i] = mcs;
+		rates->mcs_20_cdd[i] = mcs;
+		rates->mcs_20_stbc[i] = mcs;
+		rates->mcs_20_sdm[i] = mcs;
+	}
+
+	return true;
+}
+
 bool b43_ppr_load_max_from_sprom(struct b43_wldev *dev, struct b43_ppr *ppr,
 				 enum b43_band band)
 {
@@ -114,6 +170,10 @@ bool b43_ppr_load_max_from_sprom(struct b43_wldev *dev, struct b43_ppr *ppr,
 		WARN_ON_ONCE(1);
 		return false;
 	}
+
+	/* Rev 9 replaced the offsets read above by per rate ones */
+	if (sprom->revision >= 9)
+		return b43_ppr_load_max_from_sprom_r9(dev, ppr, band, maxpwr);
 
 	if (band == B43_BAND_2G) {
 		for (i = 0; i < 4; i++) {
