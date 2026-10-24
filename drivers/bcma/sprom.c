@@ -472,6 +472,35 @@ static void bcma_sprom_extract_r8(struct bcma_bus *bus, const u16 *sprom)
 	SPEX(temps_hysteresis, SSB_SPROM8_TEMPDELTA,
 	     SSB_SPROM8_TEMPDELTA_HYSTERESIS,
 	     SSB_SPROM8_TEMPDELTA_HYSTERESIS_SHIFT);
+
+	if (bus->sprom.revision < 9)
+		return;
+
+	/* Rev 9 keeps its power per rate where rev 8 has the offsets above */
+	SPEX(cckbw202gpo, SSB_SPROM9_2GPO_CCKBW20, ~0, 0);
+	SPEX(cckbw20ul2gpo, SSB_SPROM9_2GPO_CCKBW20UL, ~0, 0);
+	SPEX32(legofdmbw202gpo, SSB_SPROM9_2GPO_LOFDMBW20, ~0, 0);
+	SPEX32(legofdmbw20ul2gpo, SSB_SPROM9_2GPO_LOFDMBW20UL, ~0, 0);
+	SPEX32(legofdmbw205glpo, SSB_SPROM9_5GLPO_LOFDMBW20, ~0, 0);
+	SPEX32(legofdmbw20ul5glpo, SSB_SPROM9_5GLPO_LOFDMBW20UL, ~0, 0);
+	SPEX32(legofdmbw205gmpo, SSB_SPROM9_5GMPO_LOFDMBW20, ~0, 0);
+	SPEX32(legofdmbw20ul5gmpo, SSB_SPROM9_5GMPO_LOFDMBW20UL, ~0, 0);
+	SPEX32(legofdmbw205ghpo, SSB_SPROM9_5GHPO_LOFDMBW20, ~0, 0);
+	SPEX32(legofdmbw20ul5ghpo, SSB_SPROM9_5GHPO_LOFDMBW20UL, ~0, 0);
+	SPEX32(mcsbw202gpo, SSB_SPROM9_2GPO_MCSBW20, ~0, 0);
+	SPEX32(mcsbw20ul2gpo, SSB_SPROM9_2GPO_MCSBW20UL, ~0, 0);
+	SPEX32(mcsbw402gpo, SSB_SPROM9_2GPO_MCSBW40, ~0, 0);
+	SPEX32(mcsbw205glpo, SSB_SPROM9_5GLPO_MCSBW20, ~0, 0);
+	SPEX32(mcsbw20ul5glpo, SSB_SPROM9_5GLPO_MCSBW20UL, ~0, 0);
+	SPEX32(mcsbw405glpo, SSB_SPROM9_5GLPO_MCSBW40, ~0, 0);
+	SPEX32(mcsbw205gmpo, SSB_SPROM9_5GMPO_MCSBW20, ~0, 0);
+	SPEX32(mcsbw20ul5gmpo, SSB_SPROM9_5GMPO_MCSBW20UL, ~0, 0);
+	SPEX32(mcsbw405gmpo, SSB_SPROM9_5GMPO_MCSBW40, ~0, 0);
+	SPEX32(mcsbw205ghpo, SSB_SPROM9_5GHPO_MCSBW20, ~0, 0);
+	SPEX32(mcsbw20ul5ghpo, SSB_SPROM9_5GHPO_MCSBW20UL, ~0, 0);
+	SPEX32(mcsbw405ghpo, SSB_SPROM9_5GHPO_MCSBW40, ~0, 0);
+	SPEX(mcs32po, SSB_SPROM9_PO_MCS32, ~0, 0);
+	SPEX(legofdm40duppo, SSB_SPROM9_PO_LOFDM40DUP, ~0, 0);
 }
 
 /*
