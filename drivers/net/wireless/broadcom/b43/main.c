@@ -4242,7 +4242,8 @@ static int b43_op_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 		algorithm = B43_SEC_ALGO_AES;
 		break;
 	default:
-		B43_WARN_ON(1);
+		/* CCMP-256, GCMP and BIP keys are handled by mac80211 */
+		err = -EOPNOTSUPP;
 		goto out_unlock;
 	}
 	index = (u8) (key->keyidx);
