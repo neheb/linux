@@ -3777,6 +3777,10 @@ static int ieee80211_set_tx_power(struct wiphy *wiphy,
 
 			ieee80211_recalc_txpower(link, update_txp_type);
 		}
+
+		/* the hardware power level takes the minimum over the vifs */
+		if (local->emulate_chanctx)
+			ieee80211_hw_conf_chan(local);
 		return 0;
 	}
 
