@@ -16,6 +16,10 @@
 #include "tables_phy_ht.h"
 #include "radio_2059.h"
 #include "main.h"
+#include "ppr.h"
+
+/* Highest TX power control target per core at 2.4 GHz, 15.5 dBm in Q5.2 */
+#define B43_PHY_HT_2G_MAX_TARGET	62
 
 /*
  * A front end module like the R6400's. BFL_EXTLNA and extpagain don't tell
@@ -675,13 +679,44 @@ static void b43_phy_ht_tssi_setup(struct b43_wldev *dev)
 	}
 }
 
+/* The largest per-rate TX power backoff the SPROM asks for at @freq (Q5.2) */
+static u8 b43_phy_ht_rate_backoff(struct b43_wldev *dev, u16 freq)
+{
+	struct b43_ppr ppr;
+	enum b43_band band;
+	u8 max, min = U8_MAX;
+	int i;
+
+	if (b43_current_band(dev->wl) == NL80211_BAND_2GHZ)
+		band = B43_BAND_2G;
+	else if (freq < 5100)
+		band = B43_BAND_5G_LO;
+	else if (freq < 5500)
+		band = B43_BAND_5G_MI;
+	else
+		band = B43_BAND_5G_HI;
+
+	b43_ppr_clear(dev, &ppr);
+	if (!b43_ppr_load_max_from_sprom(dev, &ppr, band))
+		return 0;
+
+	max = b43_ppr_get_max(dev, &ppr);
+	for (i = 0; i < B43_PPR_RATES_NUM; i++) {
+		/* Rates the band doesn't have, CCK at 5 GHz, stay 0 */
+		if (ppr.__all_rates[i])
+			min = min(min, ppr.__all_rates[i]);
+	}
+
+	return min < max ? max - min : 0;
+}
+
 static void b43_phy_ht_tx_power_ctl_setup(struct b43_wldev *dev)
 {
 	struct b43_phy_ht *phy_ht = dev->phy.ht;
 	struct ssb_sprom *sprom = dev->dev->bus_sprom;
 
 	u8 *idle = phy_ht->idle_tssi;
-	u8 target[3];
+	u8 target[3], backoff;
 	s16 a1[3], b0[3], b1[3];
 
 	u16 freq = dev->phy.chandef->chan->center_freq;
@@ -721,6 +756,28 @@ static void b43_phy_ht_tx_power_ctl_setup(struct b43_wldev *dev)
 		a1[0] = a1[1] = a1[2] = -424;
 		b0[0] = b0[1] = b0[2] = 5612;
 		b1[0] = b1[1] = b1[2] = -1393;
+	}
+
+	/*
+	 * The power control loop holds one target for all rates, and how
+	 * HT-PHY sends a single rate below it is not known. Lower the target
+	 * by the largest per-rate backoff the SPROM asks for, which keeps
+	 * 64-QAM inside what the PA handles, at the cost of the same backoff
+	 * for the other rates.
+	 */
+	backoff = b43_phy_ht_rate_backoff(dev, freq);
+	for (c = 0; c < 3; c++)
+		target[c] -= min(target[c], backoff);
+
+	/*
+	 * That is not enough at 2.4 GHz: there the PA saturates at about
+	 * 20.75 dBm per core, and 64-QAM only stays decodable at least 5 dB
+	 * below that. With a static TX gain the target is not used.
+	 */
+	if (b43_current_band(dev->wl) == NL80211_BAND_2GHZ) {
+		for (c = 0; c < 3; c++)
+			target[c] = min_t(u8, target[c],
+					  B43_PHY_HT_2G_MAX_TARGET);
 	}
 
 	/* Regulatory and user limits, but no lower than 8 dBm */
