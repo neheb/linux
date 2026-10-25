@@ -403,6 +403,40 @@ int mt76x02_ampdu_action(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 }
 EXPORT_SYMBOL_GPL(mt76x02_ampdu_action);
 
+/*
+ * Key removal is ignored (see below), so the hardware slot a key falls back
+ * to software for can still hold an older key with the same index. Clear it,
+ * or the hardware keeps decrypting the frames of the software key with the
+ * stale one and flags them as decryption errors.
+ */
+static void mt76x02_clear_hw_key(struct mt76x02_dev *dev,
+				 struct ieee80211_vif *vif,
+				 struct ieee80211_sta *sta,
+				 struct ieee80211_key_conf *key)
+{
+	struct mt76x02_vif *mvif = (struct mt76x02_vif *)vif->drv_priv;
+	struct mt76x02_sta *msta;
+	struct mt76_wcid *wcid;
+
+	/* management frame protection keys have no hardware slot */
+	if (key->keyidx > 3)
+		return;
+
+	if (sta) {
+		msta = (struct mt76x02_sta *)sta->drv_priv;
+		mt76x02_mac_wcid_set_key(dev, msta->wcid.idx, NULL);
+		return;
+	}
+
+	/* don't clear a group key that is still in use at another index */
+	wcid = &mvif->group_wcid;
+	if (wcid->hw_key_idx == (u8)-1 || wcid->hw_key_idx == key->keyidx) {
+		wcid->hw_key_idx = -1;
+		mt76x02_mac_wcid_set_key(dev, wcid->idx, NULL);
+	}
+	mt76x02_mac_shared_key_setup(dev, mvif->idx, key->keyidx, NULL);
+}
+
 int mt76x02_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 		    struct ieee80211_vif *vif, struct ieee80211_sta *sta,
 		    struct ieee80211_key_conf *key)
@@ -422,7 +456,7 @@ int mt76x02_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	case WLAN_CIPHER_SUITE_CCMP:
 		break;
 	default:
-		return -EOPNOTSUPP;
+		goto sw_crypto;
 	}
 
 	/*
@@ -434,7 +468,7 @@ int mt76x02_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	    (key->cipher == WLAN_CIPHER_SUITE_TKIP ||
 	     key->cipher == WLAN_CIPHER_SUITE_CCMP) &&
 	    !(key->flags & IEEE80211_KEY_FLAG_PAIRWISE))
-		return -EOPNOTSUPP;
+		goto sw_crypto;
 
 	/*
 	 * In USB AP mode, broadcast/multicast frames are setup in beacon
@@ -444,11 +478,11 @@ int mt76x02_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	if (mt76_is_usb(&dev->mt76) &&
 	    vif->type == NL80211_IFTYPE_AP &&
 	    !(key->flags & IEEE80211_KEY_FLAG_PAIRWISE))
-		return -EOPNOTSUPP;
+		goto sw_crypto;
 
 	/* MT76x0 GTK offloading does not work with more than one VIF */
 	if (is_mt76x0(dev) && !(key->flags & IEEE80211_KEY_FLAG_PAIRWISE))
-		return -EOPNOTSUPP;
+		goto sw_crypto;
 
 	msta = sta ? (struct mt76x02_sta *)sta->drv_priv : NULL;
 	wcid = msta ? &msta->wcid : &mvif->group_wcid;
@@ -481,6 +515,12 @@ int mt76x02_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	}
 
 	return mt76x02_mac_wcid_set_key(dev, msta->wcid.idx, key);
+
+sw_crypto:
+	if (cmd == SET_KEY)
+		mt76x02_clear_hw_key(dev, vif, sta, key);
+
+	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL_GPL(mt76x02_set_key);
 
