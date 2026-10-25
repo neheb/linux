@@ -799,9 +799,26 @@ int mt76x02_mac_process_rx(struct mt76x02_dev *dev, struct sk_buff *skb,
 		status->flag |= RX_FLAG_IV_STRIPPED;
 	}
 
-	wcid = FIELD_GET(MT_RXWI_CTL_WCID, ctl);
-	sta = mt76x02_rx_get_sta(&dev->mt76, wcid);
-	status->wcid = mt76x02_rx_get_sta_wcid(sta, unicast);
+	/*
+	 * ICVERR and MICERR form a two bit cipher error code, where both bits
+	 * set means that no valid key was found, not a MIC failure.
+	 */
+	if ((rxinfo & (MT_RXINFO_ICVERR | MT_RXINFO_MICERR)) == MT_RXINFO_MICERR)
+		status->flag |= RX_FLAG_MMIC_ERROR;
+
+	/*
+	 * Frames with a bad FCS only come in with FIF_FCSFAIL, for monitor
+	 * interfaces. Keep them away from the station and its block ack
+	 * reordering: a sequence number from a corrupted frame moves the
+	 * reorder window and makes the good frames after it look old.
+	 */
+	if (rxinfo & MT_RXINFO_CRCERR) {
+		status->flag |= RX_FLAG_FAILED_FCS_CRC;
+	} else {
+		wcid = FIELD_GET(MT_RXWI_CTL_WCID, ctl);
+		sta = mt76x02_rx_get_sta(&dev->mt76, wcid);
+		status->wcid = mt76x02_rx_get_sta_wcid(sta, unicast);
+	}
 
 	len = FIELD_GET(MT_RXWI_CTL_MPDU_LEN, ctl);
 	pn_len = FIELD_GET(MT_RXINFO_PN_LEN, rxinfo);
@@ -830,7 +847,8 @@ int mt76x02_mac_process_rx(struct mt76x02_dev *dev, struct sk_buff *skb,
 
 	mt76x02_remove_hdr_pad(skb, pad_len);
 
-	if ((rxinfo & MT_RXINFO_BA) && !(rxinfo & MT_RXINFO_NULL))
+	if ((rxinfo & MT_RXINFO_BA) && !(rxinfo & MT_RXINFO_NULL) &&
+	    status->wcid)
 		status->aggr = true;
 
 	if (rxinfo & MT_RXINFO_AMPDU) {
