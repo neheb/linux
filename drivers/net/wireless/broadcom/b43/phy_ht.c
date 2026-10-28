@@ -1251,7 +1251,9 @@ static int b43_phy_ht_op_init(struct b43_wldev *dev)
 		b43_phy_ht_bphy_init(dev);
 
 	b43_httab_write_bulk(dev, B43_HTTAB32(0x1a, 0xc0),
-			B43_HTTAB_1A_C0_LATE_SIZE, b43_httab_0x1a_0xc0_late);
+			B43_HTTAB_1A_C0_LATE_SIZE,
+			b43_current_band(dev->wl) == NL80211_BAND_5GHZ ?
+			b43_httab_0x1a_0xc0_late_5g : b43_httab_0x1a_0xc0_late);
 
 	b43_phy_ht_ext_fem_setup(dev);
 
