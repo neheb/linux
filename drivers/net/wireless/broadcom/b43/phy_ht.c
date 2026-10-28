@@ -386,8 +386,9 @@ static void b43_phy_ht_stop_playback(struct b43_wldev *dev)
 		if (phy_ht->bb_mult_save[i] >= 0) {
 			b43_httab_write(dev, B43_HTTAB16(13, 0x63 + i * 4),
 					phy_ht->bb_mult_save[i]);
-			b43_httab_write(dev, B43_HTTAB16(13, 0x67 + i * 4),
+			b43_httab_write(dev, B43_HTTAB16(13, 0x73 + i * 4),
 					phy_ht->bb_mult_save[i]);
+			phy_ht->bb_mult_save[i] = -1;
 		}
 	}
 }
