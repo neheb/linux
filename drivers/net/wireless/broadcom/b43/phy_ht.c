@@ -9,6 +9,7 @@
 
 */
 
+#include <linux/cordic.h>
 #include <linux/slab.h>
 
 #include "b43.h"
@@ -423,7 +424,7 @@ static u16 b43_phy_ht_load_samples(struct b43_wldev *dev)
 }
 
 static void b43_phy_ht_run_samples(struct b43_wldev *dev, u16 samps, u16 loops,
-				   u16 wait)
+				   u16 wait, bool iqmode)
 {
 	struct b43_phy_ht *phy_ht = dev->phy.ht;
 	u16 save_seq_mode;
@@ -447,8 +448,14 @@ static void b43_phy_ht_run_samples(struct b43_wldev *dev, u16 samps, u16 loops,
 	/* TODO: find out mask bits! Do we need more function arguments? */
 	b43_phy_mask(dev, B43_PHY_HT_SAMP_CMD, ~0);
 	b43_phy_mask(dev, B43_PHY_HT_SAMP_CMD, ~0);
-	b43_phy_mask(dev, B43_PHY_HT_IQLOCAL_CMDGCTL, ~0);
-	b43_phy_set(dev, B43_PHY_HT_SAMP_CMD, 0x1);
+	if (iqmode) {
+		/* Play through the I/Q LO calibration engine */
+		b43_phy_mask(dev, B43_PHY_HT_IQLOCAL_CMDGCTL, 0x7FFF);
+		b43_phy_set(dev, B43_PHY_HT_IQLOCAL_CMDGCTL, 0x8000);
+	} else {
+		b43_phy_mask(dev, B43_PHY_HT_IQLOCAL_CMDGCTL, ~0);
+		b43_phy_set(dev, B43_PHY_HT_SAMP_CMD, 0x1);
+	}
 
 	for (i = 0; i < 100; i++) {
 		if (!(b43_phy_read(dev, B43_PHY_HT_RF_SEQ_STATUS) & 1)) {
@@ -468,7 +475,29 @@ static void b43_phy_ht_tx_tone(struct b43_wldev *dev)
 	u16 samp;
 
 	samp = b43_phy_ht_load_samples(dev);
-	b43_phy_ht_run_samples(dev, samp, 0xFFFF, 0);
+	b43_phy_ht_run_samples(dev, samp, 0xFFFF, 0, false);
+}
+
+/* Load a tone of freq kHz and amplitude max, 8 µs at 20 MHz */
+static u16 b43_phy_ht_load_tone(struct b43_wldev *dev, u32 freq, u16 max)
+{
+	struct cordic_iq iq;
+	u32 val;
+	int i;
+	u16 len = 20 << 3;
+
+	b43_phy_write(dev, B43_PHY_HT_TABLE_ADDR, 0x4400);
+
+	for (i = 0; i < len; i++) {
+		iq = cordic_calc_iq(i * freq * 360 / 20000 % 360);
+		iq.i = CORDIC_FLOAT(iq.i * max);
+		iq.q = CORDIC_FLOAT(iq.q * max);
+		val = (iq.i & 0x3FF) << 10 | (iq.q & 0x3FF);
+		b43_phy_write(dev, B43_PHY_HT_TABLE_DATAHI, val >> 16);
+		b43_phy_write(dev, B43_PHY_HT_TABLE_DATALO, val & 0xFFFF);
+	}
+
+	return len;
 }
 
 /**************************************************
@@ -854,6 +883,248 @@ static void b43_phy_ht_tx_power_ctl_setup(struct b43_wldev *dev)
 }
 
 /**************************************************
+ * TX I/Q and LO calibration
+ **************************************************/
+
+/*
+ * The N-PHY rev 3+ procedure on three cores, with the setup Broadcom's driver
+ * uses on a BCM4331 (traced on channels 6 and 36). In table 13 the calibration
+ * engine finds the LO and I/Q ladders at 0x00 and 0x20, takes its start values
+ * from 0x40 + 8 * core and leaves its results at 0x80 + 7 * core: I/Q a and b
+ * at 0 and 1, the fine LO at 3, and the coarse LO, which it also sets in the
+ * radio, at 4 and 5. The I/Q and fine LO coefficients in use are at 0x60 and
+ * 0x70 + 4 * core.
+ */
+static const struct {
+	u8 percent;
+	u8 g_env;
+} b43_phy_ht_txcal_ladder_lo[] = {
+	{ 3, 0 }, { 4, 0 }, { 6, 0 }, { 9, 0 }, { 13, 0 }, { 18, 0 },
+	{ 25, 0 }, { 25, 1 }, { 25, 2 }, { 25, 3 }, { 25, 4 }, { 25, 5 },
+	{ 25, 6 }, { 25, 7 }, { 35, 7 }, { 50, 7 }, { 71, 7 }, { 100, 7 },
+}, b43_phy_ht_txcal_ladder_iq[] = {
+	{ 3, 0 }, { 4, 0 }, { 6, 0 }, { 9, 0 }, { 13, 0 }, { 18, 0 },
+	{ 25, 0 }, { 35, 0 }, { 50, 0 }, { 71, 0 }, { 100, 0 }, { 100, 1 },
+	{ 100, 2 }, { 100, 3 }, { 100, 4 }, { 100, 5 }, { 100, 6 }, { 100, 7 },
+};
+
+/* Core in bits 13:12, step type in bits 11:8 */
+static const u16 b43_phy_ht_txcal_cmds[] = {
+	0x8434, 0x8334, 0x8084, 0x8267, 0x8056, 0x8234,
+	0x9434, 0x9334, 0x9084, 0x9267, 0x9056, 0x9234,
+	0xA434, 0xA334, 0xA084, 0xA267, 0xA056, 0xA234,
+};
+
+static void b43_phy_ht_txcal_ladder(struct b43_wldev *dev, u16 bbmult)
+{
+	int i;
+	u16 scale;
+
+	for (i = 0; i < ARRAY_SIZE(b43_phy_ht_txcal_ladder_lo); i++) {
+		scale = b43_phy_ht_txcal_ladder_lo[i].percent * bbmult / 100;
+		b43_httab_write(dev, B43_HTTAB16(13, i), (scale & 0xFF) << 8 |
+				b43_phy_ht_txcal_ladder_lo[i].g_env);
+
+		scale = b43_phy_ht_txcal_ladder_iq[i].percent * bbmult / 100;
+		b43_httab_write(dev, B43_HTTAB16(13, 0x20 + i),
+				(scale & 0xFF) << 8 |
+				b43_phy_ht_txcal_ladder_iq[i].g_env);
+	}
+}
+
+/* Returns whether the coefficients were found and applied */
+static bool b43_phy_ht_cal_tx_iq_lo(struct b43_wldev *dev)
+{
+	struct b43_phy_ht *phy_ht = dev->phy.ht;
+	static const u16 clip_regs[3] = { B43_PHY_HT_C1_CLIP1THRES,
+					  B43_PHY_HT_C2_CLIP1THRES,
+					  B43_PHY_HT_C3_CLIP1THRES };
+	static const u16 afe_regs[3][2] = {
+		{ B43_PHY_HT_AFE_C1, B43_PHY_HT_AFE_C1_OVER },
+		{ B43_PHY_HT_AFE_C2, B43_PHY_HT_AFE_C2_OVER },
+		{ B43_PHY_HT_AFE_C3, B43_PHY_HT_AFE_C3_OVER },
+	};
+	static const u16 rfctl_regs[3][2] = {
+		{ B43_PHY_HT_RF_CTL_INT_C1, 0x840 },
+		{ B43_PHY_HT_RF_CTL_INT_C2, 0x860 },
+		{ B43_PHY_HT_RF_CTL_INT_C3, 0x880 },
+	};
+	static const u16 radio_cores[3] = { R2059_C1, R2059_C2, R2059_C3 };
+	/* Loopback for the calibration, at 2.4 and at 5 GHz */
+	static const u16 radio_regs[] = { 0x156, 0x157, 0x158, 0x15c,
+					  0x155, 0x15a, 0x159, 0x15b };
+	static const u16 radio_vals[2][ARRAY_SIZE(radio_regs)] = {
+		{ 0x43, 0x55, 0x00, 0x00, 0x06, 0x00, 0x06, 0x31 },
+		{ 0x43, 0x55, 0x00, 0x00, 0x0a, 0x31, 0x04, 0x00 },
+	};
+	bool ghz5 = b43_current_band(dev->wl) == NL80211_BAND_5GHZ;
+	u16 radio_save[3][ARRAY_SIZE(radio_regs)];
+	u16 afe_save[3][2], rfctl_save[3][2], tab8_save[3], gain_save[3][3];
+	u16 clip_save[3], class_save, bbmult, cmd, len, work, res;
+	bool tx_pwr_ctl = phy_ht->tx_pwr_ctl;
+	bool done = true;
+	u32 cal_gain;
+	int c, i, j;
+
+	b43_phy_ht_tx_power_ctl(dev, false);
+
+	/* Stay in carrier search */
+	class_save = b43_phy_ht_classifier(dev, 0, 0);
+	b43_phy_ht_classifier(dev, B43_PHY_HT_CLASS_CTL_CCK_EN |
+			      B43_PHY_HT_CLASS_CTL_OFDM_EN, 0);
+	b43_phy_ht_read_clip_detection(dev, clip_save);
+	for (c = 0; c < 3; c++)
+		b43_phy_write(dev, clip_regs[c], 0xFFFF);
+	b43_phy_ht_reset_cca(dev);
+
+	for (c = 0; c < 3; c++) {
+		for (i = 0; i < ARRAY_SIZE(radio_regs); i++) {
+			u16 reg = radio_cores[c] | radio_regs[i];
+
+			radio_save[c][i] = b43_radio_read(dev, reg);
+			b43_radio_write(dev, reg, radio_vals[ghz5][i]);
+		}
+	}
+
+	for (c = 0; c < 3; c++) {
+		afe_save[c][0] = b43_phy_read(dev, afe_regs[c][0]);
+		afe_save[c][1] = b43_phy_read(dev, afe_regs[c][1]);
+		/* the overridden bits as wl has them: 0 and 9 set, 10 clear */
+		b43_phy_maskset(dev, afe_regs[c][0], ~0x0501, 0x0201);
+		b43_phy_set(dev, afe_regs[c][1], 0x0600);
+
+		tab8_save[c] = b43_httab_read(dev, B43_HTTAB16(8, 0x03 + c * 0x10));
+		b43_httab_write(dev, B43_HTTAB16(8, 0x03 + c * 0x10), 0);
+
+		rfctl_save[c][0] = b43_phy_read(dev, rfctl_regs[c][0]);
+		rfctl_save[c][1] = b43_phy_read(dev, rfctl_regs[c][1]);
+		b43_phy_write(dev, rfctl_regs[c][0], 0x1440);
+		b43_phy_set(dev, rfctl_regs[c][1], 0x0002);
+	}
+
+	/* Calibrate at the gain of TX gain index 0, 25 at 5 GHz, as wl */
+	cal_gain = b43_httab_read(dev, B43_HTTAB32(26, 0xC0 + (ghz5 ? 25 : 0)));
+	bbmult = cal_gain & 0xFF;
+	for (c = 0; c < 3; c++) {
+		gain_save[c][0] = b43_httab_read(dev, B43_HTTAB16(7, 0x110 + c));
+		gain_save[c][1] = b43_httab_read(dev, B43_HTTAB16(13, 0x63 + c * 4));
+		gain_save[c][2] = b43_httab_read(dev, B43_HTTAB16(13, 0x73 + c * 4));
+		b43_httab_write(dev, B43_HTTAB16(7, 0x110 + c), cal_gain >> 16);
+		b43_httab_write(dev, B43_HTTAB16(13, 0x63 + c * 4), bbmult);
+		b43_httab_write(dev, B43_HTTAB16(13, 0x73 + c * 4), bbmult);
+	}
+
+	b43_phy_write(dev, B43_PHY_HT_IQLOCAL_CMDGCTL, 0x8AD9);
+
+	for (c = 0; c < 3; c++) {
+		work = 0x40 + c * 8;
+		for (i = 0; i < 6; i++)
+			if (i != 2)
+				b43_httab_write(dev, B43_HTTAB16(13, work + i), 0);
+	}
+
+	len = b43_phy_ht_load_tone(dev, 2500, 250);
+	b43_phy_ht_run_samples(dev, len, 0xFFFF, 0, true);
+
+	for (i = 0; i < ARRAY_SIZE(b43_phy_ht_txcal_cmds); i++) {
+		u16 core, type;
+
+		cmd = b43_phy_ht_txcal_cmds[i];
+		core = (cmd & 0x3000) >> 12;
+		type = (cmd & 0x0F00) >> 8;
+		work = 0x40 + core * 8;
+		res = 0x80 + core * 7;
+
+		if (i % 6 == 0)
+			b43_phy_ht_txcal_ladder(dev, bbmult);
+
+		b43_phy_write(dev, B43_PHY_HT_IQLOCAL_CMDNNUM, 0x6876);
+		if (type == 3 || type == 4)
+			b43_httab_write(dev, B43_HTTAB16(13, work + 3), 0);
+		if (type == 4)
+			b43_httab_write(dev, B43_HTTAB16(13, work + 4), 0);
+
+		b43_phy_write(dev, B43_PHY_HT_IQLOCAL_CMD, cmd);
+		for (j = 0; j < 2000; j++) {
+			if (!(b43_phy_read(dev, B43_PHY_HT_IQLOCAL_CMD) &
+			      B43_PHY_HT_IQLOCAL_CMD_START))
+				break;
+			udelay(10);
+		}
+		if (j == 2000) {
+			b43err(dev->wl, "TX I/Q LO calibration timeout (0x%04x)\n",
+			       cmd);
+			done = false;
+			break;
+		}
+
+		switch (type) {
+		case 0:
+			for (j = 0; j < 2; j++)
+				b43_httab_write(dev, B43_HTTAB16(13, work + j),
+						b43_httab_read(dev, B43_HTTAB16(13, res + j)));
+			break;
+		case 2:
+		case 3:
+		case 4:
+			/* fine LO, then the two coarse LO steps */
+			j = type + 1;
+			b43_httab_write(dev, B43_HTTAB16(13, work + j),
+					b43_httab_read(dev, B43_HTTAB16(13, res + j)));
+			break;
+		}
+	}
+
+	if (done) {
+		for (c = 0; c < 3; c++) {
+			u16 a, b, lo;
+
+			work = 0x40 + c * 8;
+			a = b43_httab_read(dev, B43_HTTAB16(13, work));
+			b = b43_httab_read(dev, B43_HTTAB16(13, work + 1));
+			lo = b43_httab_read(dev, B43_HTTAB16(13, work + 3));
+			for (j = 0x60; j <= 0x70; j += 0x10) {
+				b43_httab_write(dev, B43_HTTAB16(13, j + c * 4), a);
+				b43_httab_write(dev, B43_HTTAB16(13, j + c * 4 + 1), b);
+				b43_httab_write(dev, B43_HTTAB16(13, j + c * 4 + 2), lo);
+			}
+		}
+	}
+
+	b43_phy_ht_stop_playback(dev);
+	b43_phy_ht_reset_cca(dev);
+	b43_phy_write(dev, B43_PHY_HT_IQLOCAL_CMDGCTL, 0);
+
+	for (c = 0; c < 3; c++) {
+		b43_httab_write(dev, B43_HTTAB16(7, 0x110 + c), gain_save[c][0]);
+		b43_httab_write(dev, B43_HTTAB16(13, 0x63 + c * 4), gain_save[c][1]);
+		b43_httab_write(dev, B43_HTTAB16(13, 0x73 + c * 4), gain_save[c][2]);
+	}
+
+	for (c = 0; c < 3; c++) {
+		b43_phy_write(dev, afe_regs[c][0], afe_save[c][0]);
+		b43_phy_write(dev, afe_regs[c][1], afe_save[c][1]);
+		b43_httab_write(dev, B43_HTTAB16(8, 0x03 + c * 0x10), tab8_save[c]);
+		b43_phy_write(dev, rfctl_regs[c][0], rfctl_save[c][0]);
+		b43_phy_write(dev, rfctl_regs[c][1], rfctl_save[c][1]);
+	}
+	b43_phy_ht_reset_cca(dev);
+
+	for (c = 0; c < 3; c++)
+		for (i = 0; i < ARRAY_SIZE(radio_regs); i++)
+			b43_radio_write(dev, radio_cores[c] | radio_regs[i],
+					radio_save[c][i]);
+
+	for (c = 0; c < 3; c++)
+		b43_phy_write(dev, clip_regs[c], clip_save[c]);
+	b43_phy_ht_classifier(dev, B43_PHY_HT_CLASS_CTL_CCK_EN |
+			      B43_PHY_HT_CLASS_CTL_OFDM_EN, class_save);
+	b43_phy_ht_tx_power_ctl(dev, tx_pwr_ctl);
+
+	return done;
+}
+
+/**************************************************
  * Channel switching ops.
  **************************************************/
 
@@ -1024,6 +1295,8 @@ static int b43_phy_ht_set_channel(struct b43_wldev *dev,
 	} else {
 		return -ESRCH;
 	}
+
+	b43_phy_ht_cal_tx_iq_lo(dev);
 
 	return 0;
 }

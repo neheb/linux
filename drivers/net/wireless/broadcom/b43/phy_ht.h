@@ -17,6 +17,9 @@
 #define  B43_PHY_HT_CLASS_CTL_CCK_EN		0x0001 /* CCK enable */
 #define  B43_PHY_HT_CLASS_CTL_OFDM_EN		0x0002 /* OFDM enable */
 #define  B43_PHY_HT_CLASS_CTL_WAITED_EN		0x0004 /* Waited enable */
+#define B43_PHY_HT_IQLOCAL_CMD			0x0C0	/* I/Q LO cal command */
+#define  B43_PHY_HT_IQLOCAL_CMD_START		0x8000	/* Start, clears when done */
+#define B43_PHY_HT_IQLOCAL_CMDNNUM		0x0C1	/* I/Q LO cal command N num */
 #define B43_PHY_HT_IQLOCAL_CMDGCTL		0x0C2	/* I/Q LO cal command G control */
 #define B43_PHY_HT_SAMP_CMD			0x0C3	/* Sample command */
 #define  B43_PHY_HT_SAMP_CMD_STOP		0x0002	/* Stop */
