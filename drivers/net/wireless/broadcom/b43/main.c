@@ -4710,7 +4710,10 @@ static const char *band_to_string(enum nl80211_band band)
 	return "";
 }
 
-/* Expects wl->mutex locked */
+/*
+ * Expects wl->mutex locked. Returns 1 if it switched the band, which also
+ * tunes the channel (b43_phy_init()), 0 if the band was right already.
+ */
 static int b43_switch_band(struct b43_wldev *dev,
 			   struct ieee80211_channel *chan)
 {
@@ -4779,7 +4782,7 @@ static int b43_switch_band(struct b43_wldev *dev,
 
 	b43_phy_init(dev);
 
-	return 0;
+	return 1;
 }
 
 static void b43_set_beacon_listen_interval(struct b43_wldev *dev, u16 interval)
@@ -4919,13 +4922,15 @@ static int b43_op_config(struct ieee80211_hw *hw, int radio_idx, u32 changed)
 
 		/* Switch the band (if necessary). */
 		err = b43_switch_band(dev, conf->chandef.chan);
-		if (err)
+		if (err < 0)
 			goto out_mac_enable;
 
-		/* Switch to the requested channel.
-		 * The firmware takes care of races with the TX handler.
+		/* Switch to the requested channel, unless the band switch
+		 * did. The firmware takes care of races with the TX handler.
 		 */
-		b43_switch_channel(dev, phy->channel);
+		if (!err)
+			b43_switch_channel(dev, phy->channel);
+		err = 0;
 	}
 
 	if (changed & IEEE80211_CONF_CHANGE_RETRY_LIMITS)

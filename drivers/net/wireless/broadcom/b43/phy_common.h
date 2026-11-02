@@ -227,6 +227,9 @@ struct b43_phy {
 	/* After power reset full init has to be performed */
 	bool do_full_init;
 
+	/* b43_phy_init() is turning the radio on ahead of ops->init() */
+	bool in_init;
+
 	/* Analog Type */
 	u8 analog;
 	/* B43_PHYTYPE_ */

@@ -95,7 +95,9 @@ int b43_phy_init(struct b43_wldev *dev)
 	}
 
 	phy->ops->switch_analog(dev, true);
+	phy->in_init = true;
 	b43_software_rfkill(dev, false);
+	phy->in_init = false;
 
 	err = ops->init(dev);
 	if (err) {

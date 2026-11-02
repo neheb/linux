@@ -1572,7 +1572,12 @@ static void b43_phy_ht_op_software_rfkill(struct b43_wldev *dev,
 		else
 			B43_WARN_ON(1);
 
-		b43_switch_channel(dev, dev->phy.channel);
+		/*
+		 * b43_phy_init() tunes the channel once the PHY is set up;
+		 * tuning (and calibrating) before that is wasted.
+		 */
+		if (!dev->phy.in_init)
+			b43_switch_channel(dev, dev->phy.channel);
 	}
 }
 
