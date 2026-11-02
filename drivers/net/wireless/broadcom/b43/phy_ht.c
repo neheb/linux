@@ -1274,6 +1274,7 @@ static int b43_phy_ht_set_channel(struct b43_wldev *dev,
 				  enum nl80211_channel_type channel_type)
 {
 	struct b43_phy *phy = &dev->phy;
+	struct b43_phy_ht *phy_ht = phy->ht;
 
 	const struct b43_phy_ht_channeltab_e_radio2059 *chent_r2059 = NULL;
 
@@ -1296,7 +1297,17 @@ static int b43_phy_ht_set_channel(struct b43_wldev *dev,
 		return -ESRCH;
 	}
 
-	b43_phy_ht_cal_tx_iq_lo(dev);
+	/*
+	 * Off the operating channel (scanning, remain-on-channel) only short
+	 * management frames are sent, at robust rates; keep the coefficients
+	 * of the operating channel instead of spending ~17 ms per channel.
+	 * Coming back to the channel they were found on, they still apply.
+	 * A calibration that timed out is tried again on the next tune.
+	 */
+	if (!(dev->wl->hw->conf.flags & IEEE80211_CONF_OFFCHANNEL) &&
+	    phy_ht->txcal_freq != channel->center_freq)
+		phy_ht->txcal_freq = b43_phy_ht_cal_tx_iq_lo(dev) ?
+				     channel->center_freq : 0;
 
 	return 0;
 }
@@ -1417,6 +1428,7 @@ static int b43_phy_ht_op_init(struct b43_wldev *dev)
 	}
 
 	b43_phy_ht_tables_init(dev);
+	phy_ht->txcal_freq = 0;
 
 	b43_phy_mask(dev, 0x0be, ~0x2);
 	b43_phy_set(dev, 0x23f, 0x7ff);
@@ -1571,6 +1583,8 @@ static void b43_phy_ht_op_software_rfkill(struct b43_wldev *dev,
 			b43_radio_2059_init(dev);
 		else
 			B43_WARN_ON(1);
+		/* Radio init resets the coarse LO the calibration set */
+		dev->phy.ht->txcal_freq = 0;
 
 		/*
 		 * b43_phy_init() tunes the channel once the PHY is set up;

@@ -142,6 +142,9 @@ struct b43_phy_ht {
 
 	/* 2.4 GHz CCK (802.11b) reception is off */
 	bool cck_rx_off;
+
+	/* Channel the TX I/Q and LO coefficients in use were found on, or 0 */
+	u16 txcal_freq;
 };
 
 
