@@ -2028,7 +2028,7 @@ static bool mac_is_txq_empty_ax(struct rtw89_dev *rtwdev)
 	msk32 = B_AX_WDE_EMPTY_QTA_DMAC_WLAN_CPU | B_AX_WDE_EMPTY_QTA_DMAC_DATA_CPU |
 		B_AX_PLE_EMPTY_QTA_DMAC_WLAN_CPU | B_AX_PLE_EMPTY_QTA_DMAC_H2C |
 		B_AX_WDE_EMPTY_QUE_OTHERS | B_AX_PLE_EMPTY_QUE_DMAC_MPDU_TX |
-		B_AX_WDE_EMPTY_QTA_DMAC_CPUIO | B_AX_PLE_EMPTY_QTA_DMAC_CPUIO |
+		B_AX_PLE_EMPTY_QTA_DMAC_CPUIO |
 		B_AX_WDE_EMPTY_QUE_DMAC_PKTIN | B_AX_WDE_EMPTY_QTA_DMAC_HIF |
 		B_AX_PLE_EMPTY_QUE_DMAC_SEC_TX | B_AX_WDE_EMPTY_QTA_DMAC_PKTIN |
 		B_AX_PLE_EMPTY_QTA_DMAC_B0_TXPL | B_AX_PLE_EMPTY_QTA_DMAC_B1_TXPL |
@@ -2383,32 +2383,6 @@ int rtw89_mac_preload_init(struct rtw89_dev *rtwdev, enum rtw89_mac_idx mac_idx,
 		return 0;
 
 	return mac->preload_init(rtwdev, mac_idx, mode);
-}
-
-static bool dle_is_txq_empty(struct rtw89_dev *rtwdev)
-{
-	u32 msk32;
-	u32 val32;
-
-	msk32 = B_AX_WDE_EMPTY_QUE_CMAC0_ALL_AC | B_AX_WDE_EMPTY_QUE_CMAC0_MBH |
-		B_AX_WDE_EMPTY_QUE_CMAC1_MBH | B_AX_WDE_EMPTY_QUE_CMAC0_WMM0 |
-		B_AX_WDE_EMPTY_QUE_CMAC0_WMM1 | B_AX_WDE_EMPTY_QUE_OTHERS |
-		B_AX_PLE_EMPTY_QUE_DMAC_MPDU_TX | B_AX_PLE_EMPTY_QTA_DMAC_H2C |
-		B_AX_PLE_EMPTY_QUE_DMAC_SEC_TX | B_AX_WDE_EMPTY_QUE_DMAC_PKTIN |
-		B_AX_WDE_EMPTY_QTA_DMAC_HIF | B_AX_WDE_EMPTY_QTA_DMAC_WLAN_CPU |
-		B_AX_WDE_EMPTY_QTA_DMAC_PKTIN | B_AX_WDE_EMPTY_QTA_DMAC_CPUIO |
-		B_AX_PLE_EMPTY_QTA_DMAC_B0_TXPL |
-		B_AX_PLE_EMPTY_QTA_DMAC_B1_TXPL |
-		B_AX_PLE_EMPTY_QTA_DMAC_MPDU_TX |
-		B_AX_PLE_EMPTY_QTA_DMAC_CPUIO |
-		B_AX_WDE_EMPTY_QTA_DMAC_DATA_CPU |
-		B_AX_PLE_EMPTY_QTA_DMAC_WLAN_CPU;
-	val32 = rtw89_read32(rtwdev, R_AX_DLE_EMPTY0);
-
-	if ((val32 & msk32) == msk32)
-		return true;
-
-	return false;
 }
 
 static void _patch_ss2f_path(struct rtw89_dev *rtwdev)
@@ -6350,13 +6324,14 @@ void rtw89_mac_update_rts_threshold(struct rtw89_dev *rtwdev)
 
 void rtw89_mac_flush_txq(struct rtw89_dev *rtwdev, u32 queues, bool drop)
 {
+	const struct rtw89_mac_gen_def *mac = rtwdev->chip->mac_def;
 	bool empty;
 	int ret;
 
 	if (!test_bit(RTW89_FLAG_POWERON, rtwdev->flags))
 		return;
 
-	ret = read_poll_timeout(dle_is_txq_empty, empty, empty,
+	ret = read_poll_timeout(mac->is_txq_empty, empty, empty,
 				10000, 200000, false, rtwdev);
 	if (ret && !drop && (rtwdev->total_sta_assoc || rtwdev->scanning))
 		rtw89_info(rtwdev, "timed out to flush queues\n");
