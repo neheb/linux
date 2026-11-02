@@ -4483,9 +4483,10 @@ T:	git git://linuxtv.org/media.git
 F:	drivers/media/radio/radio-aztech*
 
 B43 WIRELESS DRIVER
+M:	Rosen Penev <rosenp@gmail.com>
 L:	linux-wireless@vger.kernel.org
 L:	b43-dev@lists.infradead.org
-S:	Orphan
+S:	Maintained
 W:	https://wireless.wiki.kernel.org/en/users/Drivers/b43
 F:	drivers/net/wireless/broadcom/b43/
 
