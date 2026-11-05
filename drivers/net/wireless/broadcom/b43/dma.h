@@ -195,6 +195,8 @@ struct b43_dmadesc_meta {
 	dma_addr_t dmaaddr;
 	/* ieee80211 TX status. Only used once per 802.11 frag. */
 	bool is_last_fragment;
+	/* The TX header is in front of the frame, in the skb headroom */
+	bool hdr_pushed;
 };
 
 struct b43_dmaring;
