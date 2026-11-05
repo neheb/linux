@@ -2477,9 +2477,72 @@ static void b43_nphy_gain_ctl_workarounds_rev19(struct b43_wldev *dev)
 	/* TODO */
 }
 
+/* Radio 2057 rev 14 with an external PA at 2.4 GHz (BCM43217 on the ASUS
+ * RT-AC56U): the gain control setup of the vendor driver on that board, read
+ * back on channels 1 and 6. Tables 0-4 hold three identical 0x80 entry blocks.
+ */
+static void b43_nphy_gain_ctl_workarounds_2057_rev14_2g(struct b43_wldev *dev)
+{
+	static const u8 trloss[8] = { 0x0f, 0x0f, 0x0f, 0x0f,
+				      0x0f, 0x0f, 0x0f, 0x0f };
+	static const u8 lna1_gain[8] = { 0x08, 0x0f, 0x14, 0x19,
+					 0x08, 0x0f, 0x14, 0x19 };
+	static const u8 lna2_gain[16] = { 0xfe, 0x08, 0x0c, 0x10, 0xfe, 0x08, 0x0c, 0x10,
+					  0xfe, 0x08, 0x0c, 0x10, 0xfe, 0x08, 0x0c, 0x10 };
+	static const u8 gain_db[10] = { 0xfc, 0xff, 0x02, 0x05, 0x05,
+					0x05, 0x05, 0x05, 0x05, 0x05 };
+	static const u8 gain_bits[10] = { 0x00, 0x01, 0x02, 0x03, 0x03,
+					  0x03, 0x03, 0x03, 0x03, 0x03 };
+	static const u16 rfseq_init[2] = { 0x5136, 0x5136 };
+	unsigned int base, c, i;
+
+	for (base = 0; base <= 0x100; base += 0x80) {
+		for (c = 0; c < 2; c++) {
+			b43_ntab_write_bulk(dev, B43_NTAB8(c, base + 0), 8, trloss);
+			b43_ntab_write_bulk(dev, B43_NTAB8(c, base + 8), 8, lna1_gain);
+			b43_ntab_write_bulk(dev, B43_NTAB8(c, base + 16), 16, lna2_gain);
+			b43_ntab_write_bulk(dev, B43_NTAB8(c, base + 32), 10, gain_db);
+			b43_ntab_write_bulk(dev, B43_NTAB8(c, base + 48), 10, gain_db);
+			b43_ntab_write_bulk(dev, B43_NTAB8(2 + c, base + 32), 10, gain_bits);
+			b43_ntab_write_bulk(dev, B43_NTAB8(2 + c, base + 48), 10, gain_bits);
+		}
+		for (i = 0x13; i <= 0x1f; i += 4)
+			b43_ntab_write(dev, B43_NTAB8(4, base + i), 0x7f);
+	}
+
+	b43_phy_set(dev, B43_NPHY_C1_CGAINI, B43_NPHY_C1_CGAINI_CL2DETECT);
+	b43_phy_set(dev, B43_NPHY_C2_CGAINI, B43_NPHY_C2_CGAINI_CL2DETECT);
+
+	for (c = 0; c < 2; c++) {
+		u16 r = c ? 0x2a7 : 0x020;	/* REV3_Cx_INITGAIN_A */
+
+		b43_phy_write(dev, B43_PHY_N(r + 0), 0x007c);	/* INITGAIN_A */
+		b43_phy_write(dev, B43_PHY_N(r + 1), 0x0324);	/* INITGAIN_B */
+		b43_phy_write(dev, B43_PHY_N(r + 2), 0x002c);	/* CLIP_HIGAIN_A */
+		b43_phy_write(dev, B43_PHY_N(r + 3), 0x0224);	/* CLIP_HIGAIN_B */
+	}
+	b43_phy_write(dev, B43_PHY_N(0x036), 0x0044);	/* REV3_C1_CLIP_MEDGAIN_B */
+	b43_phy_write(dev, B43_PHY_N(0x037), 0x0070);	/* REV3_C1_CLIP_LOGAIN_A */
+	b43_phy_write(dev, B43_PHY_N(0x038), 0x0218);	/* REV3_C1_CLIP_LOGAIN_B */
+	b43_phy_write(dev, B43_PHY_N(0x2ac), 0x0044);	/* REV3_C2_CLIP_MEDGAIN_B */
+	b43_phy_write(dev, B43_PHY_N(0x2ad), 0x0070);	/* REV3_C2_CLIP_LOGAIN_A */
+	b43_phy_write(dev, B43_PHY_N(0x2ae), 0x0218);	/* REV3_C2_CLIP_LOGAIN_B */
+
+	b43_ntab_write_bulk(dev, B43_NTAB16(7, 0x106), 2, rfseq_init);
+
+	b43_phy_write(dev, B43_NPHY_C1_NBCLIPTHRES, 0x0098);
+	b43_phy_write(dev, B43_NPHY_C2_NBCLIPTHRES, 0x0098);
+	b43_phy_maskset(dev, B43_NPHY_CRSMINPOWERL0, 0xFF00, 0x0071);
+	b43_phy_maskset(dev, B43_NPHY_CRSMINPOWERU0, 0xFF00, 0x0071);
+	b43_phy_write(dev, B43_NPHY_BPHYCRSMINPOWER0, 0x0046);
+}
+
 static void b43_nphy_gain_ctl_workarounds_rev7(struct b43_wldev *dev)
 {
-	/* TODO - should depend on phy->rev */
+	/* TODO: the other radio revisions and bands */
+	if (dev->phy.radio_rev == 14 && !b43_nphy_ipa(dev) &&
+	    b43_current_band(dev->wl) == NL80211_BAND_2GHZ)
+		b43_nphy_gain_ctl_workarounds_2057_rev14_2g(dev);
 }
 
 static void b43_nphy_gain_ctl_workarounds_rev3(struct b43_wldev *dev)
