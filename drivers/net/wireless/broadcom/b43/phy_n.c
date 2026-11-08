@@ -1811,11 +1811,20 @@ static void b43_nphy_rev3_rssi_select(struct b43_wldev *dev, u8 code,
 					enum nl80211_band band =
 						b43_current_band(dev->wl);
 
-					if (dev->phy.rev < 7) {
-						if (b43_nphy_ipa(dev))
-							val = (band == NL80211_BAND_5GHZ) ? 0xC : 0xE;
-						else
-							val = 0x11;
+					if (b43_nphy_ipa(dev))
+						val = (band == NL80211_BAND_5GHZ) ? 0xC : 0xE;
+					else
+						val = 0x11;
+					if (dev->phy.rev >= 7) {
+						b43_radio_write(dev, i == 0 ?
+								R2057_TX0_TX_SSI_MUX :
+								R2057_TX1_TX_SSI_MUX,
+								val);
+						if (!b43_nphy_ipa(dev))
+							b43_radio_write(dev,
+									R2057_IQTEST_SEL_PU,
+									0x1);
+					} else {
 						reg = (i == 0) ? B2056_TX0 : B2056_TX1;
 						reg |= B2056_TX_TX_SSI_MUX;
 						b43_radio_write(dev, reg, val);
