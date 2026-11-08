@@ -7103,6 +7103,18 @@ static int b43_phy_initn(struct b43_wldev *dev)
 #endif
 		}
 	}
+#ifdef CONFIG_B43_BCMA
+	/*
+	 * The BCM43217 enables the external PAs of its two cores in PMU chip
+	 * control register 1, bit 13 for core 0 and bit 8 for core 1. Nothing
+	 * else sets them: after a power-on they are clear, the PAs stay off
+	 * and TX power control runs open, at a fraction of the power.
+	 */
+	if (dev->dev->bus_type == B43_BUS_BCMA &&
+	    dev->dev->chip_id == BCMA_CHIP_ID_BCM43217 && !b43_nphy_ipa(dev))
+		bcma_chipco_chipctl_maskset(&dev->dev->bdev->bus->drv_cc, 1,
+					    ~0, BIT(13) | BIT(8));
+#endif
 	nphy->use_int_tx_iq_lo_cal = b43_nphy_ipa(dev) ||
 		phy->rev >= 7 ||
 		(phy->rev >= 5 &&
