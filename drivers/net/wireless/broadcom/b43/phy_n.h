@@ -972,6 +972,7 @@ struct b43_phy_n {
 	s8 tx_power_offset[101];
 	u16 adj_pwr_tbl[84];
 	u16 txcal_bbmult;
+	u16 gmval;
 	u16 txiqlocal_bestc[11];
 	bool txiqlocal_coeffsvalid;
 	struct b43_phy_n_txpwrindex txpwrindex[2];
@@ -994,7 +995,7 @@ struct b43_phy_n {
 	enum b43_nphy_txpctl_op txpctl_op;
 
 	u8 txrx_chain;
-	u16 tx_rx_cal_phy_saveregs[11];
+	u16 tx_rx_cal_phy_saveregs[15];
 	u16 tx_rx_cal_radio_saveregs[22];
 
 	u16 rfctrl_intc1_save;
