@@ -1515,7 +1515,7 @@ static int b43_nphy_load_samples(struct b43_wldev *dev,
 		b43_nphy_stay_in_carrier_search(dev, 1);
 
 	for (i = 0; i < len; i++) {
-		data[i] = (samples[i].i & 0x3FF << 10);
+		data[i] = (samples[i].i & 0x3FF) << 10;
 		data[i] |= samples[i].q & 0x3FF;
 	}
 	b43_ntab_write_bulk(dev, B43_NTAB32(17, 0), len, data);
@@ -1531,7 +1531,8 @@ static u16 b43_nphy_gen_load_samples(struct b43_wldev *dev, u32 freq, u16 max,
 					bool test)
 {
 	int i;
-	u16 bw, len, rot, angle;
+	u16 bw, len;
+	s32 rot, angle;
 	struct cordic_iq *samples;
 
 	bw = b43_is_40mhz(dev) ? 40 : 20;
@@ -1554,12 +1555,17 @@ static u16 b43_nphy_gen_load_samples(struct b43_wldev *dev, u32 freq, u16 max,
 		b43err(dev->wl, "allocation for samples generation failed\n");
 		return 0;
 	}
-	rot = (((freq * 36) / bw) << 16) / 100;
+	/*
+	 * cordic_calc_iq() takes whole degrees, as in brcmsmac's
+	 * wlc_phy_gen_load_samples_nphy(); keep the angle small enough for
+	 * its fixed point conversion.
+	 */
+	rot = ((freq * 36) / bw) / 100;
 	angle = 0;
 
 	for (i = 0; i < len; i++) {
-		samples[i] = cordic_calc_iq(CORDIC_FIXED(angle));
-		angle += rot;
+		samples[i] = cordic_calc_iq(angle);
+		angle = (angle + rot) % 360;
 		samples[i].q = CORDIC_FLOAT(samples[i].q * max);
 		samples[i].i = CORDIC_FLOAT(samples[i].i * max);
 	}
@@ -4815,6 +4821,35 @@ static void b43_nphy_tx_cal_radio_setup_rev7(struct b43_wldev *dev)
 	}
 }
 
+/*
+ * Put back the radio registers b43_nphy_tx_cal_radio_setup_rev7() saved,
+ * as brcmsmac's wlc_phy_txcal_radio_cleanup_nphy() does. Left as the
+ * calibration set them, the TSSI path stays in IQ calibration mode and TX
+ * power control works on a wrong power estimate.
+ */
+static void b43_nphy_tx_cal_radio_cleanup_rev7(struct b43_wldev *dev)
+{
+	struct b43_phy *phy = &dev->phy;
+	u16 *save = dev->phy.n->tx_rx_cal_radio_saveregs;
+	int core, off;
+	u16 r;
+
+	for (core = 0; core < 2; core++) {
+		r = core ? 0x20 : 0;
+		off = core * 11;
+
+		b43_radio_write(dev, r + R2057_TX0_TX_SSI_MASTER, save[off + 0]);
+		b43_radio_write(dev, r + R2057_TX0_IQCAL_VCM_HG, save[off + 1]);
+		b43_radio_write(dev, r + R2057_TX0_IQCAL_IDAC, save[off + 2]);
+		b43_radio_write(dev, r + R2057_TX0_TSSI_VCM, save[off + 3]);
+		b43_radio_write(dev, r + R2057_TX0_TX_SSI_MUX, save[off + 5]);
+		if (phy->radio_rev != 5)
+			b43_radio_write(dev, r + R2057_TX0_TSSIA, save[off + 6]);
+		b43_radio_write(dev, r + R2057_TX0_TSSIG, save[off + 7]);
+		b43_radio_write(dev, r + R2057_TX0_TSSI_MISC1, save[off + 8]);
+	}
+}
+
 /* https://bcm-v4.sipsolutions.net/802.11/PHY/N/TxCalRadioSetup */
 static void b43_nphy_tx_cal_radio_setup(struct b43_wldev *dev)
 {
@@ -5073,7 +5108,9 @@ static struct nphy_txgains b43_nphy_get_tx_gains(struct b43_wldev *dev)
 /* https://bcm-v4.sipsolutions.net/802.11/PHY/N/TxCalPhyCleanup */
 static void b43_nphy_tx_cal_phy_cleanup(struct b43_wldev *dev)
 {
-	u16 *regs = dev->phy.n->tx_rx_cal_phy_saveregs;
+	struct b43_phy *phy = &dev->phy;
+	struct b43_phy_n *nphy = phy->n;
+	u16 *regs = nphy->tx_rx_cal_phy_saveregs;
 
 	if (dev->phy.rev >= 3) {
 		b43_phy_write(dev, B43_NPHY_AFECTL_C1, regs[0]);
@@ -5087,7 +5124,48 @@ static void b43_nphy_tx_cal_phy_cleanup(struct b43_wldev *dev)
 		b43_phy_write(dev, B43_NPHY_RFCTL_INTC2, regs[8]);
 		b43_phy_write(dev, B43_NPHY_PAPD_EN0, regs[9]);
 		b43_phy_write(dev, B43_NPHY_PAPD_EN1, regs[10]);
+
+		/*
+		 * Release the RF control overrides b43_nphy_tx_cal_phy_setup()
+		 * set, as brcmsmac's wlc_phy_txcal_phycleanup_nphy() does: the
+		 * RX LPF bandwidth, and for the internal calibration the PA
+		 * (rev 8+) or the PAD/IPA power ups (rev 7).
+		 */
+		if (phy->rev >= 19)
+			b43_nphy_rf_ctl_override_rev19(dev, 0x80, 0, 0, true,
+						       1);
+		else if (phy->rev >= 7)
+			b43_nphy_rf_ctl_override_rev7(dev, 0x80, 0, 0, true, 1);
+
 		b43_nphy_reset_cca(dev);
+
+		if (nphy->use_int_tx_iq_lo_cal) {
+			if (phy->rev >= 19) {
+				b43_nphy_rf_ctl_override_rev19(dev, 0x8, 0, 0x3,
+							       true, 0);
+			} else if (phy->rev >= 8) {
+				b43_nphy_rf_ctl_override_rev7(dev, 0x8, 0, 0x3,
+							      true, 0);
+			} else if (phy->rev == 7) {
+				if (b43_current_band(dev->wl) ==
+				    NL80211_BAND_2GHZ) {
+					b43_radio_set(dev,
+						      R2057_PAD2G_TUNE_PUS_CORE0,
+						      1);
+					b43_radio_set(dev,
+						      R2057_PAD2G_TUNE_PUS_CORE1,
+						      1);
+				} else {
+					b43_radio_set(dev,
+						      R2057_IPA5G_CASCOFFV_PU_CORE0,
+						      1);
+					b43_radio_set(dev,
+						      R2057_IPA5G_CASCOFFV_PU_CORE1,
+						      1);
+				}
+				b43_radio_mask(dev, R2057_OVR_REG0, ~(1 << 4));
+			}
+		}
 	} else {
 		b43_phy_maskset(dev, B43_NPHY_AFECTL_C1, 0x0FFF, regs[0]);
 		b43_phy_maskset(dev, B43_NPHY_AFECTL_C2, 0x0FFF, regs[1]);
@@ -5407,7 +5485,11 @@ static int b43_nphy_cal_tx_iq_lo(struct b43_wldev *dev,
 	phy6or5x = dev->phy.rev >= 6 ||
 		(dev->phy.rev == 5 && nphy->ipa2g_on &&
 		b43_current_band(dev->wl) == NL80211_BAND_2GHZ);
-	if (phy6or5x) {
+	/*
+	 * Fixed ladders only where b43_nphy_update_tx_cal_ladder() does not
+	 * build them from the calibration bbmult, as brcmsmac does.
+	 */
+	if (!phy6or5x) {
 		if (b43_is_40mhz(dev)) {
 			b43_ntab_write_bulk(dev, B43_NTAB16(15, 0), 18,
 					tbl_tx_iqlo_cal_loft_ladder_40);
@@ -5520,12 +5602,20 @@ static int b43_nphy_cal_tx_iq_lo(struct b43_wldev *dev,
 						0);
 			}
 
+			/* The engine keeps 0xC000 set while it runs */
 			b43_phy_write(dev, B43_NPHY_IQLOCAL_CMD, cmd);
 			for (i = 0; i < 2000; i++) {
 				tmp = b43_phy_read(dev, B43_NPHY_IQLOCAL_CMD);
-				if (tmp & 0xC000)
+				if (!(tmp & 0xC000))
 					break;
 				udelay(10);
+			}
+			if (b43_phy_read(dev, B43_NPHY_IQLOCAL_CMD) & 0xC000) {
+				b43err(dev->wl,
+				       "TX IQ/LO cal command 0x%04X timed out\n",
+				       cmd);
+				error = -ETIMEDOUT;
+				break;
 			}
 
 			b43_ntab_read_bulk(dev, B43_NTAB16(15, 96), length,
@@ -5542,10 +5632,12 @@ static int b43_nphy_cal_tx_iq_lo(struct b43_wldev *dev,
 
 		last = (dev->phy.rev < 3) ? 6 : 7;
 
-		if (!mphase || nphy->mphase_cal_phase_id == last) {
-			b43_ntab_write_bulk(dev, B43_NTAB16(15, 96), 4, buffer);
-			b43_ntab_read_bulk(dev, B43_NTAB16(15, 80), 4, buffer);
-			if (dev->phy.rev < 3) {
+		/* On a timeout keep the coefficients of the last calibration */
+		if (!error && (!mphase || nphy->mphase_cal_phase_id == last)) {
+			/* The best I/Q coefficients go to 80-83, as brcmsmac */
+			b43_ntab_read_bulk(dev, B43_NTAB16(15, 96), 4, buffer);
+			b43_ntab_write_bulk(dev, B43_NTAB16(15, 80), 4, buffer);
+			if (dev->phy.rev < 2) {
 				buffer[0] = 0;
 				buffer[1] = 0;
 				buffer[2] = 0;
@@ -5569,7 +5661,7 @@ static int b43_nphy_cal_tx_iq_lo(struct b43_wldev *dev,
 						phy->chandef->chan->center_freq;
 			nphy->txiqlocal_chanspec.channel_type =
 					cfg80211_get_chandef_type(phy->chandef);
-		} else {
+		} else if (!error) {
 			length = 11;
 			if (dev->phy.rev < 3)
 				length -= 2;
@@ -5579,10 +5671,24 @@ static int b43_nphy_cal_tx_iq_lo(struct b43_wldev *dev,
 
 		b43_nphy_stop_playback(dev);
 		b43_phy_write(dev, B43_NPHY_IQLOCAL_CMDGCTL, 0);
+
+		if (dev->phy.rev >= 7) {
+			b43_ntab_read_bulk(dev, B43_NTAB16(15, 80), 8, buffer);
+			for (core = 0; core < 2; core++)
+				b43dbg(dev->wl,
+				       "TX IQ/LO cal core %u: iq %04X %04X lo %04X bbmult %02X%s\n",
+					core, buffer[2 * core],
+					buffer[2 * core + 1], buffer[5 + core],
+					core ? nphy->txcal_bbmult & 0xFF :
+					       nphy->txcal_bbmult >> 8,
+					error ? " timeout" : "");
+		}
 	}
 
 	b43_nphy_tx_cal_phy_cleanup(dev);
 	b43_ntab_write_bulk(dev, B43_NTAB16(7, 0x110), 2, save);
+	if (dev->phy.rev >= 7 && dev->phy.rev < 19)
+		b43_nphy_tx_cal_radio_cleanup_rev7(dev);
 
 	if (dev->phy.rev < 2 && (!mphase || nphy->mphase_cal_phase_id == last))
 		b43_nphy_tx_iq_workaround(dev);
@@ -6076,6 +6182,50 @@ static void b43_nphy_tx_pwr_index(struct b43_wldev *dev, u8 core_mask,
 
 	if (nphy->hang_avoid)
 		b43_nphy_stay_in_carrier_search(dev, false);
+}
+
+/*
+ * Set the TX gain the TX I/Q and LO calibration runs at, and keep its
+ * baseband multipliers: b43_nphy_update_tx_cal_ladder() scales the
+ * calibration step ladder by them. brcmsmac: wlc_phy_precal_txgain_nphy(),
+ * which on rev 7+ uses a fixed TX power index.
+ */
+static void b43_nphy_precal_tx_gain(struct b43_wldev *dev)
+{
+	struct b43_phy *phy = &dev->phy;
+	struct b43_phy_n *nphy = phy->n;
+	s8 index;
+
+	/* TODO: rev 3-6 (TX gain control loop), rev 19+ */
+	if (phy->rev < 7 || phy->rev >= 19)
+		return;
+
+	if (phy->radio_rev == 3 || phy->radio_rev == 4 || phy->radio_rev == 6)
+		index = 10;
+	else
+		index = 0;
+
+	b43_nphy_tx_pwr_index(dev, 0x3, index, false);
+	nphy->txcal_bbmult = b43_ntab_read(dev, B43_NTAB16(15, 87));
+}
+
+/*
+ * Go back to the fixed TX gain of b43_nphy_tx_power_fix() after the
+ * calibrations, keeping the coefficients they wrote. brcmsmac leaves the
+ * calibration gain set at init; here it would stay in use with TX power
+ * control off.
+ */
+static void b43_nphy_precal_tx_gain_restore(struct b43_wldev *dev)
+{
+	struct b43_phy *phy = &dev->phy;
+	struct b43_phy_n *nphy = phy->n;
+
+	if (phy->rev < 7 || phy->rev >= 19)
+		return;
+
+	b43_nphy_tx_power_fix(dev);
+	nphy->txpwrindex[0].index = -1;
+	nphy->txpwrindex[1].index = -1;
 }
 
 /* brcmsmac: wlc_phy_rxcal_physetup_nphy() */
@@ -7278,22 +7428,36 @@ static int b43_phy_initn(struct b43_wldev *dev)
 					    nphy->txpwrindex[0].index_internal;
 					nphy->cal_orig_pwr_idx[1] =
 					    nphy->txpwrindex[1].index_internal;
-					/* TODO N PHY Pre Calibrate TX Gain */
+					b43_nphy_precal_tx_gain(dev);
 					target = b43_nphy_get_tx_gains(dev);
 				}
 				if (!b43_nphy_cal_tx_iq_lo(dev, target, true, false))
 					if (b43_nphy_cal_rx_iq(dev, target, 2, 0) == 0)
 						b43_nphy_save_cal(dev);
+				b43_nphy_precal_tx_gain_restore(dev);
 			} else if (nphy->mphase_cal_phase_id == 0) {
 				/*
 				 * TODO: N PHY Periodic Calibration with arg 3.
 				 * b43 lacks the multi-phase calibration; run
-				 * its RX I/Q step, as brcmsmac's RXCAL phase.
+				 * its TX I/Q-LO and RX I/Q steps at once. Rev 7
+				 * restores the TSSI path after the TX step; rev
+				 * 3-6 does not yet, so it gets the RX step only.
 				 * Rev 19+ has no RF control overrides yet.
 				 */
-				if (phy->rev >= 3 && phy->rev < 19 &&
-				    b43_nphy_cal_rx_iq(dev, target, 2, 0) == 0)
+				if (phy->rev >= 7 && phy->rev < 19) {
+					b43_nphy_precal_tx_gain(dev);
+					target = b43_nphy_get_tx_gains(dev);
+					if (!b43_nphy_cal_tx_iq_lo(dev, target,
+								   true, false) &&
+					    b43_nphy_cal_rx_iq(dev, target, 2,
+							       0) == 0)
+						b43_nphy_save_cal(dev);
+					b43_nphy_precal_tx_gain_restore(dev);
+				} else if (phy->rev >= 3 && phy->rev < 7 &&
+					   b43_nphy_cal_rx_iq(dev, target, 2,
+							      0) == 0) {
 					b43_nphy_save_cal(dev);
+				}
 			}
 		} else {
 			b43_nphy_restore_cal(dev);
