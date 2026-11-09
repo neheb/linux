@@ -4554,6 +4554,16 @@ again:
 			break;
 		}
 
+		/*
+		 * On rev 17 the coefficients are normalised by the Q power,
+		 * not the I power: for every estimate in traces of wl 7.14 on
+		 * a BCM43217, the arithmetic below with ii and qq swapped
+		 * gives the a and b wl writes, and the brcmsmac form does
+		 * not (b off by 3 to 28, a by 0 to 3).
+		 */
+		if (dev->phy.rev == 17)
+			swap(ii, qq);
+
 		iq_nbits = b43_nphy_nbits(iq);
 		qq_nbits = b43_nphy_nbits(qq);
 
