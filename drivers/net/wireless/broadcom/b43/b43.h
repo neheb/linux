@@ -834,6 +834,8 @@ enum {
 
 /* Maximum number of MPDUs b43 puts in one A-MPDU */
 #define B43_AMPDU_MAX_FRAMES	32
+/* Block ack window asked for: room for the next A-MPDU while one awaits its BA */
+#define B43_AMPDU_BA_WINDOW	IEEE80211_MAX_AMPDU_BUF_HT
 /* Times an MPDU missing from a block ack is sent again */
 #define B43_AMPDU_RETRY_LIMIT	5
 

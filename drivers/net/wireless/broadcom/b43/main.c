@@ -6306,7 +6306,7 @@ static int b43_op_ampdu_action(struct ieee80211_hw *hw,
 			ieee80211_sn_sub(params->ssn, 1);
 		bsta->baw_start[params->tid] = params->ssn;
 		bsta->baw_pending[params->tid] = 0;
-		bsta->ampdu_buf[params->tid] = B43_AMPDU_MAX_FRAMES;
+		bsta->ampdu_buf[params->tid] = B43_AMPDU_BA_WINDOW;
 		return IEEE80211_AMPDU_TX_START_IMMEDIATE;
 	}
 	case IEEE80211_AMPDU_TX_OPERATIONAL: {
@@ -6314,7 +6314,7 @@ static int b43_op_ampdu_action(struct ieee80211_hw *hw,
 
 		/*
 		 * The window is the reorder buffer the receiver answered
-		 * with, which may be smaller than the B43_AMPDU_MAX_FRAMES
+		 * with, which may be smaller than the B43_AMPDU_BA_WINDOW
 		 * b43 asked for. Frames are aggregated as they are queued.
 		 */
 		bsta->ampdu_buf[params->tid] =
@@ -6824,7 +6824,7 @@ static struct b43_wl *b43_wireless_init(struct b43_bus_dev *dev)
 	ieee80211_hw_set(hw, SUPPORT_FAST_XMIT);
 	/* Room for the TX header in front of the frame (one DMA descriptor) */
 	hw->extra_tx_headroom = sizeof(struct b43_txhdr);
-	hw->max_tx_aggregation_subframes = B43_AMPDU_MAX_FRAMES;
+	hw->max_tx_aggregation_subframes = B43_AMPDU_BA_WINDOW;
 	hw->sta_data_size = sizeof(struct b43_sta);
 	hw->wiphy->interface_modes =
 		BIT(NL80211_IFTYPE_AP) |
