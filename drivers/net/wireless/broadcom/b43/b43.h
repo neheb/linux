@@ -332,6 +332,7 @@ enum {
 #define  B43_SHM_SH_UCODESTAT_SUSP	3	/* suspended */
 #define  B43_SHM_SH_UCODESTAT_SLEEP	4	/* asleep (PS) */
 #define B43_SHM_SH_MAXBFRAMES		0x0080	/* Maximum number of frames in a burst */
+#define B43_SHM_SH_MIMO_MAXSYM		0x00BA	/* Longest PSDU received, N-PHY (bytes) */
 #define B43_SHM_SH_SPUWKUP		0x0094	/* pre-wakeup for synth PU in us */
 #define B43_SHM_SH_PRETBTT		0x0096	/* pre-TBTT in us */
 /* SHM_SHARED tx iq workarounds */

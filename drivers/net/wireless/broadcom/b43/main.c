@@ -5849,6 +5849,16 @@ static int b43_wireless_core_init(struct b43_wldev *dev)
 	 * a timeout, so we never send any probe resp.
 	 * A timeout of zero is infinite. */
 	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_PRMAXTIME, 1);
+	/*
+	 * Receive A-MPDUs of up to 64 KiB on N-PHY, as brcmsmac does for
+	 * that factor: the longest PSDU to 64 KiB and its M_WATCHDOG_8TU
+	 * (0x3C in this firmware layout, not the old DEFAULTIV) to 10.
+	 */
+	if (dev->phy.type == B43_PHYTYPE_N) {
+		b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_MIMO_MAXSYM,
+				0xFFFF);
+		b43_shm_write16(dev, B43_SHM_SHARED, 0x003C, 10);
+	}
 
 	b43_rate_memory_init(dev);
 	b43_set_phytxctl_defaults(dev);
@@ -6444,6 +6454,9 @@ static void b43_ht_cap_set_chains(struct b43_wldev *dev,
 
 	if (rx_ss >= 2)
 		ht_cap->mcs.rx_mask[1] = 0xff;
+	/* The firmware takes up to 64 KiB, see b43_wireless_core_init() */
+	if (dev->phy.type == B43_PHYTYPE_N)
+		ht_cap->ampdu_factor = IEEE80211_HT_MAX_AMPDU_64K;
 	if (tx < 2)
 		ht_cap->cap &= ~IEEE80211_HT_CAP_TX_STBC;
 	if (tx_ss != rx_ss)
